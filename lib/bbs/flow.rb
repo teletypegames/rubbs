@@ -71,6 +71,10 @@ module BBS
     def exit_menu
       @steps << { type: :exit_menu }
     end
+
+    def call(&block)
+      @steps << { type: :call, block: block }
+    end
   end
 
   class MenuBuilder

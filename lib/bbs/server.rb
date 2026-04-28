@@ -13,7 +13,16 @@ module BBS
       puts "BBS listening on port #{@port} — connect with: telnet localhost #{@port}"
       loop do
         client = server.accept
-        Thread.new(client) { |c| Session.new(c).run rescue nil }
+        Thread.new(client) do |c|
+          session = Session.new(c)
+          begin
+            session.run
+          rescue => e
+            nil
+          ensure
+            BBS.config.on_session_end&.call(session)
+          end
+        end
       end
     rescue Interrupt
       puts "\nServer stopped."

@@ -11,6 +11,8 @@ module BBS
       confirm: "\e[1;36m",
     }.freeze
 
+    attr_reader :session_id
+
     def initialize(session, session_id, flow)
       @session    = session
       @session_id = session_id
@@ -21,6 +23,9 @@ module BBS
     def run
       execute(@flow.steps)
     end
+
+    def write(data) = @session.write(data)
+    def readline    = @session.readline
 
     private
 
@@ -47,6 +52,7 @@ module BBS
       when :confirm_block then run_confirm_block(step)
       when :menu          then run_menu(step)
       when :exit_menu     then :exit_menu
+      when :call          then run_call(step)
       end
     end
 
@@ -159,12 +165,20 @@ module BBS
       nil
     end
 
+    def run_call(step)
+      result = step[:block].call(@ctx, self)
+      result == :halt ? :halt : nil
+    rescue IOError, Errno::EPIPE, Errno::ECONNRESET
+      :halt
+    end
+
     # ── helpers ────────────────────────────────────────────────────────────────
 
     def apply_transform(value, transform)
       case transform
       when :upcase   then value.upcase
       when :downcase then value.downcase
+      when Proc      then transform.call(value)
       else value
       end
     end
@@ -183,8 +197,5 @@ module BBS
       else "Invalid input. Farewell."
       end
     end
-
-    def write(data) = @session.write(data)
-    def readline    = @session.readline
   end
 end

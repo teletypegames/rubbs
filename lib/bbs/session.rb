@@ -6,6 +6,8 @@ module BBS
   class Session
     include Telnet
 
+    attr_reader :session_id
+
     def initialize(client)
       @client     = client
       @session_id = SecureRandom.hex(8)
