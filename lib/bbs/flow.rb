@@ -75,6 +75,30 @@ module BBS
     def call(&block)
       @steps << { type: :call, block: block }
     end
+
+    def line(color: :muted)
+      @steps << { type: :line, color: color }
+    end
+
+    def section(title, color: :confirm)
+      @steps << { type: :section, title: title, color: color }
+    end
+
+    def text(content = nil, style: :muted, &block)
+      @steps << { type: :text, text: content, block: block, style: style }
+    end
+
+    def rows(empty: 'No items.', &block)
+      @steps << { type: :rows, block: block, empty: empty }
+    end
+
+    def table(&block)
+      @steps << { type: :table, block: block }
+    end
+
+    def wait_enter(prompt: 'Press ENTER to continue...')
+      @steps << { type: :wait_enter, prompt: prompt }
+    end
   end
 
   class MenuBuilder

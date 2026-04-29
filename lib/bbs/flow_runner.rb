@@ -9,6 +9,13 @@ module BBS
       info:    "\e[0;33m",
       prompt:  "\e[1;37m",
       confirm: "\e[1;36m",
+      cyan:    "\e[0;36m",
+      magenta: "\e[0;35m",
+      blue:    "\e[0;34m",
+      yellow:  "\e[0;33m",
+      white:   "\e[1;37m",
+      green:   "\e[1;32m",
+      red:     "\e[1;31m",
     }.freeze
 
     attr_reader :session_id
@@ -17,7 +24,7 @@ module BBS
       @session    = session
       @session_id = session_id
       @flow       = flow
-      @ctx        = {}
+      @ctx        = { session_id: session_id }
     end
 
     def run
@@ -53,6 +60,12 @@ module BBS
       when :menu          then run_menu(step)
       when :exit_menu     then :exit_menu
       when :call          then run_call(step)
+      when :line          then run_line(step)
+      when :section       then run_section(step)
+      when :text          then run_text(step)
+      when :rows          then run_rows(step)
+      when :table         then run_table(step)
+      when :wait_enter    then run_wait_enter(step)
       end
     end
 
@@ -170,9 +183,72 @@ module BBS
       result == :halt ? :halt : nil
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       :halt
+    rescue => e
+      warn "BBS call error: #{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}"
+      write "\r\n  \e[1;31mError: #{e.message}\e[0m\r\n\r\n"
+      nil
+    end
+
+    def run_line(step)
+      color = style_color(step[:color])
+      write "  #{color}#{'─' * 66}\e[0m\r\n"
+    end
+
+    def run_section(step)
+      color = style_color(step[:color])
+      title = step[:title]
+      pad   = [70 - title.length - 6, 2].max
+      write "\r\n  #{color}┌─ \e[1;37m#{title} #{color}#{'─' * pad}┐\e[0m\r\n\r\n"
+    end
+
+    def run_text(step)
+      color   = style_color(step[:style])
+      content = step[:block] ? step[:block].call(@ctx) : step[:text]
+      write "  #{color}#{content}\e[0m\r\n" if content
+    end
+
+    def run_rows(step)
+      items = step[:block].call(@ctx)
+      items = Array(items)
+      if items.empty?
+        write "  #{STYLES[:muted]}#{step[:empty]}\e[0m\r\n"
+      else
+        items.each { |row| write "  #{row}\r\n" }
+      end
+      nil
+    rescue IOError, Errno::EPIPE, Errno::ECONNRESET
+      :halt
+    rescue => e
+      warn "BBS rows error: #{e.class}: #{e.message}"
+      write "\r\n  #{STYLES[:error]}Error loading content.\e[0m\r\n"
+      nil
+    end
+
+    def run_table(step)
+      pairs = step[:block].call(@ctx)
+      pairs.each do |label, value|
+        write "  #{STYLES[:muted]}#{label.to_s.ljust(16)}#{STYLES[:prompt]}#{value}\e[0m\r\n"
+      end
+      nil
+    rescue IOError, Errno::EPIPE, Errno::ECONNRESET
+      :halt
+    rescue => e
+      warn "BBS table error: #{e.class}: #{e.message}"
+      write "\r\n  #{STYLES[:error]}Error loading content.\e[0m\r\n"
+      nil
+    end
+
+    def run_wait_enter(step)
+      write "\r\n  #{STYLES[:muted]}#{step[:prompt]}\e[0m"
+      return :halt if readline.nil?
+      nil
     end
 
     # ── helpers ────────────────────────────────────────────────────────────────
+
+    def style_color(value)
+      value.is_a?(Symbol) ? STYLES.fetch(value, STYLES[:muted]) : value.to_s
+    end
 
     def apply_transform(value, transform)
       case transform
