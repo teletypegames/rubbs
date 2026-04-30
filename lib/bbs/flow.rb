@@ -99,6 +99,25 @@ module BBS
     def wait_enter(prompt: 'Press ENTER to continue...')
       @steps << { type: :wait_enter, prompt: prompt }
     end
+
+    def fetch(name, loading: 'Loading...', &block)
+      @steps << { type: :fetch, name: name, loading: loading, block: block }
+    end
+
+    def pick(from:, prompt:, empty: 'No items.', item:, hint: nil, &block)
+      sub = Flow.new
+      sub.instance_eval(&block) if block_given?
+      @steps << { type: :pick, from: from, prompt: prompt, empty: empty,
+                  item: item, hint: hint, sub_steps: sub.steps }
+    end
+
+    def body(width: 66, indent: 4, &block)
+      @steps << { type: :body, block: block, width: width, indent: indent }
+    end
+
+    def output(&block)
+      @steps << { type: :output, block: block }
+    end
   end
 
   class MenuBuilder

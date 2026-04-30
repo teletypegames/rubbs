@@ -66,6 +66,10 @@ module BBS
       when :rows          then run_rows(step)
       when :table         then run_table(step)
       when :wait_enter    then run_wait_enter(step)
+      when :fetch         then run_fetch(step)
+      when :pick          then run_pick(step)
+      when :body          then run_body(step)
+      when :output        then run_output(step)
       end
     end
 
@@ -244,7 +248,107 @@ module BBS
       nil
     end
 
+    def run_fetch(step)
+      write "\r\n  #{STYLES[:muted]}#{step[:loading]}\e[0m\r\n"
+      result = step[:block].call(@ctx)
+      write "\e[1A\e[2K"
+      @ctx[step[:name]] = result
+      nil
+    rescue IOError, Errno::EPIPE, Errno::ECONNRESET
+      :halt
+    rescue => e
+      warn "BBS fetch error: #{e.class}: #{e.message}"
+      write "\r\n  #{STYLES[:error]}Error loading content.\e[0m\r\n"
+      nil
+    end
+
+    def run_pick(step)
+      items = Array(@ctx[step[:from]]).first(25)
+
+      if items.empty?
+        write "\r\n  #{STYLES[:error]}#{step[:empty]}\e[0m\r\n"
+        write "\r\n  #{STYLES[:muted]}Press ENTER to continue...\e[0m"
+        return :halt if readline.nil?
+        return nil
+      end
+
+      write "\r\n"
+      items.each_with_index do |item, i|
+        write "  #{step[:item].call(item, i + 1)}\r\n"
+        if step[:hint]
+          hint = step[:hint].call(item, i + 1).to_s.strip
+          write "     #{STYLES[:muted]}#{hint}\e[0m\r\n" unless hint.empty?
+        end
+      end
+
+      write "\r\n  #{STYLES[:muted]}#{step[:prompt]}\e[0m "
+      input = readline&.strip
+      return :halt if input.nil?
+      return nil   if input.empty?
+
+      idx = input.to_i - 1
+      picked = items[idx]
+      unless picked
+        write "\r\n  #{STYLES[:error]}Invalid selection.\e[0m\r\n"
+        return nil
+      end
+
+      @ctx[:picked] = picked
+      write "\r\n"
+      execute(step[:sub_steps])
+    rescue IOError, Errno::EPIPE, Errno::ECONNRESET
+      :halt
+    end
+
+    def run_body(step)
+      text   = strip_md(step[:block].call(@ctx).to_s)
+      width  = step[:width]
+      prefix = ' ' * step[:indent]
+      words  = text.split
+      lines  = []
+      line   = +''
+      words.each do |word|
+        if line.empty?
+          line << word
+        elsif line.length + 1 + word.length <= width
+          line << ' ' << word
+        else
+          lines << line.dup
+          line = +word
+        end
+      end
+      lines << line unless line.empty?
+      write "\r\n"
+      lines.each { |l| write "#{prefix}#{l}\r\n" }
+      write "\r\n"
+      nil
+    rescue IOError, Errno::EPIPE, Errno::ECONNRESET
+      :halt
+    rescue => e
+      warn "BBS body error: #{e.class}: #{e.message}"
+      nil
+    end
+
+    def run_output(step)
+      content = step[:block].call(@ctx).to_s
+      write content unless content.empty?
+      nil
+    rescue IOError, Errno::EPIPE, Errno::ECONNRESET
+      :halt
+    rescue => e
+      warn "BBS output error: #{e.class}: #{e.message}"
+      write "\r\n  #{STYLES[:error]}Error rendering content.\e[0m\r\n"
+      nil
+    end
+
     # ── helpers ────────────────────────────────────────────────────────────────
+
+    def strip_md(text)
+      text.gsub(/\[([^\]]+)\]\([^)]+\)/, '\1')
+          .gsub(/[#*_`~>|\\]/, '')
+          .gsub(/\r?\n+/, ' ')
+          .strip
+    end
 
     def style_color(value)
       value.is_a?(Symbol) ? STYLES.fetch(value, STYLES[:muted]) : value.to_s
