@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'bbs/color'
 require_relative 'bbs/config'
 require_relative 'bbs/telnet'
 require_relative 'bbs/banner'
