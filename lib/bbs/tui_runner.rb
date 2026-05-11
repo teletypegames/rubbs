@@ -56,13 +56,17 @@ module BBS
         @buf << "\e[#{row};#{col}H"
       end
 
+      def term_cols = @session.term_cols || 80
+      def term_rows = @session.term_rows || 24
+
       def text(content, x: nil, y: nil, style: nil)
         at(x, y) if x && y
         color = STYLES[style]
         @buf << (color ? "#{color}#{content}\e[0m" : content.to_s)
       end
 
-      def bar(y:, content:, width: 80, style: :muted)
+      def bar(y:, content:, width: nil, style: :muted)
+        width ||= term_cols
         text content.to_s.ljust(width), x: 1, y: y, style: style
       end
 

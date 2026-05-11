@@ -6,7 +6,7 @@ module BBS
   class Session
     include Telnet
 
-    attr_reader :session_id
+    attr_reader :session_id, :term_cols, :term_rows
 
     def initialize(client)
       @client     = client

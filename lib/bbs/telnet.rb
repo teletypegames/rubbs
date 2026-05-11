@@ -12,11 +12,15 @@ module BBS
 
     ECHO_OPT = 1
     SGA_OPT  = 3
+    NAWS_OPT = 31
 
     def negotiate
+      @term_cols = 80
+      @term_rows = 24
       send_raw [IAC, WILL, SGA_OPT].pack('C*')
       send_raw [IAC, WILL, ECHO_OPT].pack('C*')
       send_raw [IAC, DO,   SGA_OPT].pack('C*')
+      send_raw [IAC, DO,   NAWS_OPT].pack('C*')
     end
 
     def readkey
@@ -113,13 +117,23 @@ module BBS
 
       case cmd.ord
       when SB
+        opt = @client.read(1)
+        buf = []
         loop do
           b = @client.read(1)
           break if b.nil?
           if b.ord == IAC
             s = @client.read(1)
             break if s.nil? || s.ord == SE
+          else
+            buf << b.ord
           end
+        end
+        if opt&.ord == NAWS_OPT && buf.size >= 4
+          cols = (buf[0] << 8) | buf[1]
+          rows = (buf[2] << 8) | buf[3]
+          @term_cols = cols if cols > 0
+          @term_rows = rows if rows > 0
         end
       when WILL, WONT, DO, DONT
         @client.read(1)
