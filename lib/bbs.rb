@@ -8,6 +8,8 @@ require_relative 'bbs/flow'
 require_relative 'bbs/flow_runner'
 require_relative 'bbs/renderer'
 require_relative 'bbs/store'
+require_relative 'bbs/tui'
+require_relative 'bbs/tui_runner'
 require_relative 'bbs/session'
 require_relative 'bbs/server'
 

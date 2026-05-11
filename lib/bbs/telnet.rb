@@ -19,6 +19,27 @@ module BBS
       send_raw [IAC, DO,   SGA_OPT].pack('C*')
     end
 
+    def readkey
+      loop do
+        raw  = @client.read(1)
+        return nil if raw.nil?
+        byte = raw.ord
+
+        if byte == IAC
+          absorb_iac
+          next
+        end
+
+        case byte
+        when 13, 10  then return :enter
+        when 27      then return read_escape_sequence
+        when 8, 127  then return :backspace
+        when 3       then return :interrupt
+        when 32..126 then return raw
+        end
+      end
+    end
+
     def readline
       line    = +""
       last_cr = false
@@ -69,6 +90,22 @@ module BBS
     end
 
     private
+
+    def read_escape_sequence
+      b1 = @client.read(1)
+      return :escape if b1.nil? || b1 != '['
+
+      b2 = @client.read(1)
+      return :escape if b2.nil?
+
+      case b2
+      when 'A' then :up
+      when 'B' then :down
+      when 'C' then :right
+      when 'D' then :left
+      else          :escape
+      end
+    end
 
     def absorb_iac
       cmd = @client.read(1)

@@ -70,6 +70,7 @@ module BBS
       when :pick          then run_pick(step)
       when :body          then run_body(step)
       when :output        then run_output(step)
+      when :tui           then run_tui(step)
       end
     end
 
@@ -339,6 +340,13 @@ module BBS
       warn "BBS output error: #{e.class}: #{e.message}"
       write "\r\n  #{STYLES[:error]}Error rendering content.\e[0m\r\n"
       nil
+    end
+
+    def run_tui(step)
+      TUIRunner.new(@session, @session_id, step[:definition]).run
+      nil
+    rescue IOError, Errno::EPIPE, Errno::ECONNRESET
+      :halt
     end
 
     # ── helpers ────────────────────────────────────────────────────────────────

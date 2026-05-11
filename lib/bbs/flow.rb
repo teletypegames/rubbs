@@ -118,6 +118,10 @@ module BBS
     def output(&block)
       @steps << { type: :output, block: block }
     end
+
+    def tui(definition)
+      @steps << { type: :tui, definition: definition }
+    end
   end
 
   class MenuBuilder
