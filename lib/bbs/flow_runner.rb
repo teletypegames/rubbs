@@ -18,7 +18,7 @@ module BBS
       red:     "\e[1;31m",
     }.freeze
 
-    attr_reader :session_id
+    attr_reader :session_id, :session
 
     def initialize(session, session_id, flow)
       @session    = session
@@ -343,7 +343,7 @@ module BBS
     end
 
     def run_tui(step)
-      TUIRunner.new(@session, @session_id, step[:definition]).run
+      TUIRunner.new(@session, @session_id, step[:definition], context: @ctx).run
       nil
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       :halt

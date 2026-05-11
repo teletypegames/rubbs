@@ -2,27 +2,24 @@
 
 module BBS
   class TUIRunner
-    def initialize(session, session_id, tui)
+    def initialize(session, session_id, tui, context: {})
       @session    = session
       @session_id = session_id
       @tui        = tui
+      @context    = context
     end
 
     def run
-      ctx = Context.new(@session, @session_id)
+      ctx = Context.new(@session, @session_id, @tui)
+      @context.each { |k, v| ctx.instance_variable_set(:"@#{k}", v) }
       ctx.instance_eval(&@tui.init_block) if @tui.init_block
+      ctx.go(@tui.start_page)
 
       loop do
-        ctx.do_render(@tui.render_block) if @tui.render_block
-
+        ctx.do_render
         key = @session.readkey
         break if key.nil?
-
-        handler = @tui.key_bindings[key]
-        next unless handler
-
-        result = handler.is_a?(Symbol) ? handler : ctx.instance_eval(&handler)
-        break if result == :halt
+        break if ctx.dispatch_key(key) == :halt
       end
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       nil
@@ -33,31 +30,57 @@ module BBS
     class Context
       STYLES = FlowRunner::STYLES
 
-      def initialize(session, session_id)
-        @session    = session
-        @session_id = session_id
-        @buf        = +""
+      def initialize(session, session_id, tui)
+        @session      = session
+        @session_id   = session_id
+        @tui          = tui
+        @current_page = nil
+        @buf          = +""
+        extend(@tui.helper_module) if @tui.helper_module
       end
 
-      def do_render(block)
+      def go(page_name)
+        @current_page = page_name
+        page = @tui.pages[page_name]
+        instance_eval(&page.enter_block) if page&.enter_block
+        nil
+      end
+
+      def reload = go(@current_page)
+
+      def do_render
         @buf = +"\e[?25l"
-        instance_eval(&block)
+        clear
+        instance_eval(&@tui.chrome_block) if @tui.chrome_block
+        page = @tui.pages[@current_page]
+        instance_eval(&page.render_block) if page&.render_block
         @buf << "\e[?25h"
         @session.write(@buf)
       end
 
-      # ── drawing primitives ────────────────────────────────────────────────
+      def dispatch_key(key)
+        page    = @tui.pages[@current_page]
+        handler = page&.key_bindings&.[](key)
 
-      def clear
-        @buf << "\e[2J\e[H"
+        if handler.nil? && key.is_a?(String) && key.length == 1
+          if (ph = page&.key_bindings&.[](:printable))
+            return instance_exec(key, &ph)
+          end
+        end
+
+        return nil unless handler
+        instance_eval(&handler)
       end
+
+      # ── drawing primitives ──────────────────────────────────────────────────
+
+      def clear     = @buf << "\e[2J\e[H"
+      def term_cols = @session.term_cols || 80
+      def term_rows = @session.term_rows || 24
 
       def at(col, row)
         @buf << "\e[#{row};#{col}H"
       end
-
-      def term_cols = @session.term_cols || 80
-      def term_rows = @session.term_rows || 24
 
       def text(content, x: nil, y: nil, style: nil)
         at(x, y) if x && y
