@@ -173,6 +173,14 @@ module BBS
         yield x + 1, y + 1, inner, h - 2 if block_given?
       end
 
+      def float(title: nil, width: 40, height: 20, style: :muted, bg: :black, &block)
+        w = [[width, term_cols - 4].min, 4].max
+        h = [[height, term_rows - 4].min, 3].max
+        x = (term_cols - w) / 2 + 1
+        y = (term_rows - h) / 2 + 1
+        box(x: x, y: y, w: w, h: h, title: title, style: style, bg: bg, &block)
+      end
+
       private
 
       def resolve_style(style)

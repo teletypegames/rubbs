@@ -179,12 +179,6 @@ module BBS
              x: CONT_X, y: CONT_Y + cont_h, style: THEME[:label]
       end
 
-      def render_sysinfo_rows
-        @items.each_with_index do |row, i|
-          text row[0, cont_w], x: CONT_X, y: CONT_Y + i, style: THEME[:normal]
-        end
-        text 'q back', x: CONT_X, y: CONT_Y + cont_h, style: THEME[:label]
-      end
     end
   end
 end
