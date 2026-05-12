@@ -120,7 +120,9 @@ module BBS
       when :escape, :f10
         close
       when :enter
-        activate_current
+        r = activate_current
+        $stderr.puts "[menu] navigate enter -> #{r.inspect}"
+        return r
       else
         if event.char?
           activated = activate_by_hotkey(menu.items, event.key)
@@ -192,6 +194,7 @@ module BBS
       return :handled unless item && !item.separator && item.enabled != false
       close
       result = item.on_select&.call(item)
+      $stderr.puts "[menu] activate_current item=#{item.label.inspect} result=#{result.inspect}"
       @on_activate&.call(item)
       result == :halt ? :halt : :handled
     end

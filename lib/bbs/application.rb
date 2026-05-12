@@ -174,6 +174,7 @@ module BBS
       # Menubar handles Alt-letter / F10 / its own keys
       if @menubar
         result = @menubar.handle_event(event)
+        $stderr.puts "[app] menubar handle_event -> #{result.inspect}"
         return :halt if result == :halt
         return nil if result
       end
