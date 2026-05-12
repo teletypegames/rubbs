@@ -160,8 +160,6 @@ module BBS
     end
 
     def dispatch(event)
-      relayout!
-
       # Modal windows: top window gets first shot at events
       if (win = top_window)
         result = win.handle_event(event)
@@ -218,6 +216,8 @@ module BBS
       resized = !first && (@committed.cols != c || @committed.rows != r)
       @committed = FrameBuffer.new(c, r) if first || resized
       @next      = FrameBuffer.new(c, r)
+
+      relayout!
 
       @next.fill(x: 1, y: 1, width: c, height: r, sgr: @theme[:screen])
       @root.render(@next)
