@@ -106,14 +106,6 @@ module BBS
              x: CONT_X, y: CONT_Y + cont_h, style: THEME[:label]
       end
 
-      def render_new_message_form
-        text 'Type your message and press Enter.  Esc cancels.',
-             x: CONT_X, y: CONT_Y, style: THEME[:normal]
-        text "#{tc(:bright, @username)}: #{tc(:input, @input)}_",
-             x: CONT_X, y: CONT_Y + 2
-        text @status, x: CONT_X, y: CONT_Y + 4, style: THEME[:error] unless @status.empty?
-      end
-
       def render_wiki_list
         list_h  = cont_h - 3
         visible = @items[@scroll, list_h] || []
