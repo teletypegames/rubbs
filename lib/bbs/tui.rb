@@ -25,9 +25,9 @@ module BBS
     end
 
     def page(name, &block)
-      p = Page.new(name)
-      p.instance_eval(&block)
-      @pages[name] = p
+      page_definition = Page.new(name)
+      page_definition.instance_eval(&block)
+      @pages[name] = page_definition
     end
 
     class Page
@@ -44,35 +44,35 @@ module BBS
       def printable(&block) = (@key_bindings[:printable] = block)
 
       def nav(mode, **opts)
-        lift = ->(v) { v.is_a?(Proc) ? v : -> { v } }
+        coerce = ->(value) { value.is_a?(Proc) ? value : -> { value } }
 
         case mode
         when :menu
-          size = lift.(opts.fetch(:size))
-          key(:up)   { @menu_sel = (@menu_sel - 1) % instance_exec(&size) }
-          key(:down) { @menu_sel = (@menu_sel + 1) % instance_exec(&size) }
+          size = coerce.(opts.fetch(:size))
+          key(:up)   { @menu_selection = (@menu_selection - 1) % instance_exec(&size) }
+          key(:down) { @menu_selection = (@menu_selection + 1) % instance_exec(&size) }
 
         when :cycle
-          key(:up)   { @item_sel = (@item_sel - 1) % @items.size if @items.any? }
-          key(:down) { @item_sel = (@item_sel + 1) % @items.size if @items.any? }
+          key(:up)   { @item_selection = (@item_selection - 1) % @items.size if @items.any? }
+          key(:down) { @item_selection = (@item_selection + 1) % @items.size if @items.any? }
 
         when :list
-          window = lift.(opts.fetch(:window))
+          window = coerce.(opts.fetch(:window))
           key(:up) do
-            return if @item_sel <= 0
-            @item_sel -= 1
-            @scroll = @item_sel if @item_sel < @scroll
+            return if @item_selection <= 0
+            @item_selection -= 1
+            @scroll = @item_selection if @item_selection < @scroll
           end
           key(:down) do
-            return if @item_sel >= @items.size - 1
-            @item_sel += 1
-            wh = instance_exec(&window)
-            @scroll = @item_sel - wh + 1 if @item_sel >= @scroll + wh
+            return if @item_selection >= @items.size - 1
+            @item_selection += 1
+            window_size = instance_exec(&window)
+            @scroll = @item_selection - window_size + 1 if @item_selection >= @scroll + window_size
           end
 
         when :scroll
           content = opts.fetch(:content)
-          window  = lift.(opts.fetch(:window))
+          window  = coerce.(opts.fetch(:window))
           key(:up)   { @scroll = [@scroll - 1, 0].max }
           key(:down) do
             max = [instance_exec(&content).size - instance_exec(&window), 0].max

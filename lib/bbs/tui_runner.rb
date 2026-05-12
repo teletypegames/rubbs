@@ -10,16 +10,16 @@ module BBS
     end
 
     def run
-      ctx = Context.new(@session, @session_id, @tui)
-      @context.each { |k, v| ctx.instance_variable_set(:"@#{k}", v) }
-      ctx.instance_eval(&@tui.init_block) if @tui.init_block
-      ctx.go(@tui.start_page)
+      context = Context.new(@session, @session_id, @tui)
+      @context.each { |key, value| context.instance_variable_set(:"@#{key}", value) }
+      context.instance_eval(&@tui.init_block) if @tui.init_block
+      context.go(@tui.start_page)
 
       loop do
-        ctx.do_render
+        context.do_render
         key = @session.readkey
         break if key.nil?
-        break if ctx.dispatch_key(key) == :halt
+        break if context.dispatch_key(key) == :halt
       end
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       nil
@@ -30,18 +30,18 @@ module BBS
     class Context
       STYLES = FlowRunner::STYLES
 
-      BG_COLORS = {
+      BACKGROUND_COLORS = {
         black:  "\e[40m", red:    "\e[41m", green: "\e[42m",
         yellow: "\e[43m", blue:   "\e[44m", cyan:  "\e[46m",
         white:  "\e[47m",
       }.freeze
 
       def initialize(session, session_id, tui)
-        @session          = session
-        @session_id       = session_id
-        @tui              = tui
-        @current_page     = nil
-        @committed_frame  = nil
+        @session         = session
+        @session_id      = session_id
+        @tui             = tui
+        @current_page    = nil
+        @committed_frame = nil
         extend(@tui.helper_module) if @tui.helper_module
       end
 
@@ -55,15 +55,15 @@ module BBS
       def reload = go(@current_page)
 
       def do_render
-        cols = term_cols
-        rows = term_rows
+        columns = term_cols
+        rows    = term_rows
 
         first_render = @committed_frame.nil?
         resized      = !first_render &&
-                       (@committed_frame.cols != cols || @committed_frame.rows != rows)
+                       (@committed_frame.cols != columns || @committed_frame.rows != rows)
 
-        @committed_frame = FrameBuffer.new(cols, rows) if first_render || resized
-        @next_frame      = FrameBuffer.new(cols, rows)
+        @committed_frame = FrameBuffer.new(columns, rows) if first_render || resized
+        @next_frame      = FrameBuffer.new(columns, rows)
 
         instance_eval(&@tui.chrome_block) if @tui.chrome_block
         page = @tui.pages[@current_page]
@@ -83,8 +83,8 @@ module BBS
         handler = page&.key_bindings&.[](key)
 
         if handler.nil? && key.is_a?(String) && key.length == 1
-          if (ph = page&.key_bindings&.[](:printable))
-            return instance_exec(key, &ph)
+          if (printable_handler = page&.key_bindings&.[](:printable))
+            return instance_exec(key, &printable_handler)
           end
         end
 
@@ -92,7 +92,7 @@ module BBS
         instance_eval(&handler)
       end
 
-      # ── drawing primitives ──────────────────────────────────────────────────
+      # ── Drawing primitives ────────────────────────────────────────────────────
 
       def clear
         @next_frame&.clear
@@ -101,8 +101,8 @@ module BBS
       def term_cols = @session.term_cols || 80
       def term_rows = @session.term_rows || 24
 
-      def at(col, row)
-        @next_frame.move(col, row)
+      def at(column, row)
+        @next_frame.move(column, row)
       end
 
       def text(content, x: nil, y: nil, style: nil)
@@ -112,73 +112,95 @@ module BBS
 
       def bar(y:, content:, width: nil, style: :muted)
         width ||= term_cols
-        sgr    = resolve_style(style)
+        style_code = resolve_style(style)
         at 1, y
-        @next_frame.write(' ' * width, sgr: sgr)
+        @next_frame.write(' ' * width, sgr: style_code)
         at 1, y
-        @next_frame.write_ansi(content.to_s, base_sgr: sgr)
+        @next_frame.write_ansi(content.to_s, base_sgr: style_code)
       end
 
       def list(items, x:, y:, selected: nil, style: :muted, highlight: :success)
-        norm = resolve_style(style)     || STYLES[:muted]
-        hi   = resolve_style(highlight) || STYLES[:success]
-        items.each_with_index do |item, i|
-          at x, y + i
-          if i == selected
-            @next_frame.write("▶ ", sgr: hi)
-            @next_frame.write_ansi(item.to_s, base_sgr: hi)
+        normal_style    = resolve_style(style)     || STYLES[:muted]
+        highlight_style = resolve_style(highlight) || STYLES[:success]
+        items.each_with_index do |item, index|
+          at x, y + index
+          if index == selected
+            @next_frame.write("▶ ", sgr: highlight_style)
+            @next_frame.write_ansi(item.to_s, base_sgr: highlight_style)
           else
-            @next_frame.write("  ", sgr: norm)
-            @next_frame.write_ansi(item.to_s, base_sgr: norm)
+            @next_frame.write("  ", sgr: normal_style)
+            @next_frame.write_ansi(item.to_s, base_sgr: normal_style)
           end
         end
       end
 
-      def fill(x:, y:, w:, h:, bg:)
-        sgr = BG_COLORS.fetch(bg, bg.to_s)
-        h.times do |dy|
-          at x, y + dy
-          @next_frame.write(' ' * w, sgr: sgr)
+      def fill(x:, y:, width:, height:, background:)
+        background_code = BACKGROUND_COLORS.fetch(background, background.to_s)
+        height.times do |row_offset|
+          at x, y + row_offset
+          @next_frame.write(' ' * width, sgr: background_code)
         end
       end
 
-      def screen_fill(bg:)
-        fill(x: 1, y: 1, w: term_cols, h: term_rows, bg: bg)
+      def screen_fill(background:)
+        fill(x: 1, y: 1, width: term_cols, height: term_rows, background: background)
       end
 
-      def box(x:, y:, w:, h:, title: nil, style: :muted, bg: nil)
-        color  = resolve_style(style) || STYLES[:muted]
-        inner  = w - 2
-        bg_sgr = bg ? BG_COLORS.fetch(bg, bg.to_s) : nil
+      def box(x:, y:, width:, height:, title: nil, style: :muted, background: nil)
+        style_code      = resolve_style(style) || STYLES[:muted]
+        inner_width     = width - 2
+        background_code = background ? BACKGROUND_COLORS.fetch(background, background.to_s) : nil
 
         at x, y
         if title
-          prefix = "══ #{title} "
-          pad    = [inner - prefix.length, 0].max
-          @next_frame.write("╔#{prefix}#{'═' * pad}╗", sgr: color)
+          prefix  = "══ #{title} "
+          padding = [inner_width - prefix.length, 0].max
+          @next_frame.write("╔#{prefix}#{'═' * padding}╗", sgr: style_code)
         else
-          @next_frame.write("╔#{'═' * inner}╗", sgr: color)
+          @next_frame.write("╔#{'═' * inner_width}╗", sgr: style_code)
         end
 
-        (1...h - 1).each do |dy|
-          at x, y + dy
-          @next_frame.write('║', sgr: color)
-          @next_frame.write(' ' * inner, sgr: bg_sgr)
-          @next_frame.write('║', sgr: color)
+        (1...height - 1).each do |row_offset|
+          at x, y + row_offset
+          @next_frame.write('║', sgr: style_code)
+          @next_frame.write(' ' * inner_width, sgr: background_code)
+          @next_frame.write('║', sgr: style_code)
         end
 
-        at x, y + h - 1
-        @next_frame.write("╚#{'═' * inner}╝", sgr: color)
+        at x, y + height - 1
+        @next_frame.write("╚#{'═' * inner_width}╝", sgr: style_code)
 
-        yield x + 1, y + 1, inner, h - 2 if block_given?
+        yield x + 1, y + 1, inner_width, height - 2 if block_given?
       end
 
-      def float(title: nil, width: 40, height: 20, style: :muted, bg: :black, &block)
-        w = [[width, term_cols - 4].min, 4].max
-        h = [[height, term_rows - 4].min, 3].max
-        x = (term_cols - w) / 2 + 1
-        y = (term_rows - h) / 2 + 1
-        box(x: x, y: y, w: w, h: h, title: title, style: style, bg: bg, &block)
+      def float(title: nil, width: 40, height: 20, style: :muted, background: :black, &block)
+        clamped_width  = [[width,  term_cols - 4].min, 4].max
+        clamped_height = [[height, term_rows - 4].min, 3].max
+        x = (term_cols - clamped_width)  / 2 + 1
+        y = (term_rows - clamped_height) / 2 + 1
+        box(x: x, y: y, width: clamped_width, height: clamped_height,
+            title: title, style: style, background: background, &block)
+      end
+
+      # ── Text utilities ────────────────────────────────────────────────────────
+
+      def wordwrap(text, width)
+        words = text.to_s
+                    .gsub(/\[([^\]]+)\]\([^)]+\)/, '\1')
+                    .gsub(/[#*_`~>|\\]/, '')
+                    .gsub(/\r?\n+/, ' ')
+                    .strip
+                    .split
+        lines       = []
+        current     = +''
+        words.each do |word|
+          if    current.empty?                               then current << word
+          elsif current.length + 1 + word.length <= width   then current << ' ' << word
+          else  lines << current.dup; current = +word
+          end
+        end
+        lines << current unless current.empty?
+        lines
       end
 
       private
