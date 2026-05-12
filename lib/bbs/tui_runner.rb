@@ -37,11 +37,11 @@ module BBS
       }.freeze
 
       def initialize(session, session_id, tui)
-        @session      = session
-        @session_id   = session_id
-        @tui          = tui
-        @current_page = nil
-        @buf          = +""
+        @session          = session
+        @session_id       = session_id
+        @tui              = tui
+        @current_page     = nil
+        @committed_frame  = nil
         extend(@tui.helper_module) if @tui.helper_module
       end
 
@@ -55,13 +55,27 @@ module BBS
       def reload = go(@current_page)
 
       def do_render
-        @buf = +"\e[?25l"
-        clear
+        cols = term_cols
+        rows = term_rows
+
+        first_render = @committed_frame.nil?
+        resized      = !first_render &&
+                       (@committed_frame.cols != cols || @committed_frame.rows != rows)
+
+        @committed_frame = FrameBuffer.new(cols, rows) if first_render || resized
+        @next_frame      = FrameBuffer.new(cols, rows)
+
         instance_eval(&@tui.chrome_block) if @tui.chrome_block
         page = @tui.pages[@current_page]
         instance_eval(&page.render_block) if page&.render_block
-        @buf << "\e[?25h"
-        @session.write(@buf)
+
+        delta = @next_frame.diff(@committed_frame)
+
+        if first_render || resized || !delta.empty?
+          prefix = (first_render || resized) ? "\e[2J\e[H" : ""
+          @session.write("\e[?25l#{prefix}#{delta}\e[?25h")
+          @committed_frame = @next_frame
+        end
       end
 
       def dispatch_key(key)
@@ -80,39 +94,51 @@ module BBS
 
       # ── drawing primitives ──────────────────────────────────────────────────
 
-      def clear     = @buf << "\e[2J\e[H"
+      def clear
+        @next_frame&.clear
+      end
+
       def term_cols = @session.term_cols || 80
       def term_rows = @session.term_rows || 24
 
       def at(col, row)
-        @buf << "\e[#{row};#{col}H"
+        @next_frame.move(col, row)
       end
 
       def text(content, x: nil, y: nil, style: nil)
         at(x, y) if x && y
-        color = resolve_style(style)
-        @buf << (color ? "#{color}#{content}\e[0m" : content.to_s)
+        @next_frame.write_ansi(content.to_s, base_sgr: resolve_style(style))
       end
 
       def bar(y:, content:, width: nil, style: :muted)
         width ||= term_cols
-        text content.to_s.ljust(width), x: 1, y: y, style: style
+        sgr    = resolve_style(style)
+        at 1, y
+        @next_frame.write(' ' * width, sgr: sgr)
+        at 1, y
+        @next_frame.write_ansi(content.to_s, base_sgr: sgr)
       end
 
       def list(items, x:, y:, selected: nil, style: :muted, highlight: :success)
-        norm = resolve_style(style)   || STYLES[:muted]
+        norm = resolve_style(style)     || STYLES[:muted]
         hi   = resolve_style(highlight) || STYLES[:success]
         items.each_with_index do |item, i|
           at x, y + i
-          @buf << (i == selected ? "#{hi}▶ #{item}\e[0m" : "#{norm}  #{item}\e[0m")
+          if i == selected
+            @next_frame.write("▶ ", sgr: hi)
+            @next_frame.write_ansi(item.to_s, base_sgr: hi)
+          else
+            @next_frame.write("  ", sgr: norm)
+            @next_frame.write_ansi(item.to_s, base_sgr: norm)
+          end
         end
       end
 
       def fill(x:, y:, w:, h:, bg:)
-        color = BG_COLORS.fetch(bg, bg.to_s)
+        sgr = BG_COLORS.fetch(bg, bg.to_s)
         h.times do |dy|
           at x, y + dy
-          @buf << "#{color}#{' ' * w}\e[0m"
+          @next_frame.write(' ' * w, sgr: sgr)
         end
       end
 
@@ -123,25 +149,26 @@ module BBS
       def box(x:, y:, w:, h:, title: nil, style: :muted, bg: nil)
         color  = resolve_style(style) || STYLES[:muted]
         inner  = w - 2
-        bg_str = bg ? BG_COLORS.fetch(bg, bg.to_s) : nil
+        bg_sgr = bg ? BG_COLORS.fetch(bg, bg.to_s) : nil
 
         at x, y
         if title
           prefix = "══ #{title} "
           pad    = [inner - prefix.length, 0].max
-          @buf << "#{color}╔#{prefix}#{'═' * pad}╗\e[0m"
+          @next_frame.write("╔#{prefix}#{'═' * pad}╗", sgr: color)
         else
-          @buf << "#{color}╔#{'═' * inner}╗\e[0m"
+          @next_frame.write("╔#{'═' * inner}╗", sgr: color)
         end
 
         (1...h - 1).each do |dy|
           at x, y + dy
-          interior = bg_str ? "#{bg_str}#{' ' * inner}\e[0m" : ' ' * inner
-          @buf << "#{color}║\e[0m#{interior}#{color}║\e[0m"
+          @next_frame.write('║', sgr: color)
+          @next_frame.write(' ' * inner, sgr: bg_sgr)
+          @next_frame.write('║', sgr: color)
         end
 
         at x, y + h - 1
-        @buf << "#{color}╚#{'═' * inner}╝\e[0m"
+        @next_frame.write("╚#{'═' * inner}╝", sgr: color)
 
         yield x + 1, y + 1, inner, h - 2 if block_given?
       end
