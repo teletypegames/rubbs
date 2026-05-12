@@ -134,6 +134,27 @@ module BBS
         end
       end
 
+      def list_view(items, x:, y:, height:, scroll:, selected: nil,
+                   label: :to_s, hint: nil, hint_y: nil,
+                   empty: 'No items found.',
+                   style: nil, highlight: nil)
+        visible = items[scroll, height] || []
+        if visible.empty?
+          text empty, x: x, y: y, style: style
+          return
+        end
+
+        call_label = label.is_a?(Symbol) ? ->(item) { item.public_send(label) } : label
+        list visible.map { |item| call_label.(item).to_s },
+             x: x, y: y,
+             selected: selected && (selected - scroll),
+             style: style, highlight: highlight
+
+        return unless hint && selected && (item = items[selected])
+        hint_text = (hint.is_a?(Symbol) ? item.public_send(hint) : hint.(item)).to_s.strip
+        text hint_text, x: x, y: (hint_y || y + height + 1), style: style unless hint_text.empty?
+      end
+
       def fill(x:, y:, width:, height:, background:)
         background_code = BACKGROUND_COLORS.fetch(background, background.to_s)
         height.times do |row_offset|
