@@ -160,6 +160,14 @@ module BBS
     end
 
     def dispatch(event)
+      # An open menubar has priority — its keys (arrows, Enter, hotkeys, Esc)
+      # must beat any modal window's focused widget.
+      if @menubar&.open?
+        result = @menubar.handle_event(event)
+        return :halt if result == :halt
+        return nil if result
+      end
+
       # Modal windows: top window gets first shot at events
       if (win = top_window)
         result = win.handle_event(event)
@@ -171,10 +179,9 @@ module BBS
         return nil if result
       end
 
-      # Menubar handles Alt-letter / F10 / its own keys
+      # Menubar handles Alt-letter / F10 / its own keys when closed
       if @menubar
         result = @menubar.handle_event(event)
-        $stderr.puts "[app] menubar handle_event -> #{result.inspect}"
         return :halt if result == :halt
         return nil if result
       end
