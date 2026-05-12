@@ -14,6 +14,8 @@ module BBS
     SGA_OPT  = 3
     NAWS_OPT = 31
 
+    MouseEvent = Struct.new(:kind, :button, :x, :y, :mods, keyword_init: true)
+
     def negotiate
       @term_cols = 80
       @term_rows = 24
@@ -23,9 +25,22 @@ module BBS
       send_raw [IAC, DO,   NAWS_OPT].pack('C*')
     end
 
-    def readkey
+    def enable_mouse
+      return if @mouse_enabled
+      write "\e[?1000h\e[?1006h"
+      @mouse_enabled = true
+    end
+
+    def disable_mouse
+      return unless @mouse_enabled
+      write "\e[?1006l\e[?1000l"
+      @mouse_enabled = false
+    end
+
+    def readkey(timeout: nil)
       loop do
-        raw  = @client.read(1)
+        raw  = read_byte(timeout)
+        return :idle if raw == :timeout
         return nil if raw.nil?
         byte = raw.ord
 
@@ -36,12 +51,21 @@ module BBS
 
         case byte
         when 13, 10  then return :enter
+        when 9       then return :tab
         when 27      then return read_escape_sequence
         when 8, 127  then return :backspace
         when 3       then return :interrupt
+        when 1..26   then return :"ctrl_#{(byte + 96).chr}"
         when 32..126 then return raw
         end
       end
+    end
+
+    def read_byte(timeout = nil)
+      return @client.read(1) if timeout.nil?
+      ready = IO.select([@client], nil, nil, timeout)
+      return :timeout unless ready
+      @client.read(1)
     end
 
     def readline
@@ -95,20 +119,122 @@ module BBS
 
     private
 
+    # Reads a CSI / SS3 sequence after ESC. Returns a Symbol (key name),
+    # a Symbol :"alt_<x>" (Alt-modified key), a MouseEvent, or :escape.
     def read_escape_sequence
       b1 = @client.read(1)
-      return :escape if b1.nil? || b1 != '['
+      return :escape if b1.nil?
 
-      b2 = @client.read(1)
-      return :escape if b2.nil?
+      case b1
+      when '['
+        read_csi
+      when 'O'
+        # SS3 — many terminals send F1-F4 this way
+        b2 = @client.read(1)
+        return :escape if b2.nil?
+        case b2
+        when 'P' then :f1
+        when 'Q' then :f2
+        when 'R' then :f3
+        when 'S' then :f4
+        when 'H' then :home
+        when 'F' then :end
+        else          :escape
+        end
+      else
+        # Treat ESC + printable as Alt+<char>
+        if b1.ord.between?(32, 126)
+          :"alt_#{b1.downcase}"
+        else
+          :escape
+        end
+      end
+    end
 
-      case b2
+    def read_csi
+      # Read CSI parameters: digits, ';', '<', '?', then a single final byte.
+      raw = +''
+      final = nil
+      loop do
+        c = @client.read(1)
+        return :escape if c.nil?
+        if c.match?(/[A-Za-z~]/)
+          final = c
+          break
+        end
+        raw << c
+        break if raw.length > 32 # safety
+      end
+      return :escape if final.nil?
+
+      # SGR mouse: ESC [ < b ; x ; y (M|m)
+      if raw.start_with?('<') && (final == 'M' || final == 'm')
+        parts = raw[1..].split(';')
+        return :escape if parts.size != 3
+        b = parts[0].to_i
+        x = parts[1].to_i
+        y = parts[2].to_i
+        return decode_mouse(b, x, y, pressed: final == 'M')
+      end
+
+      case final
       when 'A' then :up
       when 'B' then :down
       when 'C' then :right
       when 'D' then :left
-      else          :escape
+      when 'H' then :home
+      when 'F' then :end
+      when 'Z' then :shift_tab
+      when '~'
+        case raw.to_i
+        when 1, 7  then :home
+        when 2     then :insert
+        when 3     then :delete
+        when 4, 8  then :end
+        when 5     then :page_up
+        when 6     then :page_down
+        when 11    then :f1
+        when 12    then :f2
+        when 13    then :f3
+        when 14    then :f4
+        when 15    then :f5
+        when 17    then :f6
+        when 18    then :f7
+        when 19    then :f8
+        when 20    then :f9
+        when 21    then :f10
+        when 23    then :f11
+        when 24    then :f12
+        else            :escape
+        end
+      else :escape
       end
+    end
+
+    def decode_mouse(b, x, y, pressed:)
+      mods = []
+      mods << :shift if b & 4 != 0
+      mods << :meta  if b & 8 != 0
+      mods << :ctrl  if b & 16 != 0
+
+      motion = (b & 32) != 0
+      wheel  = (b & 64) != 0
+
+      button_id = b & 3
+      if wheel
+        kind   = :wheel
+        button = button_id == 0 ? :up : :down
+      else
+        button = case button_id
+                 when 0 then :left
+                 when 1 then :middle
+                 when 2 then :right
+                 else        :none
+                 end
+        kind = motion ? :move : (pressed ? :press : :release)
+      end
+
+      MouseEvent.new(kind: kind, button: button, x: x, y: y, mods: mods)
     end
 
     def absorb_iac

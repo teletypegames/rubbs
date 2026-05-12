@@ -122,6 +122,10 @@ module BBS
     def tui(definition)
       @steps << { type: :tui, definition: definition }
     end
+
+    def app(definition)
+      @steps << { type: :app, definition: definition }
+    end
   end
 
   class MenuBuilder

@@ -71,6 +71,7 @@ module BBS
       when :body          then run_body(step)
       when :output        then run_output(step)
       when :tui           then run_tui(step)
+      when :app           then run_app(step)
       end
     end
 
@@ -344,6 +345,15 @@ module BBS
 
     def run_tui(step)
       TUIRunner.new(@session, @session_id, step[:definition], context: @ctx).run
+      nil
+    rescue IOError, Errno::EPIPE, Errno::ECONNRESET
+      :halt
+    end
+
+    def run_app(step)
+      builder = step[:definition]
+      app = builder.build(session: @session, session_id: @session_id, context: @ctx)
+      app.run
       nil
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       :halt

@@ -80,6 +80,77 @@ module BBS
       end
     end
 
+    # ── Drawing helpers (1-based coordinates) ────────────────────────────────
+
+    def fill(x:, y:, width:, height:, sgr: nil, char: ' ')
+      height.times do |r|
+        move(x, y + r)
+        write(char * width, sgr: sgr)
+      end
+    end
+
+    def hline(x:, y:, length:, char: '─', sgr: nil)
+      move(x, y)
+      write(char * length, sgr: sgr)
+    end
+
+    def vline(x:, y:, length:, char: '│', sgr: nil)
+      length.times do |r|
+        move(x, y + r)
+        write(char, sgr: sgr)
+      end
+    end
+
+    BOX_CHARS = {
+      single: { tl: '┌', tr: '┐', bl: '└', br: '┘', h: '─', v: '│' },
+      double: { tl: '╔', tr: '╗', bl: '╚', br: '╝', h: '═', v: '║' },
+    }.freeze
+
+    def box(x:, y:, width:, height:, sgr: nil, fill_sgr: nil, style: :single, title: nil, title_sgr: nil)
+      return if width < 2 || height < 2
+      g  = BOX_CHARS[style] || BOX_CHARS[:single]
+      iw = width - 2
+
+      move(x, y)
+      write(g[:tl], sgr: sgr)
+      if title && title.length > 0
+        clipped = title[0, [iw - 2, 0].max]
+        prefix  = "#{g[:h]} "
+        write(prefix, sgr: sgr)
+        write(clipped, sgr: title_sgr || sgr)
+        rest = iw - prefix.length - clipped.length
+        write(g[:h] * [rest, 0].max, sgr: sgr) if rest > 0
+      else
+        write(g[:h] * iw, sgr: sgr)
+      end
+      write(g[:tr], sgr: sgr)
+
+      (1...height - 1).each do |r|
+        move(x, y + r)
+        write(g[:v], sgr: sgr)
+        write(' ' * iw, sgr: fill_sgr) if fill_sgr
+        move(x + width - 1, y + r)
+        write(g[:v], sgr: sgr)
+      end
+
+      move(x, y + height - 1)
+      write(g[:bl], sgr: sgr)
+      write(g[:h] * iw, sgr: sgr)
+      write(g[:br], sgr: sgr)
+    end
+
+    def shadow(x:, y:, width:, height:, sgr: nil)
+      sgr ||= "\e[40m"
+      # right edge
+      height.times do |r|
+        move(x + width, y + 1 + r)
+        write('  ', sgr: sgr) if x + width < @cols
+      end
+      # bottom edge
+      move(x + 2, y + height)
+      write(' ' * width, sgr: sgr) if y + height <= @rows
+    end
+
     # Compute the minimal ANSI byte stream to transform +from+ into +self+.
     def diff(from)
       out     = +""

@@ -15,10 +15,15 @@ module BBS
       context.instance_eval(&@tui.init_block) if @tui.init_block
       context.go(@tui.start_page)
 
+      idle = BBS.config.idle_seconds
       loop do
         context.do_render
-        key = @session.readkey
+        key = @session.readkey(timeout: idle)
         break if key.nil?
+        if key == :idle
+          break if context.dispatch_key(:idle) == :halt
+          next
+        end
         break if context.dispatch_key(key) == :halt
       end
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
@@ -79,13 +84,26 @@ module BBS
       end
 
       def dispatch_key(key)
-        page    = @tui.pages[@current_page]
-        handler = page&.key_bindings&.[](key)
+        page = @tui.pages[@current_page]
+        return nil unless page
+
+        if key.is_a?(Telnet::MouseEvent)
+          if (mouse_handler = page.key_bindings[:mouse])
+            return instance_exec(key, &mouse_handler)
+          end
+          return nil
+        end
+
+        handler = page.key_bindings[key]
 
         if handler.nil? && key.is_a?(String) && key.length == 1
-          if (printable_handler = page&.key_bindings&.[](:printable))
+          if (printable_handler = page.key_bindings[:printable])
             return instance_exec(key, &printable_handler)
           end
+        end
+
+        if handler.nil? && (any_handler = page.key_bindings[:any])
+          return instance_exec(key, &any_handler)
         end
 
         return nil unless handler

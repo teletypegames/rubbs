@@ -42,6 +42,8 @@ module BBS
       def render(&block)    = @render_block = block
       def key(k, &block)    = (@key_bindings[k] = block)
       def printable(&block) = (@key_bindings[:printable] = block)
+      def mouse(&block)     = (@key_bindings[:mouse] = block)
+      def any_key(&block)   = (@key_bindings[:any] = block)
 
       def nav(mode, **opts)
         coerce = ->(value) { value.is_a?(Proc) ? value : -> { value } }
@@ -59,15 +61,33 @@ module BBS
         when :list
           window = coerce.(opts.fetch(:window))
           key(:up) do
-            return if @item_selection <= 0
+            next if @item_selection <= 0
             @item_selection -= 1
             @scroll = @item_selection if @item_selection < @scroll
           end
           key(:down) do
-            return if @item_selection >= @items.size - 1
+            next if @item_selection >= @items.size - 1
             @item_selection += 1
             window_size = instance_exec(&window)
             @scroll = @item_selection - window_size + 1 if @item_selection >= @scroll + window_size
+          end
+          key(:page_up) do
+            next if @item_selection <= 0
+            step = instance_exec(&window)
+            @item_selection = [@item_selection - step, 0].max
+            @scroll = [@scroll - step, 0].max
+          end
+          key(:page_down) do
+            next if @item_selection >= @items.size - 1
+            step = instance_exec(&window)
+            @item_selection = [@item_selection + step, @items.size - 1].min
+            @scroll = [[@scroll + step, @item_selection].min, [@items.size - step, 0].max].min
+          end
+          key(:home) { @item_selection = 0; @scroll = 0 }
+          key(:end)  do
+            step = instance_exec(&window)
+            @item_selection = @items.size - 1
+            @scroll = [@items.size - step, 0].max
           end
 
         when :scroll
@@ -77,6 +97,15 @@ module BBS
           key(:down) do
             max = [instance_exec(&content).size - instance_exec(&window), 0].max
             @scroll = [@scroll + 1, max].min
+          end
+          key(:page_up)   { @scroll = [@scroll - instance_exec(&window), 0].max }
+          key(:page_down) do
+            max = [instance_exec(&content).size - instance_exec(&window), 0].max
+            @scroll = [@scroll + instance_exec(&window), max].min
+          end
+          key(:home) { @scroll = 0 }
+          key(:end)  do
+            @scroll = [instance_exec(&content).size - instance_exec(&window), 0].max
           end
         end
       end
