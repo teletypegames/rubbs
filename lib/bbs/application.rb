@@ -125,14 +125,11 @@ module BBS
       @running = false
     end
 
-    # Periodic tick: notify on_tick callback and any window that defines
-    # a public @tick method (used by chat for incoming messages).
+    # Periodic tick: notify on_tick callback and let each open window pull
+    # any asynchronous updates by overriding BBS::Window#tick.
     def tick!
       @on_tick&.call(self)
-      @windows.each do |w|
-        poll = w.instance_variable_get(:@chat_poll)
-        poll&.call
-      end
+      @windows.each { |w| w.tick(self) }
     end
 
     def stop! = (@running = false)

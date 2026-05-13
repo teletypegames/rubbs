@@ -84,5 +84,9 @@ module BBS
       @on_close&.call(self)
       :close_window
     end
+
+    # Called once per Application idle tick (~1s). Override in subclasses that
+    # need to poll for asynchronous updates (e.g. BBS::Windows::Stream).
+    def tick(app); end
   end
 end
