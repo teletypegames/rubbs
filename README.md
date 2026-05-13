@@ -1,40 +1,111 @@
 # rubbs
 
-A Ruby gem for building telnet BBS servers.  Three interaction layers, from
-simplest to richest:
+A Ruby gem for building telnet BBS servers. From a one-screen line prompt to
+a full-blown Synchronet-style multi-window application — without leaving Ruby.
+
+```ruby
+require 'bbs'
+
+BBS.configure do |c|
+  c.flow = BBS::Flow.define do
+    big_banner 'My BBS'
+    ask :name, prompt: 'Your name'
+    say 'Welcome!', style: :success
+  end
+end
+
+BBS.start
+```
+
+Connect with `telnet localhost 2323`.
+
+---
+
+## Table of contents
+
+1. [Concepts](#1-concepts)
+2. [Installation & quick start](#2-installation--quick-start)
+3. [Server lifecycle](#3-server-lifecycle)
+4. [The Flow layer](#4-the-flow-layer)
+5. [The TUI layer](#5-the-tui-layer)
+6. [The Application layer](#6-the-application-layer)
+7. [Widgets](#7-widgets)
+8. [Windows](#8-windows)
+9. [Pre-built window types (`BBS::Windows`)](#9-pre-built-window-types-bbswindows)
+10. [Dialogs](#10-dialogs)
+11. [Menubar, Statusbar, Focus](#11-menubar-statusbar-focus)
+12. [Theming](#12-theming)
+13. [FrameBuffer & drawing primitives](#13-framebuffer--drawing-primitives)
+14. [Markdown renderer](#14-markdown-renderer)
+15. [Banner, ASCII art & ERB screens](#15-banner-ascii-art--erb-screens)
+16. [Persistence (`BBS::Store`)](#16-persistence-bbsstore)
+17. [Telnet, sessions & input model](#17-telnet-sessions--input-model)
+18. [Source layout](#18-source-layout)
+
+---
+
+## 1. Concepts
+
+rubbs ships three interaction layers, from simplest to richest. Layers can be
+mixed in a single session — typically `Flow` for login, then `Application`
+for the main shell.
 
 | Layer | What it is | When to use |
 |---|---|---|
-| `BBS::Flow` | Line-oriented declarative dialogue DSL (ask / say / menu / persist) | Login, registration, simple wizards |
-| `BBS::TUI` | Page-router with frame-buffer delta rendering | Single-purpose full-screen UIs |
-| `BBS::Application` | Full widget framework: Menubar, Window, Button, TextInput, ListBox, … | Multi-window Synchronet-style BBSes |
+| `BBS::Flow` | Line-oriented declarative dialogue (ask / say / menu / persist) | Login, registration, simple wizards |
+| `BBS::TUI` | Single-screen page router with frame-buffer delta rendering | Single-purpose full-screen UIs |
+| `BBS::Application` | Widget framework: Menubar, Window, Button, TextInput, ListBox, … | Multi-window Synchronet-style BBSes |
 
-A single session can switch between layers — typically `Flow` for login then
-`Application` for the main shell.
+The server boots a Telnet TCP listener, hands each connection a `Session`,
+which runs the configured `Flow`. Inside that flow you can hand off to a
+`TUI` or `Application`, then return to the flow when the user exits.
 
-## Installation
+```
+TCPServer → Session → FlowRunner ─┬→ TUIRunner
+                                  ├→ Application#run
+                                  └→ FlowRunner (sub-flow, e.g. confirm-block)
+```
+
+---
+
+## 2. Installation & quick start
+
+### Gemfile
 
 ```ruby
-# Gemfile
 gem 'bbs', git: 'https://git.teletype.hu/tools/rubbs.git'
 ```
 
-## Quick start — Flow + Application
+### Hello world — Flow only
+
+```ruby
+require 'bbs'
+
+BBS.configure do |c|
+  c.flow = BBS::Flow.define do
+    big_banner 'MY BBS', style: :success
+    ask :name, prompt: 'Name'
+    say 'Welcome!', style: :success
+  end
+end
+
+BBS.start
+```
+
+### Flow → Application
 
 ```ruby
 require 'bbs'
 
 MAIN = BBS::Application.define do
   theme BBS::Theme.synchronet
-
   menubar do
     menu '&File' do
       item '&About' do BBS::Dialogs.message(self, 'Hello from rubbs!') end
       item 'E&xit'  do :halt end
     end
   end
-
-  status_hint('F1', 'Help') { BBS::Dialogs.message(self, 'No help yet.') }
+  status_hint('F1', 'Help')  { BBS::Dialogs.message(self, 'No help yet.') }
   status_hint('F10', 'Menu') { menubar.open(0) }
 end
 
@@ -42,7 +113,7 @@ BBS.configure do |c|
   c.mouse        = true
   c.idle_seconds = 600
   c.flow = BBS::Flow.define do
-    big_banner 'MY BBS', style: :success
+    big_banner 'MY BBS'
     ask :username, prompt: 'Name'
     app MAIN
     say 'Goodbye!'
@@ -52,116 +123,616 @@ end
 BBS.start
 ```
 
-Connect with `telnet localhost 2323`.
+---
 
-## Configuration
+## 3. Server lifecycle
 
-`BBS.configure` yields a `BBS::Config`:
+### `BBS.configure { |c| … }` / `BBS.config`
 
-| Option | Default | Description |
+`BBS::Config` is a value object accessed through these two singleton helpers.
+The `Server` reads it once at boot; per-session state lives on `BBS::Session`.
+
+| Field | Default | Description |
 |---|---|---|
-| `flow` | — | A `BBS::Flow` object (required) |
-| `port` | `ENV["BBS_PORT"] \|\| 2323` | TCP port |
-| `mouse` | `false` | Enable xterm SGR mouse reporting |
-| `idle_seconds` | `nil` | Disconnect after N idle seconds (nil = never) |
-| `theme` | — | Default theme for Applications (overridable per app) |
-| `screens_dir` | `nil` | Directory for ERB screens used by `BBS::Flow#screen` |
-| `on_session_end` | `nil` | Lambda called when a session ends |
+| `flow` | — | The root `BBS::Flow` to run for each connection (required). |
+| `port` | `ENV["BBS_PORT"] \|\| 2323` | TCP port for `BBS::Server`. |
+| `mouse` | `false` | If true, sessions enable xterm SGR mouse reporting on negotiate. |
+| `idle_seconds` | `nil` | Hard idle-timeout. `nil` disables it. |
+| `theme` | `nil` | Default `BBS::Theme` for Applications. |
+| `screens_dir` | `nil` | Directory for ERB templates used by `Flow#screen`. |
+| `on_session_end` | `nil` | `->(session) { … }` invoked from the server thread after each session ends, even on errors. |
 
-## The Application layer
+### `BBS.start(port: …)`
 
-`BBS::Application` is a widget event loop with:
+Boots a `BBS::Server` (one thread per client). Each thread:
+1. Creates a `BBS::Session` (assigns a hex `session_id`).
+2. Performs Telnet negotiation (SGA, ECHO, NAWS — terminal size).
+3. Enables mouse reporting if `BBS.config.mouse`.
+4. Runs `FlowRunner.new(session, session_id, BBS.config.flow).run`.
 
-- a root container drawn behind windows;
-- an optional `Menubar` with Alt-letter pulldown menus and F10 access;
-- an optional `Statusbar` with clickable hotkey hints;
-- a stack of modal `Window`s (the top one receives input first);
-- xterm SGR mouse events delivered to widgets;
-- a 1 Hz internal tick for chat polling, clocks, etc.
+### `BBS::Server`
 
-### Built-in widgets (`BBS::Widgets`)
+Lightweight wrapper around `TCPServer`. Catches accept-loop errors
+(`Errno::EMFILE`, `IOError`, …) and warns instead of crashing.
 
-| Widget | Purpose |
-|---|---|
-| `Label` | Static text, optionally aligned, themed via `style_key` |
-| `Button` | `&Save`-style hotkey, fires `on_click(self)`; mouse-clickable |
-| `TextInput` | Single-line input with cursor, scroll, `on_submit`/`on_change` |
-| `TextArea` | Multi-line editor with arrow-key navigation |
-| `Checkbox` | Toggle with `on_change(checked, self)` |
-| `ListBox` | Scrolling list with mouse + keyboard, wheel scrolling |
-| `ScrollView` | Read-only scrolling text view, with scrollbar |
-| `ProgressBar`, `Spinner` | Progress feedback |
-| `Panel`, `HBox`, `VBox` | Containers / layout |
-| `Window` | Top-level modal container with title bar, close gadget, shadow |
-| `AnsiArt` | CP437 / ANSI art renderer with SAUCE stripping (`AnsiArt.from_file`, `AnsiArt.random(dir)`) |
+---
 
-### Built-in dialogs (`BBS::Dialogs`)
+## 4. The Flow layer
+
+`BBS::Flow.define { … }` builds an immutable, line-oriented dialogue. Each
+step is interpreted by `BBS::FlowRunner` with access to a shared `@ctx` hash
+keyed by Symbol field names.
+
+### Step reference
+
+| Step | Signature | Effect |
+|---|---|---|
+| `screen` | `screen :name, **vars` | Render `screens_dir/<name>.erb` (vars resolved against `@ctx` if Symbols). |
+| `banner` | `banner text, style: :success` | Box-drawing banner. |
+| `big_banner` | `big_banner text, style:, font:` | FIGlet (Artii) ASCII art header. `font:` defaults to `'slant'`. |
+| `say` | `say text, style: :muted` | Print one line, then blank line. |
+| `text` | `text content = nil, style:` / `text(style:) { ... }` | Print text; block receives `@ctx`. |
+| `line` | `line color: :muted` | Horizontal rule. |
+| `section` | `section title, color: :confirm` | "┌─ Title ─────┐" header. |
+| `body` | `body(width:, indent:) { ... }` | Word-wrapped paragraph body; block returns Markdown-ish text. |
+| `rows` | `rows(empty:) { ... }` | Block returns rows (strings or arrays) printed one per line. |
+| `table` | `table { ... }` | Block returns `[[label, value], …]`; printed as label/value pairs. |
+| `output` | `output { ... }` | Raw write; block returns a String written verbatim. |
+| `set` | `set :name, value` | Assign `@ctx[name]`. |
+| `ask` | `ask :name, prompt:, transform:, validate:` | Read line into `@ctx[:name]`. `transform` is `:upcase`/`:downcase`/`Proc`. `validate` is `:email`/`:non_empty`. |
+| `persist` | `persist :a, :b, store: STORE` | Upsert listed fields into a `BBS::Store`, keyed by `session_id`. |
+| `pause` | `pause msg, seconds: 1.0` | Print message and sleep. |
+| `wait_enter` | `wait_enter prompt:` | Block until ENTER. |
+| `gate` | `gate(denied:) { \|ctx\| ... }` | If block returns falsy, print denied msg and halt. |
+| `confirm` | `confirm msg, denied:` | Yes/No prompt; halt if "no". |
+| `confirm` | `confirm(msg, denied:) { ... }` | Yes/No prompt; on "yes" run sub-flow. |
+| `menu` | `menu(prompt, loop: false) { option … }` | Numbered options. Each option is a sub-flow; `loop: true` re-shows after each selection until `exit_menu`. |
+| `exit_menu` | `exit_menu` | Return to the enclosing menu's caller. |
+| `fetch` | `fetch :name, loading: 'Loading…' { \|ctx\| ... }` | Show spinner-style line, store block result into `@ctx[:name]`. |
+| `pick` | `pick from:, prompt:, empty:, item:, hint:` | Show numbered list of `@ctx[from]`; on selection, store as `@ctx[:picked]` and run sub-flow. |
+| `call` | `call { \|ctx, runner\| ... }` | Arbitrary code; runner exposes `write`/`readline`. Return `:halt` to terminate. |
+| `tui` | `tui DEFINITION` | Hand off to a `BBS::TUI`. |
+| `app` | `app DEFINITION` | Hand off to a `BBS::Application`. |
+
+### Available styles for `style:` arguments
+
+`:success :muted :error :info :prompt :confirm :cyan :magenta :blue :yellow :white :green :red`
+
+### Validation
+
+`ask … validate: :email` rejects with a built-in message and halts. `:non_empty`
+rejects empties. Pass a custom Proc for ad-hoc rules (must return truthy).
+
+### Sub-flows
+
+`menu`, `confirm { … }` and `pick { … }` open nested `Flow` blocks evaluated
+on a fresh `Flow` instance and executed with the same `@ctx`.
+
+### Example — login + menu
 
 ```ruby
-BBS::Dialogs.message(app, "Saved!", title: ' Done ')
-BBS::Dialogs.confirm(app, "Delete?", on_yes: -> { ... })
-BBS::Dialogs.input(app, prompt: 'Name?', on_submit: ->(value) { ... })
+BBS::Flow.define do
+  screen :welcome, year: Time.now.year
+  ask :user, prompt: 'Login', validate: :non_empty, transform: :downcase
+  persist :user, store: USERS
+
+  gate(denied: 'Banned user.') { |ctx| !banned?(ctx[:user]) }
+
+  menu 'Choose:', loop: true do
+    option 'Read messages' do
+      fetch(:msgs) { |ctx| MsgStore.for(ctx[:user]) }
+      pick from: :msgs, prompt: 'Pick #:', empty: 'No mail.',
+           item: ->(m, i) { "#{i}. #{m.subject}" } do
+        text { |ctx| ctx[:picked].body }
+        wait_enter
+      end
+    end
+    option 'Quit' do
+      call { :halt }
+    end
+  end
+end
 ```
 
-### Pre-built window types (`BBS::Windows`)
+---
 
-High-level modal windows you can open imperatively with `.open(app, …)` or
-declaratively via the window DSL (see below).
+## 5. The TUI layer
 
-| Window | Purpose |
+A single-screen page router with frame-buffer delta rendering. Use it when
+you want a custom dashboard or interactive screen without the overhead of
+the full widget framework.
+
+```ruby
+DASH = BBS::TUI.define do
+  start :main
+
+  init do
+    @selection = 0
+  end
+
+  helpers do
+    def palette = %w[red yellow green]
+  end
+
+  chrome do
+    bar y: 1, content: ' my-bbs ', style: :info
+    bar y: term_rows, content: ' F10=quit ', style: :muted
+  end
+
+  page :main do
+    enter do
+      @items = fetch_items
+    end
+
+    nav :menu, size: -> { @items.size }
+
+    render do
+      list @items, x: 4, y: 3, selected: @selection
+    end
+
+    key(:enter) { @selected = @items[@selection]; go :detail }
+    key(:f10)   { :halt }
+  end
+
+  page :detail do
+    nav :scroll, content: -> { @body }, window: -> { term_rows - 4 }
+
+    enter { @scroll = 0; @body = render_body(@selected) }
+    render do
+      text @body.lines[@scroll, term_rows - 4]&.join, x: 2, y: 2
+    end
+    key(:escape) { go :main }
+  end
+end
+
+# Inside a Flow:
+BBS::Flow.define { tui DASH }
+```
+
+### `BBS::TUI.define`
+
+| DSL method | Purpose |
 |---|---|
-| `Info` | Centered dialog for messages, splash screens, key/value displays, optional scroll mode |
-| `Form` | Labeled input rows + textarea + checkbox + status line for inline validation |
-| `MasterDetail` | Two-pane browser: ListBox on the left, ScrollView of details on the right |
-| `Stream` | Live history view + single-line input + idle-tick polling (chat, logs) |
-| `ButtonBar` | Helper that lays out a row of buttons at the bottom of any window |
+| `start :page` | Initial page (default `:idle`). |
+| `init { ... }` | Runs once before the first render, in the page context. |
+| `chrome { ... }` | Drawn on every render, before the active page. |
+| `helpers { ... }` | Module-eval'd; methods become callable inside pages. |
+| `page :name { ... }` | Define a page. |
 
-Example — opening directly:
+### `BBS::TUI::Page` DSL
+
+| Method | Purpose |
+|---|---|
+| `enter { ... }` | Runs when entering the page (`go :name`). |
+| `render { ... }` | Re-evaluated every paint. |
+| `key(k) { ... }` | Bind a single key (Symbol or 1-char String). |
+| `printable { \|ch\| ... }` | Catch printable chars without explicit binding. |
+| `mouse { \|m\| ... }` | Mouse event handler. |
+| `any_key { \|k\| ... }` | Catch-all fallback (after printable). |
+| `nav :menu, size:` | Install up/down on `@menu_selection` (wraps). |
+| `nav :cycle` | Up/down on `@item_selection` over `@items` (wraps). |
+| `nav :list, window:` | Up/down/page-up/page-down/home/end on `@item_selection` + `@scroll` over `@items`. |
+| `nav :scroll, content:, window:` | Same keys for `@scroll` over a content list (no selection). |
+
+Block arguments to `nav` are `Proc`s evaluated inside the page context, e.g.
+`window: -> { term_rows - 6 }`. Plain values are wrapped in a Proc.
+
+Returning `:halt` from any binding ends the TUI.
+
+### `BBS::TUIRunner::Context` — drawing primitives
+
+Inside `chrome`/`enter`/`render`/keybindings the `self` is a Context with:
+
+| Method | Purpose |
+|---|---|
+| `term_cols`, `term_rows` | Negotiated terminal size (NAWS). |
+| `clear` | Wipe next frame. |
+| `at(x, y)` | Position cursor. |
+| `text(content, x:, y:, style:)` | Write a string (ANSI passthrough). |
+| `bar(y:, content:, width:, style:)` | Full-width band of `style` with text. |
+| `box(x:, y:, width:, height:, title:, style:, background:) { \|ix, iy, iw, ih\| ... }` | Double-line frame; yields inner area. |
+| `float(title:, width:, height:, style:, background:) { ... }` | Centered `box`. |
+| `fill(x:, y:, width:, height:, background:)` | Solid block. |
+| `screen_fill(background:)` | Repaint whole screen background. |
+| `list(items, x:, y:, selected:, style:, highlight:)` | Bullet list with optional selection marker. |
+| `list_view(items, x:, y:, height:, scroll:, selected:, label:, hint:, hint_y:, empty:, style:, highlight:)` | Scrollable list with selected hint line. |
+| `wordwrap(text, width)` | Strip simple Markdown and wrap. |
+| `go(page)` | Switch page (calls its `enter`). |
+| `reload` | Re-enter the current page. |
+
+Both `style:` and `background:` accept either a `FlowRunner::STYLES` Symbol
+(`:success`, `:prompt`, …) or a raw ANSI sequence. Background colors map
+through `:black :red :green :yellow :blue :cyan :white`.
+
+---
+
+## 6. The Application layer
+
+`BBS::Application` is the full TUI: a widget event loop with menubar, status
+bar, modal window stack, mouse, focus traversal, themes and per-window ticks.
+
+### Top-level build with `Application.define`
+
+```ruby
+MAIN = BBS::Application.define do
+  theme :synchronet do
+    accent "\e[1;33;40m"
+  end
+
+  services chat: ChatService.new, boards: BoardService.new
+
+  helpers do
+    def announce(text)
+      BBS::Dialogs.message(self, text, title: ' Notice ')
+    end
+  end
+
+  init do
+    @user = context[:username]
+  end
+
+  body do
+    add BBS::Widgets::Label.new(text: 'Background label', style_key: :text)
+  end
+
+  menubar do
+    menu '&File' do
+      item '&Quit', shortcut: 'Alt-X' do :halt end
+    end
+  end
+
+  status_hint('F10', 'Menu')  { menubar.open(0) }
+  status_hint('F1',  'Help')  { announce('No help yet') }
+
+  window :compose, type: :form do |w|
+    w.title 'Compose'
+    w.field :body, type: :textarea
+    w.on_submit { |values, form, ctx| ctx[:boards].post(values[:body]); :close }
+  end
+end
+```
+
+### `Application.define` DSL
+
+| Method | Purpose |
+|---|---|
+| `theme(symbol_or_theme)` | Set the base theme (Symbol calls `BBS::Theme.<name>`; or pass a `Theme` instance). |
+| `theme(:base) { ... }` | Inside the block, any one-arg method call (`screen "\e[40m"`) overrides that style key. Use `inherit :neumanntronics` to switch base mid-block. `style :key, "\e[…"` is also available. |
+| `services(hash)` | Merge into the services hash exposed to window callbacks via `ctx`. Call multiple times to add more. |
+| `helpers { ... }` | Module-eval'd; methods become available on the live `Application` instance. |
+| `init { ... }` | Runs in the Application context after building, before `body`. |
+| `body { ... }` | Block evaluated against a `BodyContext` — call `add(widget)` to attach widgets to the root container. |
+| `menubar { menu '&X' do item '&Y' do … end end }` | Define the top menubar (see [§11](#11-menubar-statusbar-focus)). |
+| `status_hint(key, label) { ... }` | Append one status bar hotkey hint. |
+| `window(:name, type: :info\|:form\|:master_detail\|:stream) { \|w\| ... }` | Register a declarative window spec (see [§9](#9-pre-built-window-types-bbswindows)). |
+
+### Application instance API
+
+| Method | Purpose |
+|---|---|
+| `cols`, `rows` | Terminal size from NAWS (defaults 80×24). |
+| `theme` / `services` / `context` | Live state. |
+| `add(widget)` | Append to the root container. |
+| `open_window(window)` | Push a `Window` onto the modal stack. |
+| `open_window(:name, **extras)` | Open a registered `WindowSpec`; `extras` flow into the spec's `ctx`. |
+| `close_window(window = top_window)` | Pop a window. Calls its `on_close` if any. |
+| `top_window` | The current modal target of input. |
+| `with_loading(text) { ... }` | Show a "Please wait" modal while the block runs in a thread; returns the block's value. |
+| `tick!` | Manually fire the periodic tick. |
+| `stop!` | Break out of the run loop. |
+
+### Run loop
+
+`run` does:
+
+1. Render full frame, diff against the committed buffer, write the delta.
+2. Wait for a key (`Session#readkey(timeout: 1.0)`).
+3. On `:idle` — fire `tick!` (which calls `@on_tick` and `window.tick(self)`
+   for every open window), then check the idle-disconnect timeout.
+4. Otherwise build an `Event` and dispatch (top window → menubar → statusbar
+   → root focus manager).
+
+Return `:halt` from any handler to end the application (and, via Flow, the
+session).
+
+---
+
+## 7. Widgets
+
+All widgets inherit from `BBS::Widget` (see `bbs/widget.rb`). They have:
+
+```ruby
+bounds     # Rect(x, y, width, height) — 1-based screen coords
+parent     # enclosing Container
+id         # optional Symbol (Container#find(:my_id))
+visible    # default true
+focused    # set by FocusManager
+enabled    # default true
+theme      # propagated by Container#theme=
+```
+
+Subclasses override `render(frame)` and `handle_event(event)`. Return values
+from `handle_event`: `:halt` ends the app, `:handled` stops propagation, `nil`
+continues.
+
+### `Widgets::Label`
+`text:`, `align:` (`:left`/`:center`/`:right`), `style_key:` (theme key,
+default `:text`). Renders one line, clipped to width.
+
+### `Widgets::Button`
+`label:` (e.g. `'&Save'` — ampersand marks hotkey), `on_click: ->(btn) { … }`.
+Alt+letter or Enter/Space fires. Mouse-clickable. `enabled = false` greys out.
+
+### `Widgets::TextInput`
+Single-line input. `value:`, `placeholder:`, `max_length:` (default 256),
+`password:` (mask with `*`), `on_submit: ->(value, self) { … }`,
+`on_change: ->(value, self) { … }`. Cursor with arrows / Home / End,
+Backspace, Delete.
+
+### `Widgets::TextArea`
+Multi-line. `value:`, `max_length:` (default 8000), `on_change:`. Arrows
+navigate across lines, Enter splits, Backspace joins, Home/End within line.
+`value` returns `\n`-joined string.
+
+### `Widgets::Checkbox`
+`label:`, `checked:`, `on_change: ->(checked, self) { … }`. Toggle with
+Space/Enter. Renders `[x] Label` / `[ ] Label`.
+
+### `Widgets::ListBox`
+Scrolling list. `items:` array, `label:` `->(item) { … }` (defaults
+`item.to_s`), `on_select: ->(item, self) { … }` (selection change),
+`on_activate: ->(item, self) { … }` (Enter / dbl-click). Up/Down, PgUp/PgDn,
+Home/End, mouse click, mouse wheel scroll. `selected_item` exposes the
+current row.
+
+### `Widgets::ScrollView`
+Read-only scrollable text. `lines:` is `Array<String>` (ANSI passthrough).
+Up/Down/PgUp/PgDn/Home/End scrolls. Built-in right-side scrollbar.
+
+### `Widgets::ProgressBar`
+`value:`, `max:`, `label:`. Renders `██░░░` filled to ratio with optional
+centered label.
+
+### `Widgets::Spinner`
+`label:` — braille spinner. Call `tick` to advance frame.
+
+### Containers
+
+`Container#add(child)`, `#remove`, `#clear`, `#find(id)`, `#walk { |w| … }`,
+`#focusable_descendants`, `#hit_test(x, y)`. Theme propagates to children.
+
+| Container | Purpose |
+|---|---|
+| `Widgets::HBox(gap: 1)` | Horizontal split. Equal widths, minus `gap` per child. |
+| `Widgets::VBox(gap: 0)` | Vertical split. |
+| `Widgets::Panel(title:, box_style: :single\|:double)` | Bordered container; renders box first then children. |
+
+### `Widgets::AnsiArt`
+
+CP437 / ANSI-art viewer.
+
+```ruby
+art = BBS::Widgets::AnsiArt.from_file('art/welcome.ans',
+                                       align: :center, valign: :middle)
+art.layout(1, 2, 80, 22)
+panel.add(art)
+
+# Or a random pick from a directory:
+BBS::Widgets::AnsiArt.random('art/')
+BBS::Widgets::AnsiArt.from_string("hello", align: :left)
+```
+
+Constructors: `from_file(path, **opts)`, `from_string(text, **opts)`,
+`random(dir, **opts)` (falls back to a built-in card if the dir is missing),
+`default_lines` (the fallback card).
+
+Encoding:
+- `.ans` / `.asc` / `.nfo` → decoded as IBM437 → UTF-8.
+- `.ansi` / `.txt` → assumed UTF-8.
+- Anything else → UTF-8, falling back to IBM437.
+- Trailing SAUCE metadata (`\x1A SAUCE…`) is stripped.
+
+Options: `align: :left|:center|:right`, `valign: :top|:middle|:bottom`,
+`fill_parent: true` (default — re-bounds to parent each render).
+
+---
+
+## 8. Windows
+
+`BBS::Window < Container` — a top-level modal container with title bar,
+shadow, close gadget, and its own `FocusManager`.
+
+```ruby
+win = BBS::Window.new(title: ' Inbox ', modal: true,
+                      shadow: true, close_key: :escape,
+                      on_close: ->(w) { puts 'closing' })
+win.layout(10, 5, 60, 18)
+win.add(some_widget)
+win.reset_focus
+app.open_window(win)
+```
+
+| Field | Default | Description |
+|---|---|---|
+| `title` | `nil` | Centered title in the top border. |
+| `modal` | `false` | (Informational; the stack already gives the top window priority.) |
+| `shadow` | `true` | Draw the drop shadow. |
+| `on_close` | `nil` | Called when the user closes; pass `false` to suppress the close gadget. |
+| `close_key` | `:escape` | Key that triggers `close`. |
+
+Methods:
+
+- `focus_manager` — lazy `FocusManager` over the window's children.
+- `reset_focus` — rebuild the focus manager (call after adding widgets).
+- `close` — fire `on_close`, return `:close_window` (the application pops).
+- `tick(app)` — override in subclasses for per-second polling.
+
+The close gadget `[■]` (top-left, columns x+2..x+4) is mouse-clickable.
+Mouse-clicks elsewhere inside the window focus the hit widget.
+
+---
+
+## 9. Pre-built window types (`BBS::Windows`)
+
+Higher-level modals you can open imperatively with `.open(app, …)`, or
+register declaratively with the window DSL.
+
+### `BBS::Windows::Info`
+
+Centered info / splash / message dialog.
 
 ```ruby
 BBS::Windows::Info.open(app,
   title: ' Welcome ',
-  width: 70,
+  width: 70, height: 20,
   body: [
-    { text: 'rubbs', style: :accent },
-    :spacer, :rule,
+    { text: 'rubbs v1.0', style: :accent, align: :center },
+    :spacer,
+    :rule,
     { kv: [['Online', '5'], ['Ruby', RUBY_VERSION]] },
-  ])
-
-BBS::Windows::Form.open(app,
-  title: ' Profile ',
-  fields: [
-    { key: :sig,  label: 'Signature', value: '...' },
-    { key: :bio,  label: 'Bio',       type: :textarea, rows: 6 },
-    { key: :nsfw, label: 'Show NSFW', type: :checkbox, value: false },
+    'Plain label line',
   ],
-  on_submit: ->(values, form) {
-    return (form.error('Bio required.'); :keep) if values[:bio].empty?
-    save(values); :close
-  })
-
-BBS::Windows::Stream.open(app,
-  title: ' Live Chat ',
-  initial_lines: chat.history,
-  placeholder: 'Type and press Enter…',
-  on_submit: ->(text, _app) { chat.broadcast(username, text) },
-  on_poll:   ->(_app)       { chat.drain(session_id) })
+  buttons: [
+    { label: '&Continue', primary: true },
+    { label: '&Cancel',   cancel:  true, on_click: ->(w) { … } },
+  ])
 ```
 
-### Window DSL — declarative windows
+Body item types: `String` (label), `:spacer`/`''`/`nil` (blank row), `:rule`
+(horizontal line), `{ text:, style:, align: }`, `{ kv: [[k,v],…], label_width: }`,
+`{ widget:, height: }`, or a raw `BBS::Widget` (each used as-is, non-scroll mode).
 
-Register windows by name inside `Application.define`, then open them by symbol.
-Block callbacks receive a `ctx` hash combining the app's services, app context,
+`scroll: true` — flatten the whole body into a single `ScrollView`.
+
+`padding:` overrides any of `{ sides: 2, top: 1, bottom: 2 }`.
+
+Default buttons: a single centered `[ &Close ]` if `buttons:` is `nil`.
+Pass `buttons: []` for none.
+
+### `BBS::Windows::Form`
+
+Labeled multi-row form with inline validation.
+
+```ruby
+BBS::Windows::Form.open(app,
+  title: ' Profile ',
+  hint:  'Edit your info:',
+  fields: [
+    { key: :name,    label: 'Name',     value: 'Joe', max_length: 80 },
+    { key: :pw,      label: 'Password', value: '',    password: true },
+    { key: :bio,     label: 'Bio',      type: :textarea, rows: 8 },
+    { key: :public,  label: 'Public',   type: :checkbox, value: false },
+  ],
+  on_submit: ->(values, form) {
+    return (form.error('Name is required.'); :keep) if values[:name].empty?
+    User.save(values); :close
+  },
+  on_cancel: ->(form) { … })
+```
+
+Field types: `:input` (default, single-line `TextInput`), `:textarea`
+(multi-line, label ignored), `:checkbox` (label part of widget).
+
+Form methods callable from `on_submit`:
+
+- `form.values` — current field values as a Hash.
+- `form.error('msg')` — paint the status line red.
+- `form.info('msg')` — paint the status line cyan-ish (input_label color).
+- `form.clear_status` — wipe the status line.
+
+Returning `:keep` from `on_submit` leaves the window open; any other return
+closes it.
+
+Buttons: a `[ &Save ]` / `[ &Cancel ]` pair by default. Override labels with
+`submit_label:` / `cancel_label:`.
+
+### `BBS::Windows::MasterDetail`
+
+Two-pane browser: ListBox on the left, ScrollView on the right.
+
+```ruby
+BBS::Windows::MasterDetail.open(app,
+  title: ' Game Catalog ',
+  items: services[:games].all,
+  item_label:    ->(g)     { g.title },
+  render_detail: ->(g, w)  { GameCard.lines(g, w) },
+  bottom_meta:   ->(g)     { "#{g.players} players  #{g.year}" },
+  list_width: 30,
+  empty_message: '  (no games)',
+  actions: [
+    { label: '&New', on_click: ->(win) { … } },
+  ],
+  close_label: '&Close')
+```
+
+`render_detail` is called whenever the selection changes; it receives
+`(item, inner_width)` and returns an Array of ANSI-styled strings. Returning
+nil shows nothing.
+
+A `[ &Close ]` button is appended unless `close_button: false`. Other
+`actions:` render to the left of close.
+
+Exposes `list_widget`, `detail_view`, `meta_label` for live manipulation.
+
+### `BBS::Windows::Stream`
+
+Scrolling history pane + single-line input + idle-tick polling. Built for
+chat / log views.
+
+```ruby
+BBS::Windows::Stream.open(app,
+  title: ' Live Chat ',
+  initial_lines: chat.history.map { format_line(_1) },
+  placeholder: 'Type and press Enter…',
+  buffer_size: 500,
+  on_submit: ->(text, app) { chat.send(text); :keep },
+  on_poll:   ->(app)       { chat.drain(app.session_id) })
+```
+
+`on_submit` is called when the user hits Enter on a non-empty line. Returning
+`:keep` keeps the input as-is; otherwise the input is cleared.
+
+`on_poll` is invoked from the 1 Hz idle tick. Return an Array of new lines
+to append (or nil/[]).
+
+`buffer_size:` caps the in-memory history (older lines drop off). Exposes
+`history` (ScrollView) and `input` (TextInput).
+
+### `BBS::Windows::ButtonBar`
+
+Layout helper used by the other window types. Pass it a window, app and an
+Array of button descriptors:
+
+```ruby
+BBS::Windows::ButtonBar.attach(window, app, [
+  { key: :ok,     label: '&OK',     primary: true,
+    on_click: ->(win) { … } },
+  { key: :cancel, label: '&Cancel', cancel:  true, align: :left },
+  { key: :help,   label: '&Help',   align: :left, keep_open: true,
+    on_click: ->(win) { show_help } },
+])
+```
+
+Returns `{ widgets:, primary:, by_key: }`. Default alignment is `:center` for
+a single button, `:right` otherwise. `cancel: true` is informational (ESC
+already closes via `Window#close_key`). `keep_open: true` keeps the window
+open after click; otherwise it closes unless `on_click` returns `:keep`.
+
+### Window DSL — `window :name, type: :form do |w| … end`
+
+Inside `Application.define`, register a `WindowSpec` keyed by a name. Block
+callbacks receive a `ctx` hash combining the app's services, app context,
 and any extras passed to `open_window`.
 
 ```ruby
 MAIN = BBS::Application.define do
-  services chat: ChatService.new, boards: BoardService.new
+  services boards: BoardService.new
 
   window :compose, type: :form do |w|
-    w.title { |ctx| " Post to #{ctx[:board].title} " }
-    w.width 70
-    w.field :body, type: :textarea, max_length: 1000
+    w.title  { |ctx| " Post to #{ctx[:board].title} " }
+    w.width  70
+    w.field  :body, type: :textarea, max_length: 1000
+    w.prefill { |ctx| { body: ctx[:draft]&.body || '' } }
     w.on_submit do |values, form, ctx|
       case ctx[:boards].post(ctx[:board].id, ctx[:username], values[:body])
       when :empty then form.error('Message cannot be empty.'); :keep
@@ -169,136 +740,387 @@ MAIN = BBS::Application.define do
       end
     end
   end
-
-  window :games, type: :master_detail do |w|
-    w.title         ' Game Catalog '
-    w.items         { |ctx| ctx[:games].all }
-    w.item_label    { |g, _ctx| g.title }
-    w.render_detail { |g, width, _ctx| GameCard.lines(g, width) }
-    w.action(label: '&New') { |_win, ctx| ctx[:app].open_window(:new_game) }
-  end
 end
 
-# Later, inside a menu handler:
+# Later:
 app.open_window(:compose, board: current_board)
 ```
 
-`window :name, type:` supports `:info`, `:form`, `:master_detail`, `:stream`.
-Inside the block, scalar attrs (`title`, `width`, …) and block attrs (`body`,
-`items`, `on_submit`, …) accept either a value or a `{ |ctx, …| … }` block.
-Use `w.field` for form fields, `w.action` for master-detail action buttons,
-and `w.button` for info-window buttons.
+DSL inside the block:
 
-### Menubar DSL
+| Attr / method | Applies to | Notes |
+|---|---|---|
+| `title`, `width`, `height`, `padding` | all | Scalar or `{ |ctx| ... }` block. |
+| `body` | info | Array of body items. |
+| `scroll`, `close_button`, `close_label` | info, master_detail, stream | |
+| `button(**opts) { |win, ctx| ... }` | info | Custom buttons list. |
+| `field key, **opts` | form | Field descriptor. |
+| `prefill { |ctx| {...} }` | form | Pre-populate fields. |
+| `hint`, `submit_label`, `cancel_label` | form | |
+| `on_submit { |values, form, ctx| ... }` | form, stream | |
+| `on_cancel { |form, ctx| ... }` | form | |
+| `items { |ctx| ... }`, `item_label { |item, ctx| ... }` | master_detail | |
+| `render_detail { |item, width, ctx| ... }` | master_detail | |
+| `bottom_meta { |item, ctx| ... }` | master_detail | |
+| `list_width`, `empty_message` | master_detail | |
+| `action(**opts) { |win, ctx| ... }` | master_detail | Extra button. |
+| `initial_lines { |ctx| ... }`, `placeholder`, `buffer_size` | stream | |
+| `on_poll { |app, ctx| ... }` | stream | |
+
+Block attrs that return blocks at the DSL level (`title { |ctx| … }`) are
+re-evaluated each time the window opens, so they reflect the current `ctx`.
+
+Open with `app.open_window(:name, key: value, …)`. Extras flow into `ctx`.
+
+---
+
+## 10. Dialogs
+
+Quick imperative helpers in `BBS::Dialogs`:
+
+```ruby
+BBS::Dialogs.message(app, 'Saved!', title: ' Done ', width: 40)
+
+BBS::Dialogs.confirm(app, 'Delete this message?',
+  on_yes: -> { Msg.delete(id) },
+  on_no:  -> { … })
+
+BBS::Dialogs.input(app, prompt: 'New name:', value: '',
+  on_submit: ->(value) { rename(value) })
+```
+
+`BBS::Dialogs.centred_window(app, width:, height:, title:)` is the underlying
+helper to build a centered, modal `Window`.
+
+For richer modal experiences prefer the `BBS::Windows::*` window types
+described in [§9](#9-pre-built-window-types-bbswindows).
+
+---
+
+## 11. Menubar, Statusbar, Focus
+
+### `BBS::Menubar`
 
 ```ruby
 menubar do
   menu '&File' do
-    item '&Open', shortcut: 'Ctrl-O' do … end
+    item '&Open',    shortcut: 'Ctrl-O' do … end
+    item '&Save',    shortcut: 'Ctrl-S', enabled: -> { current_doc } do … end
     separator
     item 'E&xit' do :halt end
   end
-end
-```
-
-The block runs in the Application's context (so you can call `open_window`,
-`close_window`, `cols`, `rows`, etc.). Return `:halt` from any handler to end
-the session.
-
-### Theming
-
-Built-in palettes: `synchronet` (default), `nortoncommander`, `dosnavigator`,
-`neumanntronics`, `mono`. Apply one and/or override individual style keys with
-the `theme` DSL block:
-
-```ruby
-MAIN = BBS::Application.define do
-  theme :nortoncommander do
-    window_border "\e[1;36;44m"
-    accent        "\e[1;33;44m"
+  menu '&Help' do
+    item '&About' do BBS::Dialogs.message(self, 'rubbs') end
   end
 end
 ```
 
-Pass a `BBS::Theme` instance directly to use it as-is, or build one from
-scratch with `BBS::Theme.new(:my_theme, { window_border: "\e[1;36m", … })`.
+- Ampersand in label marks the hotkey letter (Alt+letter from anywhere, plain
+  letter while the menu is open).
+- `shortcut:` is informational — it's drawn on the right of the menu item.
+  Bind the actual shortcut via a `status_hint` or a custom key handler.
+- F10 opens the first menu; ESC closes.
+- Block `&block` runs in the Application's context (call `open_window`,
+  `cols`, etc.). Returning `:halt` ends the session.
 
-### Per-window ticks
+When the menubar is open, all events are routed to it first — its keys cannot
+leak through to underlying windows.
 
-`BBS::Application` fires a ~1 Hz tick when idle and calls `tick(app)` on each
-open window. `BBS::Windows::Stream` uses this for polling. Override `tick` in
-your own `Window` subclasses to refresh clocks, drain queues, etc.
+### `BBS::Statusbar`
 
-### Markdown → ANSI
+```ruby
+status_hint('F10', 'Menu')   { menubar.open(0) }
+status_hint('F1',  'Help')   { announce 'No help yet' }
+status_hint('Alt-X', 'Quit') { :halt }
+```
 
-`BBS::Markdown.to_lines(text, width:, theme:)` returns an Array of ANSI-styled
-strings suitable for feeding to `BBS::Widgets::ScrollView` or `Info`'s scroll
-mode. Supports headings, bold/italic/code spans, links, quotes, bullet lists,
-code blocks, and horizontal rules.
+Renders left-aligned hints. Optional `statusbar.right_text = '...'` for a
+right-aligned indicator (set after build via `app.statusbar.right_text=`).
+Mouse-click on a hint fires its handler. Key matching is forgiving:
+`F10` → `:f10`, `Alt-X` → `:alt_x`, `Esc` → `:escape`, `Tab` → `:tab`, anything
+else uses case-insensitive name match.
 
-## The Flow layer
+### `BBS::FocusManager`
 
-The DSL for line-based dialogue. Available steps:
+One per `Window` (and the application's root container). Walks visible,
+enabled, focusable descendants for Tab / Shift-Tab cycling.
 
-| Step | Purpose |
+Key behavior:
+
+- `handle_focus_key(event)` — consumes Tab / Shift-Tab.
+- `focus(widget)` — explicit focus (used when a window opens to put cursor
+  on the first input).
+- `dispatch(event)` — forwards to the focused widget's `handle_event`.
+
+---
+
+## 12. Theming
+
+A `BBS::Theme` is just a frozen Hash of role-name → ANSI SGR string.
+
+Built-in presets:
+
+| Preset | Vibe |
 |---|---|
-| `screen :name` | Render an ERB screen from `screens/` |
-| `banner`, `big_banner` | Box-drawing / FIGlet ASCII art header |
-| `say`, `text`, `section`, `line`, `body` | Text output |
-| `ask :field`, `set :field, value`, `persist :field, store:` | Input + persistence |
-| `pause`, `wait_enter`, `gate`, `confirm` | Control flow |
-| `menu`, `exit_menu` | Numbered option menus |
-| `fetch`, `pick` | Data fetch + list selection |
-| `rows`, `table` | Formatted output |
-| `call { \|ctx, runner\| … }` | Arbitrary code; return `:halt` to end |
-| `tui DEFINITION` | Hand off to a `BBS::TUI` page router |
-| `app DEFINITION` | Hand off to a `BBS::Application` widget app |
+| `BBS::Theme.synchronet` (default) | Yellow on black, blue windows — Synchronet-style. |
+| `BBS::Theme.nortoncommander` | Blue screen, cyan title bar — Norton Commander. |
+| `BBS::Theme.dosnavigator` | Light grey background, white panels — DOS Navigator. |
+| `BBS::Theme.neumanntronics` | Muted 256-color palette, dark cyan accents. |
+| `BBS::Theme.mono` | Black & white, inverse-video selections — terminals without color. |
 
-## Input model
+### Style keys
 
-`Session#readkey(timeout:)` returns one of:
+`screen`, `text`, `text_dim`, `text_bright`, `label`, `accent`, `success`,
+`warning`, `error`,
+`window_bg`, `window_border`, `window_title`, `window_title_focused`,
+`window_text`, `window_shadow`,
+`menubar`, `menubar_hotkey`, `menubar_selected`, `menubar_sel_hot`,
+`menu_bg`, `menu_text`, `menu_hotkey`, `menu_selected`, `menu_disabled`,
+`menu_border`,
+`statusbar`, `statusbar_key`,
+`button`, `button_focused`, `button_hotkey`, `button_disabled`,
+`input`, `input_focused`, `input_label`,
+`listbox`, `listbox_selected`, `listbox_focused`, `listbox_header`,
+`scrollbar`, `scrollbar_thumb`,
+`check_on`, `check_off`, `reset`.
 
-- a single-character `String` (printable input)
-- a `Symbol`: `:enter`, `:tab`, `:shift_tab`, `:backspace`, `:escape`,
-  `:up`, `:down`, `:left`, `:right`, `:home`, `:end`,
-  `:page_up`, `:page_down`, `:insert`, `:delete`,
-  `:f1` … `:f12`, `:ctrl_a` … `:ctrl_z`,
-  `:alt_a` … (any printable character preceded by ESC),
-  `:interrupt`, `:idle`
-- a `BBS::Telnet::MouseEvent` with `kind`, `button`, `x`, `y`, `mods` —
-  delivered when `BBS.config.mouse = true`
+### Customising
 
-## Stores
+```ruby
+# 1. Use a preset
+theme BBS::Theme.synchronet
 
-`BBS::Store` is a thread-safe upsert-by-`session_id` CSV file with an
-in-memory cache; appends are O(1), full rewrites only on update.
+# 2. Override per-key with the DSL block
+theme :nortoncommander do
+  inherit :neumanntronics            # optional: switch base mid-block
+  window_border "\e[1;36;44m"
+  accent        "\e[1;33;44m"
+  style :screen, "\e[40m"            # explicit form
+end
 
-## Architecture
+# 3. Build from scratch
+theme BBS::Theme.new(:mine, {
+  screen: "\e[40m", text: "\e[0;37;40m", # …
+})
+
+# 4. Merge in code
+custom = BBS::Theme.synchronet.merge(accent: "\e[1;36;40m")
+```
+
+`Theme#style(key)` / `Theme#[](key)` look up a SGR. Widgets call
+`style(:role)` which resolves through the widget's `theme` or its parent's.
+
+---
+
+## 13. FrameBuffer & drawing primitives
+
+`BBS::FrameBuffer` is the offscreen grid used by TUI and Application. Cells
+hold `(char, sgr)` pairs; `diff` computes the minimal ANSI byte stream to
+transform one frame into another (only changed cells get redrawn).
+
+Direct API:
+
+```ruby
+fb = BBS::FrameBuffer.new(cols, rows)
+fb.move(col, row)                              # 1-based
+fb.write('Hello', sgr: "\e[1;33m")
+fb.write_ansi("\e[1;33mbright\e[0m  normal")   # respects embedded SGR
+fb.fill(x:, y:, width:, height:, sgr:, char: ' ')
+fb.hline(x:, y:, length:, char: '─', sgr:)
+fb.vline(x:, y:, length:, char: '│', sgr:)
+fb.box(x:, y:, width:, height:, sgr:, fill_sgr:,
+       style: :single|:double, title:, title_sgr:, title_indent:)
+fb.shadow(x:, y:, width:, height:, sgr:)
+delta = fb.diff(prev_fb)                       # ANSI byte stream
+```
+
+Class helpers for ANSI-aware string handling:
+
+- `BBS::FrameBuffer.visible_width(text)` — length ignoring SGR escapes.
+- `BBS::FrameBuffer.clip_ansi(text, max_width)` — truncate keeping styles intact.
+- `BBS::FrameBuffer.wrap_ansi(text, width)` — word-wrap with SGR state
+  carried across wrapped lines.
+
+---
+
+## 14. Markdown renderer
+
+`BBS::Markdown.to_lines(text, width:, theme:)` → Array of ANSI strings,
+one per terminal line. Feed it into a `BBS::Widgets::ScrollView` or an
+`Info` window with `scroll: true`.
+
+Supports:
+
+- `#` … `######` headings (styled `text_bright`, `accent`, `label`).
+- `**bold**`, `*italic*`, `_italic_`.
+- `` `inline code` `` and ` ``` ` code blocks (preserved verbatim, no wrap).
+- `[link text](url)` (renders `link text` in `accent`).
+- `> quoted text` (rendered with a `│` gutter).
+- `- ` / `* ` / `+ ` bullet lists, with hanging indents on wrap.
+- `1. ` numbered lists.
+- `---` / `***` / `___` horizontal rules.
+- Backslash escapes for `\* \_ \` \[ \( \{ \# …`.
+
+Each inline span resets to `theme[:text]` so trailing text keeps the
+correct background — critical when the surrounding window has a tinted
+background.
+
+---
+
+## 15. Banner, ASCII art & ERB screens
+
+### `BBS::Banner`
+
+```ruby
+BBS::Banner.render('Hello!',     color: "\e[1;32m", padding: 2)
+BBS::Banner.render_big('ZINE',   color: "\e[1;36m", font: 'slant')
+```
+
+The plain variant draws a box-drawing banner; the big variant uses the
+`artii` gem (FIGlet). Any Artii font name is accepted (`big`, `slant`,
+`small`, etc.). These are used by Flow's `banner` / `big_banner` steps.
+
+### `BBS::Renderer` — ERB screens
+
+For `Flow#screen :name, **vars`:
+
+```ruby
+BBS.configure { |c| c.screens_dir = 'screens' }
+
+# screens/welcome.erb
+<%= clr %><%= banner 'Welcome' %>
+   <%= green %>Hello <%= @username %>!<%= reset %>
+```
+
+The ERB context exposes color helpers (`green`, `yellow`, `cyan`, `white`,
+`gray`, `red`, `dim_green`, `clr`, `reset`) plus `banner(text, padding:)`
+and `big_banner(text, font:)`. Instance variables are populated from
+`vars` (resolved against `@ctx` if the value is a Symbol).
+
+### `BBS::Color`
+
+Tiny helper for ad-hoc colorisation outside the theme system:
+
+```ruby
+include BBS::Color   # or BBS::Color.c(...)
+c(:cyan, 'hello')    # => "\e[0;36mhello\e[0m"
+```
+
+Available colors: `:reset :gray :yellow :white :blue :cyan :green :magenta :red`.
+
+---
+
+## 16. Persistence (`BBS::Store`)
+
+A thread-safe, upsert-by-`session_id` CSV file with an in-memory cache.
+Used by `Flow#persist` but useful standalone.
+
+```ruby
+USERS = BBS::Store.new(
+  path:    'data/users.csv',
+  headers: %w[session_id timestamp username email]
+)
+
+USERS.upsert(session_id: sid, username: 'joe', email: 'j@e.com')
+USERS.find(sid)        # => { 'session_id' => …, 'username' => 'joe', … } or nil
+USERS.all              # => [ {…}, {…}, … ]
+USERS.delete(sid)
+```
+
+- Headers `session_id` and `timestamp` are filled automatically when present.
+- New rows append in O(1); updates rewrite the file under the mutex.
+- `find` / `all` return Hashes.
+
+---
+
+## 17. Telnet, sessions & input model
+
+### `BBS::Session`
+
+Wraps a TCP socket with Telnet negotiation and the input parser:
+
+```ruby
+session.session_id       # 16-hex SecureRandom id
+session.term_cols        # NAWS column count (default 80)
+session.term_rows        # NAWS row count    (default 24)
+session.readline         # cooked line input (FlowRunner uses this)
+session.readkey(timeout: 1.0)
+session.write(bytes)
+session.enable_mouse / disable_mouse
+```
+
+Telnet options negotiated on connect: `SGA` (suppress go-ahead), `ECHO`
+(server-side echo), `NAWS` (terminal size). Mouse uses xterm 1000/1006
+SGR mode.
+
+### `Session#readkey` return values
+
+- Single-character `String` — printable input (`'a'`, `' '`, …).
+- `Symbol` — one of:
+  - Navigation: `:enter`, `:tab`, `:shift_tab`, `:backspace`, `:escape`,
+    `:up`, `:down`, `:left`, `:right`, `:home`, `:end`,
+    `:page_up`, `:page_down`, `:insert`, `:delete`.
+  - Function keys: `:f1`…`:f12`.
+  - Control codes: `:ctrl_a`…`:ctrl_z` (raw 1–26 minus a few that map to
+    other things — Enter, Tab, Backspace, Esc, Ctrl-C).
+  - Alt-modified printables: `:alt_a`…`:alt_z`, `:alt_0`, …
+    (any printable preceded by ESC).
+  - `:interrupt` — Ctrl-C.
+  - `:idle` — the supplied `timeout` expired.
+- `BBS::Telnet::MouseEvent` — when `BBS.config.mouse = true`. Fields:
+  - `kind`: `:press`, `:release`, `:move`, `:wheel`.
+  - `button`: `:left`, `:middle`, `:right`, `:up`, `:down` (wheel), `:none`.
+  - `x`, `y`: terminal-relative, 1-based.
+  - `mods`: array of `:shift`, `:ctrl`, `:meta`.
+
+### `BBS::Event`
+
+Application/Window/Widget `handle_event` receives a normalised `BBS::Event`:
+
+```ruby
+event.kind       # :key, :mouse, :idle, :resize, :tick
+event.key?       # kind == :key
+event.mouse?     # kind == :mouse
+event.key        # the Symbol/String key
+event.mouse      # the Telnet::MouseEvent
+event.x, event.y # mouse position
+event.alt?       # key.to_s.start_with?('alt_')
+event.alt_char   # 'x' from :alt_x
+event.char?      # key is a 1-char String
+```
+
+Return `:halt` to end the application, `:handled` to stop propagation,
+`nil`/`false` to keep dispatching.
+
+---
+
+## 18. Source layout
 
 | File | Responsibility |
 |---|---|
-| `bbs/server.rb` | TCP accept loop, one thread per client |
-| `bbs/session.rb` | Telnet negotiation, mouse enable/disable, idle timer |
-| `bbs/telnet.rb` | Telnet protocol, full key parsing, xterm SGR mouse |
-| `bbs/config.rb` | `BBS::Config` value object |
-| `bbs/flow.rb`, `bbs/flow_runner.rb` | Flow DSL + interpreter |
-| `bbs/tui.rb`, `bbs/tui_runner.rb` | Page-router with frame-buffer rendering |
-| `bbs/frame_buffer.rb` | Double-buffer, delta diff, drawing helpers |
-| `bbs/application.rb` | Widget event loop, window stack, ticking, DSL builder |
-| `bbs/widget.rb`, `bbs/container.rb` | Widget tree base |
-| `bbs/widgets.rb` | Built-in widgets |
-| `bbs/widgets/ansi_art.rb` | CP437/ANSI art widget |
-| `bbs/window.rb`, `bbs/menu.rb`, `bbs/statusbar.rb`, `bbs/dialogs.rb` | Chrome |
-| `bbs/window_spec.rb` | Declarative window DSL (`WindowSpec`) |
-| `bbs/windows/info.rb` | Centered info / message / kv dialog |
-| `bbs/windows/form.rb` | Multi-field form with status line |
-| `bbs/windows/master_detail.rb` | Two-pane list / detail browser |
-| `bbs/windows/stream.rb` | Live log / chat window with input + polling |
-| `bbs/windows/button_bar.rb` | Bottom-row button layout helper |
-| `bbs/focus_manager.rb` | Tab/Shift-Tab focus traversal |
-| `bbs/theme.rb` | Style palette (synchronet, nortoncommander, dosnavigator, neumanntronics, mono) |
-| `bbs/markdown.rb` | Markdown → ANSI line array renderer |
-| `bbs/event.rb` | Unified key + mouse event objects |
-| `bbs/store.rb` | Thread-safe cached CSV upsert |
-| `bbs/banner.rb`, `bbs/renderer.rb` | FIGlet + ERB |
-| `bbs/color.rb` | Simple ANSI colour helper |
+| `lib/bbs.rb` | Public surface: `BBS.configure`, `BBS.config`, `BBS.start`. |
+| `bbs/server.rb` | TCP accept loop, one thread per client, on-session-end hook. |
+| `bbs/session.rb` | Telnet negotiation, mouse enable/disable, idle timer. |
+| `bbs/telnet.rb` | Telnet protocol, full key parsing, xterm SGR mouse. |
+| `bbs/config.rb` | `BBS::Config` value object. |
+| `bbs/flow.rb`, `bbs/flow_runner.rb` | Flow DSL + interpreter. |
+| `bbs/tui.rb`, `bbs/tui_runner.rb` | Page-router with frame-buffer rendering and the drawing-primitive context. |
+| `bbs/frame_buffer.rb` | Double-buffer, delta diff, drawing helpers, ANSI string utilities. |
+| `bbs/application.rb` | Widget event loop, window stack, ticking, builder DSL. |
+| `bbs/widget.rb`, `bbs/container.rb` | Widget tree base. |
+| `bbs/widgets.rb` | Built-in widgets (Label, Button, TextInput, TextArea, Checkbox, ListBox, ScrollView, ProgressBar, Spinner, HBox, VBox, Panel). |
+| `bbs/widgets/ansi_art.rb` | CP437 / ANSI art widget with SAUCE stripping. |
+| `bbs/window.rb`, `bbs/window_spec.rb` | `Window` + declarative window DSL. |
+| `bbs/windows/info.rb` | Centered info / message / kv / scroll dialog. |
+| `bbs/windows/form.rb` | Multi-field form with status line. |
+| `bbs/windows/master_detail.rb` | Two-pane list / detail browser. |
+| `bbs/windows/stream.rb` | Live log / chat window with input + polling. |
+| `bbs/windows/button_bar.rb` | Bottom-row button layout helper. |
+| `bbs/menu.rb`, `bbs/statusbar.rb`, `bbs/dialogs.rb` | Chrome + ad-hoc dialogs. |
+| `bbs/focus_manager.rb` | Tab/Shift-Tab focus traversal. |
+| `bbs/theme.rb` | Style palette (synchronet, nortoncommander, dosnavigator, neumanntronics, mono). |
+| `bbs/markdown.rb` | Markdown → ANSI line array renderer. |
+| `bbs/event.rb` | Unified key + mouse event objects. |
+| `bbs/store.rb` | Thread-safe cached CSV upsert. |
+| `bbs/banner.rb`, `bbs/renderer.rb` | FIGlet + ERB. |
+| `bbs/color.rb` | Simple ANSI colour helper. |
