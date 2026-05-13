@@ -34,14 +34,16 @@ module BBS
         frame.shadow(x: bounds.x, y: bounds.y, width: bounds.width,
                      height: bounds.height, sgr: style(:window_shadow))
       end
+      show_close = @on_close != false && bounds.width >= 6
       frame.box(
         x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height,
         sgr: style(:window_border), fill_sgr: style(:window_bg),
         style: :double, title: @title,
-        title_sgr: focused ? style(:window_title_focused) : style(:window_title)
+        title_sgr: focused ? style(:window_title_focused) : style(:window_title),
+        title_indent: show_close ? 4 : 0
       )
       # Close gadget — Turbo Vision style "[■]"
-      if @on_close != false && bounds.width >= 6
+      if show_close
         frame.move(bounds.x + 2, bounds.y)
         frame.write('[■]', sgr: style(:window_title))
       end

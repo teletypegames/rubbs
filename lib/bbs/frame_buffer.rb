@@ -106,7 +106,7 @@ module BBS
       double: { tl: '╔', tr: '╗', bl: '╚', br: '╝', h: '═', v: '║' },
     }.freeze
 
-    def box(x:, y:, width:, height:, sgr: nil, fill_sgr: nil, style: :single, title: nil, title_sgr: nil)
+    def box(x:, y:, width:, height:, sgr: nil, fill_sgr: nil, style: :single, title: nil, title_sgr: nil, title_indent: 0)
       return if width < 2 || height < 2
       g  = BOX_CHARS[style] || BOX_CHARS[:single]
       iw = width - 2
@@ -114,11 +114,14 @@ module BBS
       move(x, y)
       write(g[:tl], sgr: sgr)
       if title && title.length > 0
-        clipped = title[0, [iw - 2, 0].max]
+        indent  = [title_indent, 0].max
+        title_max = [iw - 2 - indent, 0].max
+        clipped   = title[0, title_max]
+        write(g[:h] * indent, sgr: sgr) if indent > 0
         prefix  = "#{g[:h]} "
         write(prefix, sgr: sgr)
         write(clipped, sgr: title_sgr || sgr)
-        rest = iw - prefix.length - clipped.length
+        rest = iw - indent - prefix.length - clipped.length
         write(g[:h] * [rest, 0].max, sgr: sgr) if rest > 0
       else
         write(g[:h] * iw, sgr: sgr)
