@@ -5,6 +5,90 @@ module BBS
     Cell = Struct.new(:char, :sgr)
     BLANK = Cell.new(' ', nil).freeze
 
+    ANSI_ESC_RE = /\e\[[\d;]*[A-Za-z~]/.freeze
+
+    # Length of the visible portion of an ANSI-styled string.
+    def self.visible_width(text)
+      text.to_s.gsub(ANSI_ESC_RE, '').length
+    end
+
+    # Truncate an ANSI-styled string so its visible width is ≤ max_width.
+    # SGR escape sequences are preserved (they have zero visible width).
+    def self.clip_ansi(text, max_width)
+      return '' if max_width <= 0
+      out     = +''
+      visible = 0
+      i       = 0
+      s       = text.to_s
+      len     = s.length
+      while i < len
+        if s[i] == "\e" && i + 1 < len && s[i + 1] == '['
+          j = i + 2
+          j += 1 while j < len && !s[j].match?(/[A-Za-z~]/)
+          break if j >= len
+          out << s[i..j]
+          i = j + 1
+          next
+        end
+        break if visible >= max_width
+        out << s[i]
+        visible += 1
+        i += 1
+      end
+      out
+    end
+
+    # Word-wrap an ANSI-styled string to lines of visible width ≤ width.
+    # SGR state is carried across wrapped lines: when the original text has
+    # an active color/attribute at a wrap point, the next line starts with
+    # that same SGR sequence so styling continues seamlessly.
+    def self.wrap_ansi(text, width)
+      return [''] if width <= 0
+      s = text.to_s
+      return [s] if visible_width(s) <= width
+
+      lines       = []
+      cur         = +''
+      cur_visible = 0
+      active_sgr  = nil
+
+      flush = lambda do
+        lines << cur.rstrip
+        cur = +''
+        cur_visible = 0
+        cur << active_sgr if active_sgr
+      end
+
+      s.scan(/(\e\[[\d;]*[A-Za-z~]|[^\s\e]+|\s+)/) do |(tok)|
+        if tok.start_with?("\e")
+          active_sgr = (tok == "\e[0m" || tok == "\e[m") ? nil : tok
+          cur << tok
+          next
+        end
+
+        tok_visible = tok.gsub(ANSI_ESC_RE, '').length
+
+        if tok.match?(/\A\s+\z/)
+          if cur_visible == 0
+            cur << tok
+            cur_visible += tok_visible
+          elsif cur_visible + tok_visible <= width
+            cur << tok
+            cur_visible += tok_visible
+          else
+            flush.call
+          end
+        else
+          flush.call if cur_visible + tok_visible > width && cur_visible > 0
+          cur << tok
+          cur_visible += tok_visible
+        end
+      end
+
+      lines << cur.rstrip unless cur.empty?
+      lines.empty? ? [''] : lines
+    end
+
     attr_reader :cols, :rows
 
     def initialize(cols, rows)

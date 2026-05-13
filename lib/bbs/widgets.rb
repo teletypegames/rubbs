@@ -445,7 +445,7 @@ module BBS
           line = @lines[@scroll + r]
           next unless line
           frame.move(bounds.x, bounds.y + r)
-          frame.write_ansi(line[0, bounds.width].to_s, base_sgr: sgr)
+          frame.write_ansi(FrameBuffer.clip_ansi(line.to_s, bounds.width), base_sgr: sgr)
         end
         # right-side scrollbar
         if @lines.size > bounds.height && bounds.width > 1
