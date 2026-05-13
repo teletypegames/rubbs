@@ -161,11 +161,12 @@ module BBS
 
     def dispatch(event)
       # An open menubar has priority — its keys (arrows, Enter, hotkeys, Esc)
-      # must beat any modal window's focused widget.
+      # must beat any modal window's focused widget. Always swallow events
+      # while the menu is open so they cannot leak through to windows.
       if @menubar&.open?
         result = @menubar.handle_event(event)
         return :halt if result == :halt
-        return nil if result
+        return nil
       end
 
       # Modal windows: top window gets first shot at events

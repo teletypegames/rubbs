@@ -91,8 +91,11 @@ module BBS
     end
 
     def handle_event(event)
-      return open_via_keyboard(event) if !open? && event.key?
-      return navigate(event)          if open?
+      return navigate(event) if open?
+      return open_via_keyboard(event) if event.key?
+      if event.mouse? && event.mouse.kind == :press && event.mouse.button == :left
+        return handle_mouse_press(event)
+      end
       nil
     end
 
@@ -141,9 +144,6 @@ module BBS
           open(idx)
           return :handled
         end
-      end
-      if event.mouse? && event.mouse.kind == :press && event.mouse.button == :left
-        return handle_mouse_press(event)
       end
       nil
     end
