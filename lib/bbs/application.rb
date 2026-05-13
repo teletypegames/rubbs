@@ -10,6 +10,7 @@ require_relative 'widgets'
 require_relative 'menu'
 require_relative 'statusbar'
 require_relative 'dialogs'
+require_relative 'window_spec'
 
 module BBS
   # The widget event loop. Acts as the root container:
@@ -23,7 +24,7 @@ module BBS
   # and use add_window / menubar / statusbar.
   class Application
     attr_reader :session, :session_id, :context, :root, :menubar, :statusbar,
-                :windows, :theme
+                :windows, :theme, :services, :window_specs
 
     def self.define(&block)
       builder = Builder.new
@@ -32,7 +33,7 @@ module BBS
     end
 
     def initialize(session:, session_id:, context: {}, theme: nil, on_idle: nil,
-                   on_tick: nil, helpers: nil)
+                   on_tick: nil, helpers: nil, services: {}, window_specs: {})
       @session       = session
       @session_id    = session_id
       @context       = context
@@ -47,6 +48,8 @@ module BBS
       @on_idle       = on_idle
       @on_tick       = on_tick
       @helpers       = helpers
+      @services      = services
+      @window_specs  = window_specs
       extend(@helpers) if @helpers
     end
 
@@ -69,11 +72,20 @@ module BBS
       child
     end
 
-    def open_window(window)
-      window.theme = @theme
-      @windows << window
-      window.focused = true
-      window
+    # Overloaded: pass a Symbol/String to open a registered WindowSpec (with
+    # optional extras forwarded into the callback ctx), or pass a Window
+    # instance to push it directly onto the modal stack.
+    def open_window(target, **extras)
+      if target.is_a?(Symbol) || target.is_a?(String)
+        spec = @window_specs[target.to_sym]
+        raise ArgumentError, "Unknown window: #{target.inspect}" unless spec
+        spec.open(self, **extras)
+      else
+        target.theme = @theme
+        @windows << target
+        target.focused = true
+        target
+      end
     end
 
     def close_window(window = nil)
@@ -242,7 +254,7 @@ module BBS
     # ── Builder DSL ───────────────────────────────────────────────────────────
     class Builder
       attr_reader :init_block, :theme, :menubar_block, :statusbar_hints,
-                  :helper_module
+                  :helper_module, :window_specs
 
       def initialize
         @init_block      = nil
@@ -251,6 +263,20 @@ module BBS
         @statusbar_hints = []
         @body_block      = nil
         @helper_module   = Module.new
+        @services        = {}
+        @window_specs    = {}
+      end
+
+      def services(hash = nil)
+        return @services if hash.nil?
+        @services = @services.merge(hash)
+      end
+
+      def window(name, type:, &block)
+        spec = WindowSpec.new(name, type: type)
+        block&.call(spec)
+        @window_specs[name] = spec
+        spec
       end
 
       def theme(base = nil, &block)
@@ -285,7 +311,9 @@ module BBS
         app = Application.new(
           session: session, session_id: session_id, context: context,
           theme: @theme || Theme.synchronet,
-          helpers: @helper_module
+          helpers: @helper_module,
+          services: @services,
+          window_specs: @window_specs
         )
         if @menubar_block
           menubar_widget = Menubar.new
