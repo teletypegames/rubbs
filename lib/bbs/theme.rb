@@ -187,6 +187,64 @@ module BBS
       }.freeze).freeze
     end
 
+    def self.neumanntronics
+      Theme.new(:neumanntronics, {
+        screen:           "\e[48;5;16m",
+        text:             "\e[0;38;5;73;48;5;16m",
+        text_dim:         "\e[0;38;5;66;48;5;16m",
+        text_bright:      "\e[0;38;5;116;48;5;16m",
+        label:            "\e[0;38;5;73;48;5;16m",
+        accent:           "\e[0;38;5;220;48;5;16m",
+        success:          "\e[0;38;5;79;48;5;16m",
+        warning:          "\e[0;38;5;220;48;5;16m",
+        error:            "\e[0;38;5;203;48;5;16m",
+
+        window_bg:        "\e[48;5;16m",
+        window_border:    "\e[0;38;5;73;48;5;16m",
+        window_title:     "\e[0;38;5;116;48;5;23m",
+        window_title_focused: "\e[0;38;5;220;48;5;23m",
+        window_text:      "\e[0;38;5;73;48;5;16m",
+        window_shadow:    "\e[48;5;16m",
+
+        menubar:          "\e[0;38;5;116;48;5;23m",
+        menubar_hotkey:   "\e[0;38;5;220;48;5;23m",
+        menubar_selected: "\e[0;38;5;16;48;5;73m",
+        menubar_sel_hot:  "\e[0;38;5;16;48;5;220m",
+
+        menu_bg:          "\e[0;38;5;73;48;5;23m",
+        menu_text:        "\e[0;38;5;73;48;5;23m",
+        menu_hotkey:      "\e[0;38;5;220;48;5;23m",
+        menu_selected:    "\e[0;38;5;16;48;5;73m",
+        menu_disabled:    "\e[0;38;5;66;48;5;23m",
+        menu_border:      "\e[0;38;5;73;48;5;23m",
+
+        statusbar:        "\e[0;38;5;116;48;5;23m",
+        statusbar_key:    "\e[0;38;5;220;48;5;23m",
+
+        button:           "\e[0;38;5;73;48;5;16m",
+        button_focused:   "\e[0;38;5;16;48;5;73m",
+        button_hotkey:    "\e[0;38;5;220;48;5;16m",
+        button_disabled:  "\e[0;38;5;66;48;5;16m",
+
+        input:            "\e[0;38;5;73;48;5;16m",
+        input_focused:    "\e[0;38;5;16;48;5;73m",
+        input_label:      "\e[0;38;5;73;48;5;16m",
+
+        listbox:          "\e[0;38;5;73;48;5;16m",
+        listbox_selected: "\e[0;38;5;16;48;5;73m",
+        listbox_focused:  "\e[0;38;5;220;48;5;16m",
+        listbox_header:   "\e[0;38;5;116;48;5;23m",
+
+        scrollbar:        "\e[0;38;5;66;48;5;16m",
+        scrollbar_thumb:  "\e[0;38;5;73;48;5;16m",
+
+        check_on:         "\e[0;38;5;220;48;5;16m",
+        check_off:        "\e[0;38;5;73;48;5;16m",
+
+        reset:            "\e[0m",
+      }.freeze).freeze
+    end
+
     def self.mono
       Theme.new(:mono, {
         screen:           "",
