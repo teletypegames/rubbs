@@ -256,7 +256,22 @@ module BBS
         @helper_module   = Module.new
       end
 
-      def theme(value) = (@theme = value)
+      def theme(base = nil, &block)
+        if block
+          starting = case base
+                     when Symbol then Theme.public_send(base)
+                     when Theme  then base
+                     when nil    then Theme.synchronet
+                     else             base
+                     end
+          builder = ThemeBuilder.new(starting)
+          builder.instance_eval(&block)
+          @theme = builder.build
+        else
+          @theme = base
+        end
+      end
+
       def init(&block) = (@init_block = block)
       def helpers(&block) = @helper_module.module_eval(&block)
       def menubar(&block) = (@menubar_block = block)
@@ -342,6 +357,34 @@ module BBS
 
       def add(widget) = @app.add(widget)
       def app         = @app
+    end
+
+    # DSL inside `theme do ... end`. Any unknown method call with one argument
+    # is treated as a style override (e.g. `screen "\e[0m"`).
+    class ThemeBuilder
+      def initialize(base)
+        @base      = base
+        @overrides = {}
+      end
+
+      def inherit(theme)
+        @base = theme.is_a?(Symbol) ? Theme.public_send(theme) : theme
+      end
+
+      def style(key, value)
+        @overrides[key.to_sym] = value
+      end
+
+      def build
+        @overrides.empty? ? @base : @base.merge(@overrides)
+      end
+
+      def respond_to_missing?(_name, _include_private = false) = true
+
+      def method_missing(name, *args)
+        return @overrides[name] = args.first if args.size == 1
+        super
+      end
     end
   end
 end
