@@ -77,6 +77,116 @@ module BBS
       }.freeze).freeze
     end
 
+    def self.nortoncommander
+      Theme.new(:nortoncommander, {
+        screen:           "\e[44m",
+        text:             "\e[0;37;44m",
+        text_dim:         "\e[0;2;37;44m",
+        text_bright:      "\e[1;37;44m",
+        label:            "\e[0;36;44m",
+        accent:           "\e[1;33;44m",
+        success:          "\e[1;32;44m",
+        warning:          "\e[1;33;44m",
+        error:            "\e[1;31;44m",
+
+        window_bg:        "\e[44m",
+        window_border:    "\e[1;36;44m",
+        window_title:     "\e[1;30;46m",
+        window_title_focused: "\e[1;37;46m",
+        window_text:      "\e[0;37;44m",
+        window_shadow:    "\e[40m",
+
+        menubar:          "\e[1;30;46m",
+        menubar_hotkey:   "\e[1;31;46m",
+        menubar_selected: "\e[1;30;42m",
+        menubar_sel_hot:  "\e[1;31;42m",
+
+        menu_bg:          "\e[1;30;47m",
+        menu_text:        "\e[1;30;47m",
+        menu_hotkey:      "\e[1;31;47m",
+        menu_selected:    "\e[1;37;42m",
+        menu_disabled:    "\e[0;2;30;47m",
+        menu_border:      "\e[1;30;47m",
+
+        statusbar:        "\e[1;30;46m",
+        statusbar_key:    "\e[1;33;46m",
+
+        button:           "\e[1;37;42m",
+        button_focused:   "\e[1;37;46m",
+        button_hotkey:    "\e[1;33;42m",
+        button_disabled:  "\e[0;2;37;42m",
+
+        input:            "\e[1;30;46m",
+        input_focused:    "\e[1;37;46m",
+        input_label:      "\e[1;33;44m",
+
+        listbox:          "\e[0;37;44m",
+        listbox_selected: "\e[1;37;46m",
+        listbox_focused:  "\e[0;30;46m",
+        listbox_header:   "\e[1;33;44m",
+
+        scrollbar:        "\e[0;36;44m",
+        scrollbar_thumb:  "\e[1;37;46m",
+
+        reset:            "\e[0m",
+      }.freeze).freeze
+    end
+
+    def self.dosnavigator
+      Theme.new(:dosnavigator, {
+        screen:           "\e[47m",
+        text:             "\e[0;30;47m",
+        text_dim:         "\e[0;2;30;47m",
+        text_bright:      "\e[1;30;47m",
+        label:            "\e[0;30;47m",
+        accent:           "\e[0;34;47m",
+        success:          "\e[0;32;47m",
+        warning:          "\e[0;31;47m",
+        error:            "\e[1;31;47m",
+
+        window_bg:        "\e[47m",
+        window_border:    "\e[0;30;47m",
+        window_title:     "\e[0;30;46m",
+        window_title_focused: "\e[1;37;46m",
+        window_text:      "\e[0;30;47m",
+        window_shadow:    "\e[40m",
+
+        menubar:          "\e[0;30;46m",
+        menubar_hotkey:   "\e[1;31;46m",
+        menubar_selected: "\e[1;37;42m",
+        menubar_sel_hot:  "\e[1;33;42m",
+
+        menu_bg:          "\e[0;30;47m",
+        menu_text:        "\e[0;30;47m",
+        menu_hotkey:      "\e[1;31;47m",
+        menu_selected:    "\e[1;37;42m",
+        menu_disabled:    "\e[0;2;30;47m",
+        menu_border:      "\e[0;30;47m",
+
+        statusbar:        "\e[0;30;46m",
+        statusbar_key:    "\e[1;33;46m",
+
+        button:           "\e[0;30;47m",
+        button_focused:   "\e[1;37;42m",
+        button_hotkey:    "\e[1;31;47m",
+        button_disabled:  "\e[0;2;30;47m",
+
+        input:            "\e[0;30;47m",
+        input_focused:    "\e[1;30;46m",
+        input_label:      "\e[0;30;47m",
+
+        listbox:          "\e[0;30;47m",
+        listbox_selected: "\e[0;30;46m",
+        listbox_focused:  "\e[1;37;46m",
+        listbox_header:   "\e[0;30;46m",
+
+        scrollbar:        "\e[0;30;47m",
+        scrollbar_thumb:  "\e[1;37;46m",
+
+        reset:            "\e[0m",
+      }.freeze).freeze
+    end
+
     def self.mono
       Theme.new(:mono, {
         screen:           "",
