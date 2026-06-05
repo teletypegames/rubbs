@@ -459,8 +459,17 @@ module BBS
       end
 
       def handle_event(event)
-        return nil unless event.key?
         max = [@lines.size - bounds.height, 0].max
+        if event.mouse?
+          return nil unless event.mouse.kind == :wheel
+          @scroll = if event.mouse.button == :up
+                      [@scroll - 3, 0].max
+                    else
+                      [@scroll + 3, max].min
+                    end
+          return :handled
+        end
+        return nil unless event.key?
         case event.key
         when :up        then @scroll = [@scroll - 1, 0].max
         when :down      then @scroll = [@scroll + 1, max].min

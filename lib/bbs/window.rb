@@ -70,6 +70,16 @@ module BBS
         end
       end
 
+      # Route wheel scrolling to whatever widget is under the cursor, so a
+      # scrollable pane responds even when keyboard focus is elsewhere.
+      if event.mouse? && event.mouse.kind == :wheel
+        hit = hit_test(event.x, event.y)
+        if hit && hit != focus_manager.focused
+          res = hit.handle_event(event)
+          return res if res
+        end
+      end
+
       result = focus_manager.handle_focus_key(event) ? :handled : nil
       result ||= focus_manager.dispatch(event)
       return result if result
