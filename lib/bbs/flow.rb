@@ -126,6 +126,10 @@ module BBS
     def app(definition)
       @steps << { type: :app, definition: definition }
     end
+
+    def os(definition)
+      @steps << { type: :os, definition: definition }
+    end
   end
 
   class MenuBuilder

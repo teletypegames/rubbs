@@ -72,6 +72,7 @@ module BBS
       when :output        then run_output(step)
       when :tui           then run_tui(step)
       when :app           then run_app(step)
+      when :os            then run_os(step)
       end
     end
 
@@ -354,6 +355,13 @@ module BBS
       builder = step[:definition]
       app = builder.build(session: @session, session_id: @session_id, context: @ctx)
       app.run
+      nil
+    rescue IOError, Errno::EPIPE, Errno::ECONNRESET
+      :halt
+    end
+
+    def run_os(step)
+      FakeOS::Runner.new(@session, step[:definition], context: @ctx).run
       nil
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       :halt
