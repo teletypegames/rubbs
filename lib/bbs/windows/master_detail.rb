@@ -81,47 +81,68 @@ module BBS
         end
       end
 
+      # Terminal resized: recompute the whole geometry against the new size
+      # and re-render the detail at the new pane width.
+      def relayout(_app = @app)
+        place_window
+        place_panes
+        ButtonBar.place(self, @bar[:widgets], @actions)
+        reload_detail
+      end
+
       private
 
       def build
-        w = @width  || @app.cols - 4
-        h = @height || @app.rows - 6
-        x = (@app.cols - w) / 2 + 1
-        y = (@app.rows - h) / 2 + 1
-        layout(x, y, w, h)
-
-        has_buttons = !@actions.empty?
-        has_meta    = !@bottom_meta.nil?
-        panel_h     = h - 4 - (has_meta ? 1 : 0) - (has_buttons ? 1 : 0)
-        panel_h     = [panel_h, 3].max
-
-        list_w = @list_width || [(w / 3).clamp(20, 40), w - 10].min
-        list_x = bounds.x + 2
-        list_y = bounds.y + 2
+        place_window
 
         @list_widget = BBS::Widgets::ListBox.new(
           items: @items,
-          label: ->(item) { "  #{@item_label.call(item)}".ljust(list_w) }
+          label: ->(item) { "  #{@item_label.call(item)}".ljust(@list_w || 0) }
         )
-        @list_widget.layout(list_x, list_y, list_w, panel_h)
         add(@list_widget)
 
-        detail_x = list_x + list_w + 2
-        detail_w = bounds.width - list_w - 5
         @detail_view = BBS::Widgets::ScrollView.new(lines: [])
-        @detail_view.layout(detail_x, list_y, detail_w, panel_h)
         add(@detail_view)
 
-        if has_meta
-          meta_y = bounds.y + h - (has_buttons ? 3 : 2)
+        unless @bottom_meta.nil?
           @meta_label = BBS::Widgets::Label.new(text: '', style_key: :input_label)
-          @meta_label.layout(bounds.x + 2, meta_y, bounds.width - 4, 1)
           add(@meta_label)
         end
 
         @list_widget.on_select = ->(_, _) { reload_detail }
 
-        ButtonBar.attach(self, @app, @actions)
+        @bar = ButtonBar.attach(self, @app, @actions)
+        place_panes
+      end
+
+      def place_window
+        w = @width  || @app.cols - 4
+        h = @height || @app.rows - 6
+        x = (@app.cols - w) / 2 + 1
+        y = (@app.rows - h) / 2 + 1
+        layout(x, y, w, h)
+      end
+
+      def place_panes
+        h           = bounds.height
+        has_buttons = !@actions.empty?
+        has_meta    = !@meta_label.nil?
+        panel_h     = h - 4 - (has_meta ? 1 : 0) - (has_buttons ? 1 : 0)
+        panel_h     = [panel_h, 3].max
+
+        @list_w = @list_width || [(bounds.width / 3).clamp(20, 40), bounds.width - 10].min
+        list_x  = bounds.x + 2
+        list_y  = bounds.y + 2
+        @list_widget.layout(list_x, list_y, @list_w, panel_h)
+
+        detail_x = list_x + @list_w + 2
+        detail_w = bounds.width - @list_w - 5
+        @detail_view.layout(detail_x, list_y, detail_w, panel_h)
+
+        if @meta_label
+          meta_y = bounds.y + h - (has_buttons ? 3 : 2)
+          @meta_label.layout(bounds.x + 2, meta_y, bounds.width - 4, 1)
+        end
       end
     end
   end

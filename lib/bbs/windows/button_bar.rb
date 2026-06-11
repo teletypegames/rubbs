@@ -32,6 +32,24 @@ module BBS
           BBS::Widgets::Button.new(label: d[:label], on_click: build_handler(window, app, d))
         end
 
+        place(window, widgets, descriptors)
+
+        widgets.each { |w| window.add(w) }
+
+        primary_idx = descriptors.index { |d| d[:primary] }
+        primary     = primary_idx ? widgets[primary_idx] : nil
+
+        by_key = {}
+        descriptors.each_with_index { |d, i| by_key[d[:key]] = widgets[i] if d[:key] }
+
+        { widgets: widgets, primary: primary, by_key: by_key }
+      end
+
+      # Position (or re-position) already-built bar widgets against the
+      # window's current bounds. Used by attach and by window relayouts.
+      def place(window, widgets, descriptors)
+        return if widgets.empty?
+
         default_align = descriptors.length == 1 ? :center : :right
         aligns        = descriptors.map { |d| d[:align] || default_align }
 
@@ -68,16 +86,6 @@ module BBS
           widgets[i].layout(x, row_y, bw, 1)
           x += bw + 1
         end
-
-        widgets.each { |w| window.add(w) }
-
-        primary_idx = descriptors.index { |d| d[:primary] }
-        primary     = primary_idx ? widgets[primary_idx] : nil
-
-        by_key = {}
-        descriptors.each_with_index { |d, i| by_key[d[:key]] = widgets[i] if d[:key] }
-
-        { widgets: widgets, primary: primary, by_key: by_key }
       end
 
       def button_width(button)

@@ -236,6 +236,7 @@ module BBS
       @next      = FrameBuffer.new(c, r)
 
       relayout!
+      @windows.each { |w| w.relayout(self) } if resized
 
       @next.fill(x: 1, y: 1, width: c, height: r, sgr: @theme[:screen])
       @root.render(@next)

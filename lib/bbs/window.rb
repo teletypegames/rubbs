@@ -98,5 +98,24 @@ module BBS
     # Called once per Application idle tick (~1s). Override in subclasses that
     # need to poll for asynchronous updates (e.g. BBS::Windows::Stream).
     def tick(app); end
+
+    # Called by the Application when the terminal is resized. The default
+    # keeps the window's size and re-centers it, shifting every descendant
+    # along. Subclasses whose geometry depends on the terminal size override
+    # this (e.g. BBS::Windows::MasterDetail).
+    def relayout(app)
+      dx = [(app.cols - bounds.width) / 2 + 1, 1].max - bounds.x
+      dy = [(app.rows - bounds.height) / 2 + 1, 1].max - bounds.y
+      shift(dx, dy)
+    end
+
+    # Move the window and all its descendants by (dx, dy).
+    def shift(dx, dy)
+      return if dx.zero? && dy.zero?
+      walk do |w|
+        b = w.bounds
+        w.bounds = Widget::Rect.new(b.x + dx, b.y + dy, b.width, b.height)
+      end
+    end
   end
 end
