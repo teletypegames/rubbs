@@ -14,4 +14,4 @@ steps:
       - gem build bbs.gemspec
       - echo "==> Load check"
       - gem install --no-document ./bbs-*.gem
-      - ruby -e "require 'bbs'; puts \"BBS betoltve, #{BBS.constants.size} konstans\""
+      - ruby -e 'require "bbs"; puts "BBS betoltve, " + BBS.constants.size.to_s + " konstans"'
