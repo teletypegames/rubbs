@@ -1,0 +1,17 @@
+# A gemnek nincs teszt-suite-ja, ezért az ellenőrzés három dolgot néz:
+# minden forrás szintaktikailag helyes-e, felépül-e a gem, és betölthető-e
+# a függőségeivel együtt.
+steps:
+  - name: test
+    image: ruby:3.2-slim
+    commands:
+      - ruby -v
+      - echo "==> Syntax check"
+      - |
+        for f in $(find lib -name '*.rb'); do ruby -c "$f" >/dev/null || exit 1; done
+        echo "$(find lib -name '*.rb' | wc -l) fajl rendben"
+      - echo "==> Gem build"
+      - gem build bbs.gemspec
+      - echo "==> Load check"
+      - gem install --no-document ./bbs-*.gem
+      - ruby -e "require 'bbs'; puts \"BBS betoltve, #{BBS.constants.size} konstans\""
