@@ -2,6 +2,7 @@ Gem::Specification.new do |s|
   s.name        = 'bbs'
   s.version     = '0.4.0'
   s.summary     = 'Universal telnet BBS server library'
+  s.license     = 'MIT'
   s.author      = 'Zsolt Tasnadi'
   s.files       = Dir['lib/**/*.rb']
   s.require_paths = ['lib']
