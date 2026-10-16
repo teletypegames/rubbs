@@ -21,7 +21,7 @@ module BBS
         row = @rows.find { |r| r['session_id'] == session_id }
 
         if row
-          fields.each { |k, v| row[k.to_s] = v.to_s }
+          fields.each { |k, v| row[k.to_s] = clean(v) }
           flush!
         else
           @rows << build_row(session_id, fields)
@@ -59,7 +59,10 @@ module BBS
     def load_rows!
       return @rows if @rows
       ensure_file!
-      table = CSV.read(@path, headers: true)
+      # Bytes, not text: a line with invalid UTF-8 (e.g. raw telnet negotiation saved with the input)
+      # would otherwise raise CSV::InvalidEncodingError and kill every session that touches the store.
+      raw   = File.binread(@path).force_encoding(Encoding::UTF_8).scrub
+      table = CSV.parse(raw, headers: true)
       @rows = table.map { |row| row }
     end
 
@@ -68,7 +71,7 @@ module BBS
         case h
         when 'session_id' then session_id
         when 'timestamp'  then Time.now.utc.iso8601
-        else fields[h.to_sym]&.to_s
+        else (v = fields[h.to_sym]).nil? ? nil : clean(v)
         end
       end
       CSV::Row.new(@headers, values)
@@ -83,6 +86,11 @@ module BBS
         csv << @headers
         @rows.each { |r| csv << r.fields }
       end
+    end
+
+    # Valid UTF-8 without control characters, so a stray byte from the terminal never lands in the file.
+    def clean(value)
+      value.to_s.dup.force_encoding(Encoding::UTF_8).scrub('').gsub(/[\u0000-\u0008\u000b-\u001f\u007f]/, '')
     end
 
     def ensure_file!
