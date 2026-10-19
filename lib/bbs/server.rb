@@ -23,6 +23,9 @@ module BBS
           session = Session.new(c)
           begin
             session.run
+          rescue IOError, Errno::EPIPE, Errno::ECONNRESET, Errno::ETIMEDOUT, IO::TimeoutError => e
+            # The client hung up or went silent: an ordinary end of a session, not a fault.
+            puts "BBS session dropped by the client (#{e.message})"
           rescue StandardError => e
             warn "BBS session error: #{e.class}: #{e.message}\n#{e.backtrace.first(3).join("\n")}"
           ensure
