@@ -68,7 +68,7 @@ module BBS
       @client.read(1)
     end
 
-    def readline
+    def readline(mask: nil)
       line    = +""
       last_cr = false
 
@@ -107,8 +107,14 @@ module BBS
         next if byte < 32
 
         line << raw
-        write raw
+        write(mask || raw)
       end
+    end
+
+    # True once the client has reported its window size (telnet NAWS). Real
+    # terminals do; port scanners and password-guessing bots usually do not.
+    def naws_reported?
+      @naws_reported == true
     end
 
     def write(data)
@@ -260,6 +266,7 @@ module BBS
           rows = (buf[2] << 8) | buf[3]
           @term_cols = cols if cols > 0
           @term_rows = rows if rows > 0
+          @naws_reported = true
         end
       when WILL, WONT, DO, DONT
         @client.read(1)

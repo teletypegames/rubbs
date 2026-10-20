@@ -32,7 +32,7 @@ module BBS
     end
 
     def write(data) = @session.write(data)
-    def readline    = @session.readline
+    def readline(mask: nil) = @session.readline(mask: mask)
 
     private
 

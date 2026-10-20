@@ -190,7 +190,7 @@ keyed by Symbol field names.
 | `exit_menu` | `exit_menu` | Return to the enclosing menu's caller. |
 | `fetch` | `fetch :name, loading: 'Loading…' { \|ctx\| ... }` | Show spinner-style line, store block result into `@ctx[:name]`. |
 | `pick` | `pick from:, prompt:, empty:, item:, hint:` | Show numbered list of `@ctx[from]`; on selection, store as `@ctx[:picked]` and run sub-flow. |
-| `call` | `call { \|ctx, runner\| ... }` | Arbitrary code; runner exposes `write`/`readline`. Return `:halt` to terminate. |
+| `call` | `call { \|ctx, runner\| ... }` | Arbitrary code; runner exposes `write`/`readline(mask:)`/`session`. Return `:halt` to terminate. |
 | `tui` | `tui DEFINITION` | Hand off to a `BBS::TUI`. |
 | `app` | `app DEFINITION` | Hand off to a `BBS::Application`. |
 
@@ -1044,6 +1044,8 @@ session.session_id       # 16-hex SecureRandom id
 session.term_cols        # NAWS column count (default 80)
 session.term_rows        # NAWS row count    (default 24)
 session.readline         # cooked line input (FlowRunner uses this)
+session.readline(mask: '*') # same, echoing the mask instead of each character
+session.naws_reported?   # true once the client sent its window size (NAWS)
 session.readkey(timeout: 1.0)
 session.write(bytes)
 session.enable_mouse / disable_mouse
