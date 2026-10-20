@@ -40,8 +40,9 @@ Connect with `telnet localhost 2323`.
 15. [Banner, ASCII art & ERB screens](#15-banner-ascii-art--erb-screens)
 16. [Persistence (`BBS::Store`)](#16-persistence-bbsstore)
 17. [AI characters (`BBS::AI`)](#17-ai-characters-bbsai)
-18. [Telnet, sessions & input model](#18-telnet-sessions--input-model)
-19. [Source layout](#19-source-layout)
+18. [Doors (`BBS::Door`)](#18-doors-bbsdoor)
+19. [Telnet, sessions & input model](#19-telnet-sessions--input-model)
+20. [Source layout](#20-source-layout)
 
 ---
 
@@ -57,13 +58,21 @@ for the main shell.
 | `BBS::TUI` | Single-screen page router with frame-buffer delta rendering | Single-purpose full-screen UIs |
 | `BBS::Application` | Widget framework: Menubar, Window, Button, TextInput, ListBox, … | Multi-window Synchronet-style BBSes |
 
+Three building blocks sit beside them:
+
+| Block | What it is | When to use |
+|---|---|---|
+| `BBS::FakeOS` | A character-mode OS simulator: boot script + command shell | A simulated machine the caller types into |
+| `BBS::Door` | Hands the line from an Application to a program and back | Games, simulated machines, anything full-line inside a menu-driven BBS |
+| `BBS::AI` | A persona-driven chat with a small model, streamed to the terminal | A character the caller can talk to, e.g. in a FakeOS `on_unknown` |
+
 The server boots a Telnet TCP listener, hands each connection a `Session`,
 which runs the configured `Flow`. Inside that flow you can hand off to a
 `TUI` or `Application`, then return to the flow when the user exits.
 
 ```
 TCPServer → Session → FlowRunner ─┬→ TUIRunner
-                                  ├→ Application#run
+                                  ├→ Application#run ⇄ Door#run (FakeOS, …)
                                   └→ FlowRunner (sub-flow, e.g. confirm-block)
 ```
 
@@ -406,6 +415,7 @@ end
 | `menubar { menu '&X' do item '&Y' do … end end }` | Define the top menubar (see [§11](#11-menubar-statusbar-focus)). |
 | `status_hint(key, label) { ... }` | Append one status bar hotkey hint. |
 | `window(:name, type: :info\|:form\|:master_detail\|:stream) { \|w\| ... }` | Register a declarative window spec (see [§9](#9-pre-built-window-types-bbswindows)). |
+| `door(:name, program, label: nil)` | Declare a door the caller can step into (see [§18](#18-doors-bbsdoor)). Inside `menu`, `doors` adds one item per declared door. |
 
 ### Application instance API
 
@@ -421,6 +431,7 @@ end
 | `with_loading(text) { ... }` | Show a "Please wait" modal while the block runs in a thread; returns the block's value. |
 | `tick!` | Manually fire the periodic tick. |
 | `stop!` | Break out of the run loop. |
+| `open_door(:name)` | Leave through a declared door: returns `:halt`, and `Builder#run` opens the door. |
 
 ### Run loop
 
@@ -435,6 +446,11 @@ end
 
 Return `:halt` from any handler to end the application (and, via Flow, the
 session).
+
+`Builder#run(session:, session_id:, context:)` is `build(...).run` that also
+takes the caller through doors: when the application ended with `open_door`,
+it runs the door and builds the application again, until the caller leaves
+without one.
 
 ---
 
@@ -1088,7 +1104,49 @@ fallback:                  # canned replies, tried top to bottom
 
 ---
 
-## 18. Telnet, sessions & input model
+## 18. Doors (`BBS::Door`)
+
+A door is a program the caller steps into from the BBS, as in the doors of the
+old boards: the BBS hands the telnet line over, the program talks to the
+caller directly, and the line comes back when the program exits. The program
+is a `BBS::FakeOS` definition (see the comment in `bbs/fake_os.rb`), or
+anything that responds to `call(session, context)`.
+
+```ruby
+APP = BBS::Application.define do
+  door :sermo, Sermo::OS,                       label: '&SERMO'
+  door :dice,  ->(session, ctx) { DiceGame.new(session).play }, label: '&Dice'
+
+  menubar do
+    menu '&Doors' do
+      doors                                     # one item per declared door
+    end
+  end
+
+  status_hint('F5', 'SERMO') { open_door(:sermo) }
+end
+
+BBS.config.flow = BBS::Flow.define do
+  ask :username, prompt: 'Name'
+  call do |ctx, runner|
+    APP.run(session: runner.session, session_id: ctx[:session_id], context: ctx)
+    nil
+  end
+end
+```
+
+- `open_door(:name)` ends the application with `:halt` and leaves the door in
+  `context[:door]`. `APP.run` then runs the door and builds the application
+  again; a plain `APP.build(...).run` would only end.
+- `Door#run(session, context)` clears the screen and switches mouse reporting
+  off for the program, and switches it back on (if `BBS.config.mouse`) when it
+  returns. It can be used without an Application.
+- The context hash is the same before, inside and after the door, so a door can
+  keep its state for the rest of the call (the AI chat history, for example).
+
+---
+
+## 19. Telnet, sessions & input model
 
 ### `BBS::Session`
 
@@ -1151,7 +1209,7 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 
 ---
 
-## 19. Source layout
+## 20. Source layout
 
 | File | Responsibility |
 |---|---|
@@ -1180,6 +1238,7 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `bbs/event.rb` | Unified key + mouse event objects. |
 | `bbs/store.rb` | Thread-safe cached CSV upsert. |
 | `bbs/fake_os.rb` | Character-mode OS simulator: boot script + command shell. |
+| `bbs/door.rb` | Doors: hand the line to a program and take it back. |
 | `bbs/ai.rb` | AI characters: persona file, OpenAI-compatible streaming client, chat with memory and fallback, typewriter output. |
 | `bbs/banner.rb`, `bbs/renderer.rb` | FIGlet + ERB. |
 | `bbs/color.rb` | Simple ANSI colour helper. |

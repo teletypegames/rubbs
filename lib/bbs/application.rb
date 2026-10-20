@@ -11,6 +11,7 @@ require_relative 'menu'
 require_relative 'statusbar'
 require_relative 'dialogs'
 require_relative 'window_spec'
+require_relative 'door'
 
 module BBS
   # The widget event loop. Acts as the root container:
@@ -22,9 +23,22 @@ module BBS
   #
   # Build one with Application.define { ... } DSL, or instantiate directly
   # and use add_window / menubar / statusbar.
+  #
+  # Doors (BBS::Door) are declared in the DSL and opened from any handler;
+  # Builder#run then hands the line to the door and rebuilds the
+  # application when the caller comes back:
+  #
+  #   APP = BBS::Application.define do
+  #     door :sermo, Sermo::OS, label: '&SERMO'
+  #     menubar do
+  #       menu('&Doors') { doors }        # one item per declared door
+  #     end
+  #   end
+  #
+  #   APP.run(session: session, session_id: sid, context: ctx)
   class Application
     attr_reader :session, :session_id, :context, :root, :menubar, :statusbar,
-                :windows, :theme, :services, :window_specs
+                :windows, :theme, :services, :window_specs, :doors
 
     def self.define(&block)
       builder = Builder.new
@@ -33,7 +47,7 @@ module BBS
     end
 
     def initialize(session:, session_id:, context: {}, theme: nil, on_idle: nil,
-                   on_tick: nil, helpers: nil, services: {}, window_specs: {})
+                   on_tick: nil, helpers: nil, services: {}, window_specs: {}, doors: {})
       @session       = session
       @session_id    = session_id
       @context       = context
@@ -50,6 +64,7 @@ module BBS
       @helpers       = helpers
       @services      = services
       @window_specs  = window_specs
+      @doors         = doors
       extend(@helpers) if @helpers
     end
 
@@ -86,6 +101,17 @@ module BBS
         target.focused = true
         target
       end
+    end
+
+    # Leaves the application through a declared door: returns :halt, so a
+    # menu item or key handler can end with it, and Builder#run opens the
+    # door once the event loop has stopped.
+    def open_door(name)
+      door = @doors[name.to_sym]
+      raise ArgumentError, "Unknown door: #{name.inspect}" unless door
+
+      @context[:door] = door
+      :halt
     end
 
     def close_window(window = nil)
@@ -255,7 +281,7 @@ module BBS
     # ── Builder DSL ───────────────────────────────────────────────────────────
     class Builder
       attr_reader :init_block, :theme, :menubar_block, :statusbar_hints,
-                  :helper_module, :window_specs
+                  :helper_module, :window_specs, :doors
 
       def initialize
         @init_block      = nil
@@ -266,6 +292,13 @@ module BBS
         @helper_module   = Module.new
         @services        = {}
         @window_specs    = {}
+        @doors           = {}
+      end
+
+      # Declares a door: `program` is a BBS::FakeOS definition or a
+      # callable(session, context); `label` is its menu item.
+      def door(name, program, label: nil)
+        @doors[name.to_sym] = Door.new(name, program, label: label)
       end
 
       def services(hash = nil)
@@ -314,7 +347,8 @@ module BBS
           theme: @theme || Theme.synchronet,
           helpers: @helper_module,
           services: @services,
-          window_specs: @window_specs
+          window_specs: @window_specs,
+          doors: @doors
         )
         if @menubar_block
           menubar_widget = Menubar.new
@@ -338,6 +372,19 @@ module BBS
           ctx.instance_exec(&@body_block)
         end
         app
+      end
+
+      # Builds and runs the application. When the caller leaves it through a
+      # door, runs the door and builds the application again; returns when
+      # the caller leaves without one. The context lives through it all.
+      def run(session:, session_id:, context: {})
+        loop do
+          build(session: session, session_id: session_id, context: context).run
+          door = context.delete(:door)
+          break unless door
+
+          door.run(session, context)
+        end
       end
     end
 
@@ -373,6 +420,13 @@ module BBS
       def separator
         @items << Menubar::MenuItem.new(label: '', shortcut: nil, enabled: false,
                                         separator: true, on_select: nil)
+      end
+
+      # One item per declared door, in declaration order.
+      def doors
+        @app.doors.each_value do |door|
+          item(door.label) { open_door(door.name) }
+        end
       end
     end
 
