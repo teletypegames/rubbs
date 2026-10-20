@@ -39,8 +39,9 @@ Connect with `telnet localhost 2323`.
 14. [Markdown renderer](#14-markdown-renderer)
 15. [Banner, ASCII art & ERB screens](#15-banner-ascii-art--erb-screens)
 16. [Persistence (`BBS::Store`)](#16-persistence-bbsstore)
-17. [Telnet, sessions & input model](#17-telnet-sessions--input-model)
-18. [Source layout](#18-source-layout)
+17. [AI characters (`BBS::AI`)](#17-ai-characters-bbsai)
+18. [Telnet, sessions & input model](#18-telnet-sessions--input-model)
+19. [Source layout](#19-source-layout)
 
 ---
 
@@ -1033,7 +1034,61 @@ USERS.delete(sid)
 
 ---
 
-## 17. Telnet, sessions & input model
+## 17. AI characters (`BBS::AI`)
+
+A character a caller can talk to: a persona read from a YAML file, a small
+model behind any OpenAI-compatible chat endpoint (llama.cpp's `llama-server`,
+Ollama, vLLM, a hosted API), a short memory per caller, and canned replies for
+when the model is missing or fails. It fits a FakeOS `on_unknown` hook:
+
+```ruby
+PERSONA = BBS::AI::Persona.load('lib/oracle.yml')
+ORACLE  = BBS::AI::Chat.new(
+  persona: PERSONA,
+  client:  BBS::AI::Client.new(url: ENV.fetch('ORACLE_LLM_URL', ''))
+)
+
+on_unknown do |input, io|
+  out = BBS::AI::Typewriter.new(io, prefix: 'ORACLE: ', style: :dim)
+  ORACLE.reply(input, io.ctx) { |piece| out.write(piece) }
+  out.finish
+end
+```
+
+The persona file:
+
+```yaml
+system: |                  # the system prompt
+  You are the oracle of this board. …
+examples:                  # turns in the right voice, sent before the history
+  - user: hi
+    assistant: I am here.
+options:                   # extra request fields, e.g. sampling
+  max_tokens: 96
+  temperature: 0.4
+fallback:                  # canned replies, tried top to bottom
+  replies:
+    - match: '\b(hello|hi)\b' # case-insensitive regexp
+      reply: I am here.
+  default: 'You said: "{input}".'
+```
+
+| Class | |
+|---|---|
+| `Persona.load(path)` | the YAML above; `#messages` (system + examples), `#fallback(text)`, `#options` |
+| `Client.new(url:, model: nil, api_key: nil, open_timeout: 2, read_timeout: 30)` | `#stream(messages, **options) { \|piece\| }` over `/v1/chat/completions` with `stream: true`; `#enabled?` is false for an empty URL |
+| `Chat.new(persona:, client:, history: 6, key: :ai_history, filter: PLAIN_TEXT, options: {})` | `#reply(text, ctx) { \|piece\| }` returns the reply and yields it as it streams. The history lives in `ctx[key]`, so it lasts for the call. `filter` drops markdown marks and emoji. `options` override the persona's. |
+| `Typewriter.new(io, prefix:, style:, width: nil)` | `#write(piece)`, `#finish(newlines: 2)`: word-wraps streamed text to the caller's terminal under the prefix |
+
+- With an empty URL, or when the request fails before any text arrived, the
+  reply is the persona's canned one. A reply cut off mid-way is kept.
+- A small model copies its examples far better than it follows the system
+  prompt, and a long history makes it repeat its own slips: prefer more
+  examples and a short `history`.
+
+---
+
+## 18. Telnet, sessions & input model
 
 ### `BBS::Session`
 
@@ -1096,7 +1151,7 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 
 ---
 
-## 18. Source layout
+## 19. Source layout
 
 | File | Responsibility |
 |---|---|
@@ -1124,5 +1179,7 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `bbs/markdown.rb` | Markdown → ANSI line array renderer. |
 | `bbs/event.rb` | Unified key + mouse event objects. |
 | `bbs/store.rb` | Thread-safe cached CSV upsert. |
+| `bbs/fake_os.rb` | Character-mode OS simulator: boot script + command shell. |
+| `bbs/ai.rb` | AI characters: persona file, OpenAI-compatible streaming client, chat with memory and fallback, typewriter output. |
 | `bbs/banner.rb`, `bbs/renderer.rb` | FIGlet + ERB. |
 | `bbs/color.rb` | Simple ANSI colour helper. |
