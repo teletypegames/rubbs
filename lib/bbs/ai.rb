@@ -37,6 +37,9 @@ module BBS
     #   options:                  # extra request fields (sampling), optional
     #     temperature: 0.8
     #     max_tokens: 96
+    #   deflect:                  # answered without the model, tried first:
+    #     - match: '\b(code|python)\b'   # what a small model gets wrong
+    #       reply: I do not write code.
     #   fallback:                 # canned replies, tried top to bottom
     #     replies:
     #       - match: '\b(hello|hi)\b'   # a case-insensitive regexp
@@ -47,10 +50,10 @@ module BBS
 
       def self.load(path)
         data = YAML.safe_load(File.read(path), aliases: false) || {}
-        new(**data.transform_keys(&:to_sym).slice(:system, :examples, :options, :fallback))
+        new(**data.transform_keys(&:to_sym).slice(:system, :examples, :options, :deflect, :fallback))
       end
 
-      def initialize(system: '', examples: [], options: {}, fallback: {})
+      def initialize(system: '', examples: [], options: {}, deflect: [], fallback: {})
         @system   = system.to_s.strip
         @examples = Array(examples).flat_map do |turn|
           [{ role: 'user', content: turn.fetch('user').to_s.strip },
@@ -58,10 +61,16 @@ module BBS
         end.freeze
         @options  = (options || {}).transform_keys(&:to_sym).freeze
         fallback  = fallback || {}
-        @replies  = Array(fallback['replies']).map do |rule|
-          [Regexp.new(rule.fetch('match'), Regexp::IGNORECASE), rule.fetch('reply').to_s.strip]
-        end.freeze
+        @deflect  = rules(deflect)
+        @replies  = rules(fallback['replies'])
         @default  = fallback['default'].to_s.strip
+      end
+
+      # The reply for `text` that needs no model, nil when no deflect rule
+      # matches: questions a small model answers out of character.
+      def deflect(text)
+        _, reply = @deflect.find { |pattern, _| pattern.match?(text) }
+        reply&.gsub('{input}', text)
       end
 
       # The canned reply for `text`: the first matching rule, else the default.
@@ -70,8 +79,20 @@ module BBS
         (reply || @default).gsub('{input}', text)
       end
 
-      def messages
-        [({ role: 'system', content: @system } unless @system.empty?), *@examples].compact
+      # `facts` (a String) is added to the system prompt for one request:
+      # what the character should know right now, e.g. looked up for the
+      # question at hand.
+      def messages(facts = nil)
+        system = [@system, facts.to_s.strip].reject(&:empty?).join("\n\n")
+        [({ role: 'system', content: system } unless system.empty?), *@examples].compact
+      end
+
+      private
+
+      def rules(list)
+        Array(list).map do |rule|
+          [Regexp.new(rule.fetch('match'), Regexp::IGNORECASE), rule.fetch('reply').to_s.strip]
+        end.freeze
       end
     end
 
@@ -153,22 +174,32 @@ module BBS
       # Returns the reply. With a block, the reply is also yielded piece by
       # piece as it arrives, so the terminal can type it out live. The canned
       # reply is yielded whole.
-      def reply(text, ctx = {}, &on_text)
+      #
+      # facts:    added to the system prompt for this request only (not kept
+      #           in the history), see Persona#messages;
+      # fallback: the reply when the model is missing or fails, instead of
+      #           the persona's canned one — e.g. the looked-up facts as they
+      #           are.
+      def reply(text, ctx = {}, facts: nil, fallback: nil, &on_text)
         text  = text.to_s.strip
-        reply = (think(text, ctx, &on_text) if @client.enabled?)
+        if (canned = @persona.deflect(text))
+          return canned.tap { |line| on_text&.call(line) }
+        end
+
+        reply = (think(text, ctx, facts, &on_text) if @client.enabled?)
         return reply if reply
 
-        @persona.fallback(text).tap { |line| on_text&.call(line) }
+        (fallback || @persona.fallback(text)).tap { |line| on_text&.call(line) }
       end
 
       private
 
       # nil when the model gave nothing, so the caller falls back; a reply
       # cut short mid-way is kept as it is.
-      def think(text, ctx, &on_text)
+      def think(text, ctx, facts, &on_text)
         history = ctx.is_a?(Hash) ? (ctx[@key] ||= []) : []
         reply   = +''
-        @client.stream([*@persona.messages, *history, { role: 'user', content: text }], **@options) do |piece|
+        @client.stream([*@persona.messages(facts), *history, { role: 'user', content: text }], **@options) do |piece|
           piece = piece.gsub(@filter, '') if @filter
           next if piece.empty?
 

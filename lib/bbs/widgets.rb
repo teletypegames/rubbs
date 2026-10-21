@@ -99,7 +99,8 @@ module BBS
 
     # ── TextInput ─────────────────────────────────────────────────────────────
     class TextInput < Widget
-      attr_accessor :value, :placeholder, :max_length, :on_submit, :on_change, :password
+      attr_reader   :value
+      attr_accessor :placeholder, :max_length, :on_submit, :on_change, :password
 
       def initialize(value: '', placeholder: '', max_length: 256,
                      on_submit: nil, on_change: nil, password: false, **kw)
@@ -112,6 +113,14 @@ module BBS
         @password    = password
         @cursor      = @value.length
         @scroll      = 0
+      end
+
+      # A new value puts the cursor at its end: a cursor left past the end
+      # (after a submit clears the field) would make the next key fail.
+      def value=(text)
+        @value  = text.to_s.dup
+        @cursor = @value.length
+        @scroll = 0
       end
 
       def focusable? = true

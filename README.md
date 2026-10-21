@@ -1095,6 +1095,10 @@ examples:                  # turns in the right voice, sent before the history
 options:                   # extra request fields, e.g. sampling
   max_tokens: 96
   temperature: 0.4
+  stop: ["\n\n"]           # a blank line ends the reply
+deflect:                   # answered without the model, before it is asked
+  - match: '\b(code|python)\b'
+    reply: I do not write code.
 fallback:                  # canned replies, tried top to bottom
   replies:
     - match: '\b(hello|hi)\b' # case-insensitive regexp
@@ -1104,9 +1108,9 @@ fallback:                  # canned replies, tried top to bottom
 
 | Class | |
 |---|---|
-| `Persona.load(path)` | the YAML above; `#messages` (system + examples), `#fallback(text)`, `#options` |
+| `Persona.load(path)` | the YAML above; `#messages(facts = nil)` (system, plus the facts for one request, + examples), `#deflect(text)` (the reply of the first matching `deflect` rule, or nil: what a small model answers out of character however it is asked, so the code answers it), `#fallback(text)`, `#options` |
 | `Client.new(url:, model: nil, api_key: nil, open_timeout: 2, read_timeout: 30)` | `#stream(messages, **options) { \|piece\| }` over `/v1/chat/completions` with `stream: true`; `#enabled?` is false for an empty URL |
-| `Chat.new(persona:, client:, history: 6, key: :ai_history, filter: PLAIN_TEXT, options: {})` | `#reply(text, ctx) { \|piece\| }` returns the reply and yields it as it streams. The history lives in `ctx[key]`, so it lasts for the call. `filter` drops markdown marks and emoji. `options` override the persona's. |
+| `Chat.new(persona:, client:, history: 6, key: :ai_history, filter: PLAIN_TEXT, options: {})` | `#reply(text, ctx, facts: nil, fallback: nil) { \|piece\| }` returns the reply and yields it as it streams. The history lives in `ctx[key]`, so it lasts for the call. `facts` is added to the system prompt for this one request (what the character should know right now, looked up for the question; not kept in the history); `fallback` replaces the persona's canned reply when the model is missing or fails. `filter` drops markdown marks and emoji. `options` override the persona's. |
 | `Typewriter.new(io, prefix:, style:, width: nil)` | `#write(piece)`, `#finish(newlines: 2)`: word-wraps streamed text to the caller's terminal under the prefix |
 
 - With an empty URL, or when the request fails before any text arrived, the
