@@ -177,7 +177,7 @@ keyed by Symbol field names.
 
 | Step | Signature | Effect |
 |---|---|---|
-| `screen` | `screen :name, **vars` | Render `screens_dir/<name>.erb` (vars resolved against `@ctx` if Symbols). |
+| `screen` | `screen :name, **vars` | Render `<name>.erb` from the flow's `screens_dir`, or from `BBS.config.screens_dir` (vars resolved against `@ctx` if Symbols). |
 | `banner` | `banner text, style: :success` | Box-drawing banner. |
 | `big_banner` | `big_banner text, style:, font:` | FIGlet (Artii) ASCII art header. `font:` defaults to `'slant'`. |
 | `say` | `say text, style: :muted` | Print one line, then blank line. |
@@ -203,6 +203,16 @@ keyed by Symbol field names.
 | `call` | `call { \|ctx, runner\| ... }` | Arbitrary code; runner exposes `write`/`readline(mask:)`/`session`. Return `:halt` to terminate. |
 | `tui` | `tui DEFINITION` | Hand off to a `BBS::TUI`. |
 | `app` | `app DEFINITION` | Hand off to a `BBS::Application`. |
+
+### A flow's own screens
+
+`BBS::Flow.define(screens_dir: path) { … }` keeps the flow's ERB screens
+next to it, so a flow shipped in a gem renders its own `screen` steps
+inside any BBS, whatever `BBS.config.screens_dir` says. Without it the
+flow uses `BBS.config.screens_dir`.
+
+`FlowRunner.new(session, session_id, flow, context: {})` seeds the flow's
+context; a door uses it to pass the caller's name in.
 
 ### Available styles for `style:` arguments
 
@@ -548,6 +558,9 @@ Encoding:
 - `.ansi` / `.txt` → assumed UTF-8.
 - Anything else → UTF-8, falling back to IBM437.
 - Trailing SAUCE metadata (`\x1A SAUCE…`) is stripped.
+
+`AnsiArt.sauce(path)` reads that record: a `Sauce` struct with `title`,
+`author`, `group` and `date` (`YYYY-MM-DD`), or `nil` when the file has none.
 
 Options: `align: :left|:center|:right`, `valign: :top|:middle|:bottom`,
 `fill_parent: true` (default — re-bounds to parent each render).
@@ -1109,8 +1122,8 @@ fallback:                  # canned replies, tried top to bottom
 A door is a program the caller steps into from the BBS, as in the doors of the
 old boards: the BBS hands the telnet line over, the program talks to the
 caller directly, and the line comes back when the program exits. The program
-is a `BBS::FakeOS` definition (see the comment in `bbs/fake_os.rb`), or
-anything that responds to `call(session, context)`.
+is a `BBS::FakeOS` definition (see the comment in `bbs/fake_os.rb`), a
+`BBS::Flow`, or anything that responds to `call(session, context)`.
 
 ```ruby
 APP = BBS::Application.define do
@@ -1143,6 +1156,14 @@ end
   returns. It can be used without an Application.
 - The context hash is the same before, inside and after the door, so a door can
   keep its state for the rest of the call (the AI chat history, for example).
+- A `BBS::Flow` door runs on a copy of the context instead, so its `ask` steps
+  cannot overwrite the BBS's keys (`:username`, …). A flow has no exit command,
+  so when it ends the door asks for ENTER before handing the line back. Give
+  the flow its own `screens_dir` when it comes with screens.
+- A FakeOS with a coloured screen sets `colors base:`: every reset returns to
+  it and `cls` fills the screen with it, so a background survives the prompt,
+  the caller's echo and new lines. Give each colour role the same background,
+  since an SGR that starts with `0;` clears it.
 
 ---
 

@@ -5,8 +5,8 @@ require 'artii'
 
 module BBS
   class Renderer
-    def self.render(name, vars = {})
-      dir  = BBS.config.screens_dir or raise "BBS.config.screens_dir is not set"
+    def self.render(name, vars = {}, dir: BBS.config.screens_dir)
+      raise 'No screens_dir: set BBS.config.screens_dir or the flow\'s screens_dir' unless dir
       path = File.join(dir, "#{name}.erb")
       ctx  = Context.new(vars)
       ERB.new(File.read(path), trim_mode: '-').result(ctx.ctx_binding).gsub("\n", "\r\n")

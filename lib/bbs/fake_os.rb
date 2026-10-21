@@ -49,6 +49,7 @@ module BBS
       error:  "\e[1;31m",
       dim:    "\e[1;30m",
       prompt: "\e[0;37m",
+      base:   '', # what every reset returns to: a background here colours the whole screen
     }.freeze
 
     def self.define(&block)
@@ -153,7 +154,7 @@ module BBS
 
       def newline(count = 1) = @session.write("\r\n" * count)
 
-      def cls = @session.write("\e[2J\e[H")
+      def cls = @session.write("#{reset}\e[2J\e[H")
 
       def pause(seconds) = sleep_for(seconds)
 
@@ -215,7 +216,7 @@ module BBS
       end
 
       def color(role) = @colors.fetch(role) { @colors[:text] }
-      def reset = "\e[0m"
+      def reset = "\e[0m#{@colors[:base]}"
       def sleep_for(seconds) = (sleep(seconds) if seconds&.positive?)
     end
 

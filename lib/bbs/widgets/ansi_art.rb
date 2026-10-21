@@ -95,6 +95,29 @@ module BBS
         split_lines(text)
       end
 
+      Sauce = Struct.new(:title, :author, :group, :date, keyword_init: true)
+
+      # The SAUCE record of an art file (title, author, group, date), or nil
+      # when the file has none. Read from the last 128 bytes, CP437.
+      def self.sauce(path)
+        File.open(path, 'rb') do |f|
+          return nil if f.size < 128
+          f.seek(-128, IO::SEEK_END)
+          record = f.read(128)
+          return nil unless record.start_with?('SAUCE00')
+
+          field = ->(from, length) do
+            record.byteslice(from, length).force_encoding('IBM437')
+                  .encode('UTF-8', invalid: :replace, undef: :replace).delete("\0").strip
+          end
+          date = field.call(82, 8)
+          Sauce.new(title: field.call(7, 35), author: field.call(42, 20), group: field.call(62, 20),
+                    date: date =~ /\A\d{8}\z/ ? "#{date[0, 4]}-#{date[4, 2]}-#{date[6, 2]}" : '')
+        end
+      rescue SystemCallError
+        nil
+      end
+
       def self.strip_sauce(bytes)
         sub = bytes.index("\x1A".b)
         sub ? bytes.byteslice(0, sub) : bytes

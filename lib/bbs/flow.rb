@@ -2,16 +2,20 @@
 
 module BBS
   class Flow
-    attr_reader :steps
+    attr_reader :steps, :screens_dir
 
-    def self.define(&block)
-      flow = new
+    # `screens_dir` is where this flow's `screen` steps find their ERB files;
+    # without it they use BBS.config.screens_dir. A flow that ships with its
+    # own screens (a door from a gem) names its folder here.
+    def self.define(screens_dir: nil, &block)
+      flow = new(screens_dir: screens_dir)
       flow.instance_eval(&block)
       flow.freeze
     end
 
-    def initialize
-      @steps = []
+    def initialize(screens_dir: nil)
+      @steps       = []
+      @screens_dir = screens_dir
     end
 
     def screen(name, **vars)

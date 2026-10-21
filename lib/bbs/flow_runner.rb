@@ -20,11 +20,13 @@ module BBS
 
     attr_reader :session_id, :session
 
-    def initialize(session, session_id, flow)
+    # `context` seeds the flow's context, e.g. the caller's name when a flow
+    # runs as a door.
+    def initialize(session, session_id, flow, context: {})
       @session    = session
       @session_id = session_id
       @flow       = flow
-      @ctx        = { session_id: session_id }
+      @ctx        = { **context, session_id: session_id }
     end
 
     def run
@@ -80,7 +82,8 @@ module BBS
 
     def run_screen(step)
       vars = step[:vars].transform_values { |v| v.is_a?(Symbol) ? @ctx[v] : v }
-      write Renderer.render(step[:name].to_s, @ctx.merge(vars))
+      dir  = @flow.screens_dir || BBS.config.screens_dir
+      write Renderer.render(step[:name].to_s, @ctx.merge(vars), dir: dir)
     end
 
     def run_banner(step)
