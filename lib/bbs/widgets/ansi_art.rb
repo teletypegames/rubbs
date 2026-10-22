@@ -87,6 +87,58 @@ module BBS
         end
       end
 
+      VIEW_SCROLL_KEYS = %i[up down page_up page_down home end].freeze
+
+      # Shows art on the whole screen, the way an art viewer of the old boards
+      # did: centred when it fits, scrolled with the arrows, PgUp/PgDn,
+      # Home/End when it is taller than the screen, a status line at the
+      # bottom. Any other key (or a click) returns. Run it inside
+      # Application#with_line, which repaints the application afterwards:
+      #
+      #   app.with_line { |session| BBS::Widgets::AnsiArt.view(session, lines, title: 'sunset.ans') }
+      #
+      # Returns nil when the caller hung up, else true.
+      def self.view(session, lines, title: nil)
+        top = 0
+        loop do
+          cols   = session.term_cols || 80
+          rows   = session.term_rows || 24
+          view_h = [rows - 1, 1].max
+          top    = top.clamp(0, [lines.size - view_h, 0].max)
+          session.write(view_frame(lines, top, cols, rows, view_h, title))
+          key = session.readkey
+          return nil if key.nil?
+
+          case key
+          when :up        then top -= 1
+          when :down      then top += 1
+          when :page_up   then top -= view_h - 1
+          when :page_down then top += view_h - 1
+          when :home      then top = 0
+          when :end       then top = lines.size
+          when Telnet::MouseEvent
+            next unless key.kind == :press
+
+            return true
+          else return true
+          end
+        end
+      end
+
+      def self.view_frame(lines, top, cols, rows, view_h, title)
+        width  = lines.map { |l| FrameBuffer.visible_width(l) }.max || 0
+        left   = [(cols - width) / 2, 0].max
+        shown  = lines[top, view_h] || []
+        offset = [(view_h - lines.size) / 2, 0].max
+        out = +"\e[?25l\e[0m\e[2J"
+        shown.each_with_index do |line, i|
+          out << "\e[#{offset + i + 1};#{left + 1}H" << FrameBuffer.clip_ansi(line, cols - left) << "\e[0m"
+        end
+        more   = lines.size > view_h ? "  #{top + 1}-#{top + shown.size}/#{lines.size}  ↑↓ PgUp PgDn" : ''
+        status = " #{title}#{more}  · any other key returns "
+        out << "\e[#{rows};1H\e[0;30;47m" << FrameBuffer.clip_ansi(status, cols).ljust(cols) << "\e[0m\e[?25h"
+      end
+
       # ── File loading ────────────────────────────────────────────────────────
       def self.load_file(path)
         raw = File.binread(path)

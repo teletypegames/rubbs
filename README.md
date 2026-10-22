@@ -574,6 +574,13 @@ Options: `align: :left|:center|:right`, `valign: :top|:middle|:bottom`,
 
 ---
 
+`AnsiArt.view(session, lines, title: nil)` shows art on the whole screen, the
+way an art viewer of the old boards did: centred when it fits, scrolled with
+the arrows, PgUp/PgDn and Home/End when it is taller than the screen, and a
+status line with the title at the bottom; any other key or a click returns.
+Run it inside `app.with_line { |session| … }`, which repaints the
+application afterwards.
+
 ## 8. Windows
 
 `BBS::Window < Container` — a top-level modal container with title bar,
