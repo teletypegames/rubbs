@@ -46,8 +46,8 @@ module BBS
                      list_width: nil, bottom_meta: nil, actions: nil, on_activate: nil,
                      close_button: true, close_label: '&Close',
                      empty_message: '  (empty)',
-                     width: nil, height: nil)
-        super(title: title, modal: true)
+                     width: nil, height: nil, maximizable: false)
+        super(title: title, modal: true, maximizable: maximizable)
         self.theme = app.theme
         @app           = app
         @items         = items
@@ -72,16 +72,17 @@ module BBS
         self
       end
 
-      def reload_detail
+      def reload_detail(keep_scroll: false)
         item = @list_widget&.selected_item
         if item.nil?
           @detail_view.lines  = [@empty_message]
           @detail_view.scroll = 0
           @meta_label.text    = '' if @meta_label
         else
-          lines = @render_detail.call(item, @detail_view.bounds.width - 1)
-          @detail_view.lines  = Array(lines)
-          @detail_view.scroll = 0
+          scroll = keep_scroll ? @detail_view.scroll : 0
+          lines  = Array(@render_detail.call(item, @detail_view.bounds.width - 1))
+          @detail_view.lines  = lines
+          @detail_view.scroll = scroll.clamp(0, [lines.size - @detail_view.bounds.height, 0].max)
           @meta_label.text    = @bottom_meta.call(item) if @meta_label && @bottom_meta
         end
       end
@@ -95,13 +96,23 @@ module BBS
         reload_detail
       end
 
-      # Terminal resized: recompute the whole geometry against the new size
-      # and re-render the detail at the new pane width.
-      def relayout(_app = @app)
-        place_window
+      def resizable? = true
+
+      def normal_rect
+        w = @width  || @app.cols - 4
+        h = @height || @app.rows - 6
+        [(@app.cols - w) / 2 + 1, (@app.rows - h) / 2 + 1, w, h]
+      end
+
+      # Lays the window out at the given size (terminal resized, maximized,
+      # restored) and re-renders the detail at the new pane width.
+      def place(x, y, width, height)
+        layout(x, y, width, height)
         place_panes
         ButtonBar.place(self, @bar[:widgets], @actions)
-        reload_detail
+        list = @list_widget
+        list.scroll = [list.selected - list.bounds.height + 1, 0].max if list.selected >= list.scroll + list.bounds.height
+        reload_detail(keep_scroll: true)
       end
 
       private
@@ -136,11 +147,7 @@ module BBS
       end
 
       def place_window
-        w = @width  || @app.cols - 4
-        h = @height || @app.rows - 6
-        x = (@app.cols - w) / 2 + 1
-        y = (@app.rows - h) / 2 + 1
-        layout(x, y, w, h)
+        layout(*normal_rect)
       end
 
       def place_panes

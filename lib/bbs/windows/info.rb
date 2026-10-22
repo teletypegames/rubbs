@@ -46,8 +46,8 @@ module BBS
       attr_reader :scroll_view
 
       def initialize(app:, title:, body: [], buttons: nil, width: 60, height: nil,
-                     scroll: false, padding: nil)
-        super(title: title, modal: true)
+                     scroll: false, padding: nil, maximizable: false)
+        super(title: title, modal: true, maximizable: maximizable)
         self.theme = app.theme
         @app     = app
         @body    = body
@@ -66,17 +66,36 @@ module BBS
         self
       end
 
-      private
+      # Only the scrolling body can be laid out at another size.
+      def resizable? = @scroll
 
-      def build
-        button_h = @buttons.any? ? 2 : 0
+      def normal_rect
+        button_h  = @buttons.any? ? 2 : 0
         body_rows = @scroll ? 10 : @body.sum { |it| item_rows(it) }
         h = @height || (@padding[:top] + body_rows + button_h + @padding[:bottom])
         w = [@width, @app.cols - 4].min
         h = [h, @app.rows - 4].min
-        x = (@app.cols - w) / 2 + 1
-        y = (@app.rows - h) / 2 + 1
-        layout(x, y, w, h)
+        [(@app.cols - w) / 2 + 1, (@app.rows - h) / 2 + 1, w, h]
+      end
+
+      # The scroll body fills the new size; its lines were wrapped by the
+      # caller, so a wider window shows them as they are.
+      def place(x, y, width, height)
+        layout(x, y, width, height)
+        button_h = @buttons.any? ? 2 : 0
+        body_h   = [height - @padding[:top] - @padding[:bottom] - button_h, 1].max
+        @scroll_view.layout(x + @padding[:sides], y + @padding[:top], width - (@padding[:sides] * 2), body_h)
+        @scroll_view.scroll = @scroll_view.scroll.clamp(0, [@scroll_view.lines.size - body_h, 0].max)
+        ButtonBar.place(self, @bar[:widgets], @buttons)
+      end
+
+      private
+
+      def build
+        button_h = @buttons.any? ? 2 : 0
+        layout(*normal_rect)
+        w = bounds.width
+        h = bounds.height
 
         inner_w = w - @padding[:sides] * 2
         inner_x = bounds.x + @padding[:sides]
@@ -90,7 +109,8 @@ module BBS
           place_static_body(inner_x, inner_y, inner_w)
         end
 
-        @primary_button = ButtonBar.attach(self, @app, @buttons)[:primary]
+        @bar = ButtonBar.attach(self, @app, @buttons)
+        @primary_button = @bar[:primary]
       end
 
       def item_rows(item)

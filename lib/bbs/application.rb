@@ -97,6 +97,7 @@ module BBS
         spec.open(self, **extras)
       else
         target.theme = @theme
+        target.app   = self
         @windows << target
         target.focused = true
         target
@@ -136,6 +137,14 @@ module BBS
 
     def top_window
       @windows.last
+    end
+
+    # The screen between the menubar and the statusbar, as [x, y, w, h]:
+    # where a maximized window goes.
+    def desktop_rect
+      top    = @menubar ? 1 : 0
+      bottom = @statusbar ? 1 : 0
+      [1, 1 + top, cols, [rows - top - bottom, 3].max]
     end
 
     # Main event loop. Uses a short read timeout to fire periodic ticks for

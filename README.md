@@ -596,6 +596,7 @@ app.open_window(win)
 | `shadow` | `true` | Draw the drop shadow. |
 | `on_close` | `nil` | Called once when the window is closed (by `Application#close_window`); pass `false` to suppress the close gadget. |
 | `close_key` | `:escape` | Key that triggers `close`. |
+| `maximizable` | `false` | Give the window a zoom gadget, if it can lay itself out at any size (see below). |
 
 Methods:
 
@@ -607,6 +608,24 @@ Methods:
 
 The close gadget `[■]` (top-left, columns x+2..x+4) is mouse-clickable.
 Mouse-clicks elsewhere inside the window focus the hit widget.
+
+### Maximizing
+
+A window with `maximizable: true` (in the window DSL: `w.maximizable true`)
+that is `resizable?` gets a zoom gadget in its top right corner, Turbo Vision
+style: `[↑]` fills the desktop between the menubar and the statusbar
+(`app.desktop_rect`), `[↕]` puts it back. **F5**, **Alt-Enter** and a
+**double click on the title bar** do the same; `toggle_maximize` does it from
+code and `maximized?` tells. A maximized window stays maximized when the
+terminal is resized.
+
+`resizable?` windows are `MasterDetail`, `Stream`, `Form` (a single textarea
+without `:rows` takes the height left over) and an `Info` with `scroll: true`;
+a static `Info` stays as it is, so `maximizable` has no effect on it. A custom
+window joins in by returning true from `resizable?` and implementing
+`normal_rect` (its usual `[x, y, w, h]`) and `place(x, y, w, h)` (lays its
+children out at that size); `relayout` then picks one of them. Turn it on for
+windows with a lot to read, not for small dialogs.
 
 ---
 
@@ -1239,7 +1258,7 @@ one-character String. `read_raw_byte(timeout)` is for binary protocols
 
 - Single-character `String` — printable input (`'a'`, `' '`, …).
 - `Symbol` — one of:
-  - Navigation: `:enter`, `:tab`, `:shift_tab`, `:backspace`, `:escape`,
+  - Navigation: `:enter`, `:alt_enter`, `:tab`, `:shift_tab`, `:backspace`, `:escape`,
     `:up`, `:down`, `:left`, `:right`, `:home`, `:end`,
     `:page_up`, `:page_down`, `:insert`, `:delete`.
   - Function keys: `:f1`…`:f12`.

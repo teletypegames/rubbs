@@ -20,6 +20,9 @@ module BBS
   #     end
   #   end
   #
+  # `w.maximizable true` gives the window the zoom gadget (F5, Alt-Enter):
+  # it fills the screen and back. Worth it for windows with a lot to read.
+  #
   # Open with `app.open_window(:compose, board: some_board)`. Block callbacks
   # receive a `ctx` hash combining the app's services, app.context, and any
   # extras passed to open_window.
@@ -27,6 +30,7 @@ module BBS
     SCALAR_ATTRS = %i[
       title width height padding hint placeholder list_width buffer_size
       scroll close_button close_label empty_message submit_label cancel_label
+      maximizable
     ].freeze
 
     BLOCK_ATTRS = %i[
@@ -73,7 +77,9 @@ module BBS
     # underlying rubbs window. `extras` flow into `ctx` (e.g., `board:`).
     def open(app, **extras)
       ctx = build_ctx(app, extras)
-      send("open_#{@type}", app, ctx)
+      window = send("open_#{@type}", app, ctx)
+      window.maximizable = resolve(:maximizable, ctx) ? true : false if window.respond_to?(:maximizable=)
+      window
     end
 
     private

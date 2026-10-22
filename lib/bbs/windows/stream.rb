@@ -36,8 +36,8 @@ module BBS
       def initialize(app:, title:, initial_lines: [], placeholder: '',
                      on_submit: nil, on_poll: nil, buffer_size: 500,
                      width: nil, height: nil,
-                     close_button: true, close_label: '&Close')
-        super(title: title, modal: true)
+                     close_button: true, close_label: '&Close', maximizable: false)
+        super(title: title, modal: true, maximizable: maximizable)
         self.theme = app.theme
         @app           = app
         @initial_lines = initial_lines
@@ -67,31 +67,41 @@ module BBS
         @history.scroll = [@history.lines.size - @history.bounds.height, 0].max
       end
 
+      def resizable? = true
+
+      def normal_rect
+        w = @width  || @app.cols - 8
+        h = @height || @app.rows - 6
+        [(@app.cols - w) / 2 + 1, (@app.rows - h) / 2 + 1, w, h]
+      end
+
+      # History on top, the input line under it, the button row at the
+      # bottom; the history stays scrolled to its end.
+      def place(x, y, width, height)
+        layout(x, y, width, height)
+        @history.layout(x + 2, y + 1, width - 4, [height - 4, 1].max)
+        @history.scroll = [@history.lines.size - @history.bounds.height, 0].max
+        @input.layout(x + 2, y + height - 3, width - 4, 1)
+        @input.send(:adjust_scroll)
+        ButtonBar.place(self, @bar[:widgets], @bar_descriptors) if @bar
+      end
+
       private
 
       def build
-        w = @width  || @app.cols - 8
-        h = @height || @app.rows - 6
-        x = (@app.cols - w) / 2 + 1
-        y = (@app.rows - h) / 2 + 1
-        layout(x, y, w, h)
-
-        inner_x = bounds.x + 2
-        inner_w = bounds.width - 4
-
         @history = BBS::Widgets::ScrollView.new(lines: @initial_lines)
-        @history.layout(inner_x, bounds.y + 1, inner_w, h - 4)
-        @history.scroll = [@history.lines.size - @history.bounds.height, 0].max
         add(@history)
 
         @input = BBS::Widgets::TextInput.new(placeholder: @placeholder)
         @input.on_submit = method(:handle_input_submit)
-        @input.layout(inner_x, bounds.y + h - 3, inner_w, 1)
         add(@input)
 
+        layout(*normal_rect)
         if @close_button
-          ButtonBar.attach(self, @app, [{ label: @close_label, cancel: true }])
+          @bar_descriptors = [{ label: @close_label, cancel: true }]
+          @bar = ButtonBar.attach(self, @app, @bar_descriptors)
         end
+        place(*normal_rect)
       end
 
       def handle_input_submit(value, _input)

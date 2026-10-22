@@ -182,6 +182,9 @@ module BBS
         when 'F' then :end
         else          :escape
         end
+      when "\r"
+        @after_cr = true
+        :alt_enter
       else
         # Treat ESC + printable as Alt+<char>
         if b1.ord.between?(32, 126)
