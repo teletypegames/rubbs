@@ -604,6 +604,7 @@ app.open_window(win)
 | `on_close` | `nil` | Called once when the window is closed (by `Application#close_window`); pass `false` to suppress the close gadget. |
 | `close_key` | `:escape` | Key that triggers `close`. |
 | `maximizable` | `false` | Give the window a zoom gadget, if it can lay itself out at any size (see below). |
+| `movable` | `true` | Let the caller move the window and, when it is `resizable?`, size it (see below). |
 
 Methods:
 
@@ -633,6 +634,22 @@ window joins in by returning true from `resizable?` and implementing
 `normal_rect` (its usual `[x, y, w, h]`) and `place(x, y, w, h)` (lays its
 children out at that size); `relayout` then picks one of them. Turn it on for
 windows with a lot to read, not for small dialogs.
+
+### Moving and sizing
+
+A window that is not maximized can be moved, and a `resizable?` one sized
+too; `movable: false` turns it off.
+
+- **Mouse:** drag the title bar to move it, drag the bottom right corner
+  (marked `┘`) to size it. Mouse reporting is xterm mode 1002, so the
+  terminal reports the motion while the button is held.
+- **Keyboard:** Ctrl-F5 or F6 starts it, Turbo Vision style, and the title
+  bar shows the keys: the arrows move the window, Shift and the arrows size
+  it, Tab switches the arrows between moving and sizing, Enter or Esc ends.
+- `move_to(x, y, w, h)` does it from code. The window stays on the desktop
+  and at least 24×7; once moved or sized it keeps that place when the
+  terminal is resized (pulled back onto the screen if needed), and a
+  restored maximized window goes back to it.
 
 ---
 
@@ -1266,6 +1283,8 @@ one-character String. `read_raw_byte(timeout)` is for binary protocols
 - Single-character `String` — printable input (`'a'`, `' '`, …).
 - `Symbol` — one of:
   - Navigation: `:enter`, `:alt_enter`, `:tab`, `:shift_tab`, `:backspace`, `:escape`,
+    with xterm modifiers as a prefix: `:shift_up`, `:ctrl_right`, `:ctrl_f5`, `:alt_home`, …
+    (a window hands a modified arrow nothing takes to its widget as the plain key);
     `:up`, `:down`, `:left`, `:right`, `:home`, `:end`,
     `:page_up`, `:page_down`, `:insert`, `:delete`.
   - Function keys: `:f1`…`:f12`.

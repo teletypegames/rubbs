@@ -32,13 +32,14 @@ module BBS
 
     def enable_mouse
       return if @mouse_enabled
-      write "\e[?1000h\e[?1006h"
+      # 1002: presses, releases and motion while a button is held (drags).
+      write "\e[?1002h\e[?1006h"
       @mouse_enabled = true
     end
 
     def disable_mouse
       return unless @mouse_enabled
-      write "\e[?1006l\e[?1000l"
+      write "\e[?1006l\e[?1002l\e[?1000l"
       @mouse_enabled = false
     end
 
@@ -227,6 +228,21 @@ module BBS
         return decode_mouse(b, x, y, pressed: final == 'M')
       end
 
+      with_modifier(csi_key(final, raw), raw)
+    end
+
+    # xterm reports Shift, Alt and Ctrl as a second parameter: ESC [ 1 ; 2 A
+    # is Shift-Up, ESC [ 15 ; 5 ~ is Ctrl-F5.
+    MODIFIERS = { 2 => 'shift', 3 => 'alt', 5 => 'ctrl', 6 => 'ctrl_shift' }.freeze
+
+    def with_modifier(key, raw)
+      prefix = MODIFIERS[raw.split(';')[1].to_i]
+      return key unless prefix && key.is_a?(Symbol) && key != :escape
+
+      :"#{prefix}_#{key}"
+    end
+
+    def csi_key(final, raw)
       case final
       when 'A' then :up
       when 'B' then :down
