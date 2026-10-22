@@ -7,7 +7,7 @@ require_relative 'button_bar'
 
 module BBS
   module Windows
-    # A centered modal dialog for messages, splash screens, info displays.
+    # A centered window for messages, splash screens, info displays.
     #
     #   BBS::Windows::Info.open(app,
     #     title: ' Welcome ',
@@ -47,7 +47,7 @@ module BBS
 
       def initialize(app:, title:, body: [], buttons: nil, width: 60, height: nil,
                      scroll: false, padding: nil, maximizable: false)
-        super(title: title, modal: true, maximizable: maximizable)
+        super(title: title, modal: false, maximizable: maximizable)
         self.theme = app.theme
         @app     = app
         @body    = body

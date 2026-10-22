@@ -370,7 +370,7 @@ through `:black :red :green :yellow :blue :cyan :white`.
 ## 6. The Application layer
 
 `BBS::Application` is the full TUI: a widget event loop with menubar, status
-bar, modal window stack, mouse, focus traversal, themes and per-window ticks.
+bar, a switchable window stack, mouse, focus traversal, themes and per-window ticks.
 
 ### Top-level build with `Application.define`
 
@@ -437,10 +437,12 @@ end
 | `cols`, `rows` | Terminal size from NAWS (defaults 80×24). |
 | `theme` / `services` / `context` | Live state. |
 | `add(widget)` | Append to the root container. |
-| `open_window(window)` | Push a `Window` onto the modal stack. |
+| `open_window(window)` | Push a `Window` onto the stack and make it the active one. |
 | `open_window(:name, **extras)` | Open a registered `WindowSpec`; `extras` flow into the spec's `ctx`. |
+| `raise_window(window)` | Bring an open window to the front and make it the active one. |
+| `cycle_windows(step = 1)` | The next (or, with -1, the previous) switchable window to the front. |
 | `close_window(window = top_window)` | Pop a window. Calls its `on_close` if any. |
-| `top_window` | The current modal target of input. |
+| `top_window` | The active window, the target of input. |
 | `with_loading(text) { ... }` | Show a "Please wait" modal while the block runs in a thread; returns the block's value. |
 | `with_line { \|session\| ... }` | Hand the raw line to the block (a file transfer, say) on a clean screen without mouse reporting, then repaint everything; returns the block's value. |
 | `tick!` | Manually fire the periodic tick. |
@@ -585,11 +587,13 @@ application afterwards.
 
 ## 8. Windows
 
-`BBS::Window < Container` — a top-level modal container with title bar,
-shadow, close gadget, and its own `FocusManager`.
+`BBS::Window < Container` — a top-level container with title bar, shadow,
+close gadget, and its own `FocusManager`. Windows stack; the top one is the
+active one and gets the input first, and the caller can switch between them
+(see *Switching windows* below).
 
 ```ruby
-win = BBS::Window.new(title: ' Inbox ', modal: true,
+win = BBS::Window.new(title: ' Inbox ', modal: false,
                       shadow: true, close_key: :escape,
                       on_close: ->(w) { puts 'closing' })
 win.layout(10, 5, 60, 18)
@@ -601,7 +605,7 @@ app.open_window(win)
 | Field | Default | Description |
 |---|---|---|
 | `title` | `nil` | Centered title in the top border. |
-| `modal` | `false` | (Informational; the stack already gives the top window priority.) |
+| `modal` | `false` | A modal window (the `Dialogs`) keeps the front until it closes: while one is open, no window switching. The other windows, the `BBS::Windows` types included, can be switched. |
 | `shadow` | `true` | Draw the drop shadow. |
 | `on_close` | `nil` | Called once when the window is closed (by `Application#close_window`); pass `false` to suppress the close gadget. |
 | `close_key` | `:escape` | Key that triggers `close`. |
@@ -645,7 +649,8 @@ too; `movable: false` turns it off.
 - **Mouse:** drag the title bar to move it, drag the bottom right corner
   (marked `┘`) to size it. Mouse reporting is xterm mode 1002, so the
   terminal reports the motion while the button is held.
-- **Keyboard:** Ctrl-F5 or F6 starts it, Turbo Vision style, and the title
+- **Keyboard:** Ctrl-F5 starts it (F6 too, while the window is the only
+  one: with more, F6 switches windows), Turbo Vision style, and the title
   bar shows the keys: the arrows move the window, Shift and the arrows size
   it, Tab switches the arrows between moving and sizing, Enter or Esc ends.
 - `move_to(x, y, w, h)` does it from code. The window stays on the desktop
@@ -653,11 +658,31 @@ too; `movable: false` turns it off.
   terminal is resized (pulled back onto the screen if needed), and a
   restored maximized window goes back to it.
 
+### Switching windows
+
+Several windows can be open at once, and they cover each other in the
+order they were last used, Turbo Vision style:
+
+- **Mouse:** a click on a window behind the active one brings it to the
+  front, and the click goes on to it: a button, the close gadget or a drag
+  of its title bar answers at once.
+- **Keyboard:** F6 brings the next window to the front, Shift-F6 the
+  previous one; Alt-1 … Alt-9 picks a window by the number on the right of
+  its top frame (each window gets the lowest free number when it opens).
+- The active window has a double frame and a highlighted title, the others
+  a single frame. When the active one closes, the one under it becomes
+  active.
+- A `modal` window (`Dialogs.message`, `confirm`, `input`) blocks all of
+  it until it closes, so a question is always answered before anything
+  else.
+- `app.raise_window(win)` brings a window to the front from code,
+  `app.cycle_windows(±1)` steps, `app.switchable_windows` lists them.
+
 ---
 
 ## 9. Pre-built window types (`BBS::Windows`)
 
-Higher-level modals you can open imperatively with `.open(app, …)`, or
+Higher-level windows you can open imperatively with `.open(app, …)`, or
 register declaratively with the window DSL.
 
 ### `BBS::Windows::Info`
@@ -880,7 +905,7 @@ BBS::Dialogs.input(app, prompt: 'New name:', value: '',
 `BBS::Dialogs.centred_window(app, width:, height:, title:)` is the underlying
 helper to build a centered, modal `Window`.
 
-For richer modal experiences prefer the `BBS::Windows::*` window types
+For richer windows prefer the `BBS::Windows::*` window types
 described in [§9](#9-pre-built-window-types-bbswindows).
 
 ---

@@ -96,12 +96,42 @@ module BBS
         raise ArgumentError, "Unknown window: #{target.inspect}" unless spec
         spec.open(self, **extras)
       else
-        target.theme = @theme
-        target.app   = self
+        target.theme  = @theme
+        target.app    = self
+        target.number = free_number unless target.modal
+        top_window&.focused = false
         @windows << target
         target.focused = true
         target
       end
+    end
+
+    # Brings an open window to the front and makes it the active one.
+    def raise_window(window)
+      return window if window == top_window || !@windows.include?(window)
+
+      top_window.focused = false
+      @windows.delete(window)
+      @windows << window
+      window.focused = true
+      window
+    end
+
+    # The windows the caller can switch between, by their number. None
+    # while a modal window (a dialog) is open: it keeps the front.
+    def switchable_windows
+      return [] if @windows.any?(&:modal)
+
+      @windows.reject(&:modal).sort_by { |w| w.number || 10 }
+    end
+
+    # F6 / Shift-F6: the next or the previous window, by number.
+    def cycle_windows(step = 1)
+      list = switchable_windows
+      return nil if list.size < 2
+
+      index = list.index(top_window) || 0
+      raise_window(list[(index + step) % list.size])
     end
 
     # Leaves the application through a declared door: returns :halt, so a
@@ -132,6 +162,7 @@ module BBS
       return unless window
       @windows.delete(window)
       window.focused = false
+      top_window&.focused = true
       window.on_close.call(window) if window.on_close.respond_to?(:call)
     end
 
@@ -234,7 +265,9 @@ module BBS
         return nil
       end
 
-      # Modal windows: top window gets first shot at events
+      return nil if switch_windows(event)
+
+      # The top window gets first shot at events
       if (win = top_window)
         result = win.handle_event(event)
         return :halt if result == :halt
@@ -263,6 +296,37 @@ module BBS
       result = dispatch_to_root(event)
       return :halt if result == :halt
       result
+    end
+
+    # F6, Shift-F6 and Alt-digit switch windows; a click on a window behind
+    # the top one brings it to the front, and the click goes on to it, so a
+    # button or the title bar answers at once. True when a key was taken.
+    def switch_windows(event)
+      return false if top_window&.busy?
+
+      if event.key?
+        case event.key
+        when :f6       then return !cycle_windows(1).nil?
+        when :shift_f6 then return !cycle_windows(-1).nil?
+        when :alt_1, :alt_2, :alt_3, :alt_4, :alt_5, :alt_6, :alt_7, :alt_8, :alt_9
+          number = event.key.to_s[-1].to_i
+          target = switchable_windows.find { |w| w.number == number }
+          return false unless target
+
+          raise_window(target)
+          return true
+        end
+      elsif event.mouse? && event.mouse.kind == :press && !@menubar&.open?
+        list   = switchable_windows
+        target = @windows.reverse.find { |w| w.bounds.contains?(event.x, event.y) }
+        raise_window(target) if target && list.include?(target)
+      end
+      false
+    end
+
+    def free_number
+      taken = @windows.filter_map(&:number)
+      (1..9).find { |n| !taken.include?(n) }
     end
 
     def dispatch_to_root(event)

@@ -46,7 +46,7 @@ module BBS
                      hint: nil, width: 60, height: nil,
                      submit_label: '&Save', cancel_label: '&Cancel',
                      padding: nil, on_cancel: nil, maximizable: false)
-        super(title: title, modal: true, maximizable: maximizable)
+        super(title: title, modal: false, maximizable: maximizable)
         self.theme = app.theme
         @app          = app
         @fields       = fields

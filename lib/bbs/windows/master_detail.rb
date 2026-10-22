@@ -47,7 +47,7 @@ module BBS
                      close_button: true, close_label: '&Close',
                      empty_message: '  (empty)',
                      width: nil, height: nil, maximizable: false)
-        super(title: title, modal: true, maximizable: maximizable)
+        super(title: title, modal: false, maximizable: maximizable)
         self.theme = app.theme
         @app           = app
         @items         = items

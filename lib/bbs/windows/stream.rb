@@ -37,7 +37,7 @@ module BBS
                      on_submit: nil, on_poll: nil, buffer_size: 500,
                      width: nil, height: nil,
                      close_button: true, close_label: '&Close', maximizable: false)
-        super(title: title, modal: true, maximizable: maximizable)
+        super(title: title, modal: false, maximizable: maximizable)
         self.theme = app.theme
         @app           = app
         @initial_lines = initial_lines

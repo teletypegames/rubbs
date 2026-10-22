@@ -5,8 +5,12 @@ require_relative 'focus_manager'
 
 module BBS
   # A Window is a top-level Container with its own border, title, and focus
-  # manager. The Application stacks windows; the top window is the modal /
-  # active one and receives input first.
+  # manager. The Application stacks windows; the top window is the active
+  # one and receives input first. Windows that are not `modal` can be
+  # switched, Turbo Vision style: a click on one brings it to the front, F6
+  # and Shift-F6 cycle them, Alt-1 … Alt-9 picks one by the number on its
+  # frame. The active window has a double frame, the others a single one. A
+  # `modal` window (the Dialogs) keeps the front until it closes.
   #
   # A `maximizable` window that can lay itself out at any size (`resizable?`:
   # MasterDetail, Stream, Form, a scrolling Info) gets a zoom gadget in its
@@ -17,7 +21,7 @@ module BBS
   # A window that is not maximized can be moved and, when resizable?,
   # resized (`movable: false` turns it off): drag the title bar to move it,
   # the bottom right corner to size it. From the keyboard Ctrl-F5 (or F6)
-  # starts it, Turbo Vision style: the arrows move the window, Shift and the
+  # starts it (F6 only while it is the only window), Turbo Vision style: the arrows move the window, Shift and the
   # arrows size it (Tab switches the arrows between moving and sizing), and
   # Enter or Esc ends it. A window moved or sized keeps its place when the
   # terminal is resized, pulled back onto the screen if needed.
@@ -31,7 +35,7 @@ module BBS
     KBD_TITLES   = { move: ' Move: arrows · Shift+arrows or Tab: size · Enter: done ',
                      size: ' Size: arrows · Tab: move · Enter: done ' }.freeze
 
-    attr_accessor :title, :modal, :shadow, :on_close, :close_key, :maximizable, :movable
+    attr_accessor :title, :modal, :shadow, :on_close, :close_key, :maximizable, :movable, :number
     attr_writer :app
 
     def initialize(title: nil, modal: false, shadow: true, on_close: nil,
@@ -49,7 +53,11 @@ module BBS
       @drag        = nil
       @kbd_mode    = nil
       @focus_mgr   = nil
+      @number      = nil
     end
+
+    # True while the window is being moved or sized: the keys are its own.
+    def busy? = !@kbd_mode.nil? || !@drag.nil?
 
     def maximized? = @maximized
 
@@ -103,15 +111,17 @@ module BBS
         frame.shadow(x: bounds.x, y: bounds.y, width: bounds.width,
                      height: bounds.height, sgr: style(:window_shadow))
       end
-      show_close = @on_close != false && bounds.width >= 6
-      show_zoom  = zoomable? && bounds.width >= 14
-      title      = @title
-      title      = title.to_s[0, [bounds.width - 14, 0].max] if show_zoom
+      show_close  = @on_close != false && bounds.width >= 6
+      show_zoom   = zoomable? && bounds.width >= 14
+      show_number = @number && bounds.width >= 20
+      title       = @title
+      room        = (show_zoom ? 14 : 4) + (show_number ? 4 : 0)
+      title       = title.to_s[0, [bounds.width - room, 0].max] if show_zoom || show_number
       title = KBD_TITLES[@kbd_mode] if @kbd_mode
       frame.box(
         x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height,
         sgr: @kbd_mode || @drag ? style(:window_title_focused) : style(:window_border),
-        fill_sgr: style(:window_bg), style: :double, title: title,
+        fill_sgr: style(:window_bg), style: focused || @modal ? :double : :single, title: title,
         title_sgr: focused ? style(:window_title_focused) : style(:window_title),
         title_indent: show_close ? 4 : 0
       )
@@ -119,6 +129,10 @@ module BBS
       if show_close
         frame.move(bounds.x + 2, bounds.y)
         frame.write('[■]', sgr: style(:window_title))
+      end
+      if show_number
+        frame.move(show_zoom ? zoom_x - 3 : bounds.x + bounds.width - 4, bounds.y)
+        frame.write(@number.to_s, sgr: focused ? style(:window_title_focused) : style(:window_title))
       end
       if show_zoom
         frame.move(zoom_x, bounds.y)
