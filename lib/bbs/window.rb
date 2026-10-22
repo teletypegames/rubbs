@@ -61,7 +61,7 @@ module BBS
 
     def handle_event(event)
       if event.mouse? && event.mouse.kind == :press && event.mouse.button == :left
-        if event.y == bounds.y && event.x >= bounds.x + 2 && event.x <= bounds.x + 4
+        if @on_close != false && event.y == bounds.y && event.x >= bounds.x + 2 && event.x <= bounds.x + 4
           return close
         end
         if event.mouse.button == :left
@@ -74,7 +74,7 @@ module BBS
       # scrollable pane responds even when keyboard focus is elsewhere.
       if event.mouse? && event.mouse.kind == :wheel
         hit = hit_test(event.x, event.y)
-        if hit && hit != focus_manager.focused
+        if hit && hit != self && hit != focus_manager.focused
           res = hit.handle_event(event)
           return res if res
         end
@@ -84,15 +84,27 @@ module BBS
       result ||= focus_manager.dispatch(event)
       return result if result
 
+      # A key the focused widget left alone presses the button it is the
+      # hotkey of: "y" or Alt-Y for "&Yes".
+      if event.key? && (button = hotkey_button(event.key))
+        return button.fire
+      end
+
       if event.key? && event.key == @close_key
         return close
       end
       nil
     end
 
-    def close
-      @on_close&.call(self)
-      :close_window
+    # The Application closes the window and calls on_close (see
+    # Application#close_window), so the callback runs once.
+    def close = :close_window
+
+    def hotkey_button(key)
+      letter = key.is_a?(String) && key.length == 1 ? key.downcase : key.to_s[/\Aalt_(.)\z/, 1]
+      return nil unless letter
+
+      focusable_descendants.find { |w| w.is_a?(Widgets::Button) && w.enabled && w.hotkey == letter }
     end
 
     # Called once per Application idle tick (~1s). Override in subclasses that

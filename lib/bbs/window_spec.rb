@@ -31,7 +31,7 @@ module BBS
 
     BLOCK_ATTRS = %i[
       body items initial_lines item_label render_detail bottom_meta
-      on_submit on_cancel on_poll prefill
+      on_submit on_cancel on_poll on_activate prefill
     ].freeze
 
     attr_reader :name, :type
@@ -123,6 +123,7 @@ module BBS
       label_cb  = @attrs[:item_label]
       render_cb = @attrs[:render_detail]
       meta_cb   = @attrs[:bottom_meta]
+      activate  = @attrs[:on_activate]
       kw = {
         title:         resolve(:title, ctx),
         items:         resolve(:items, ctx) || [],
@@ -136,6 +137,7 @@ module BBS
         height:        resolve(:height, ctx)
       }.compact
       kw[:bottom_meta] = ->(item) { meta_cb.call(item, ctx) } if meta_cb
+      kw[:on_activate] = ->(item, win) { activate.call(item, win, ctx) } if activate
       kw[:actions]     = build_actions(ctx) unless @actions.empty?
       BBS::Windows::MasterDetail.open(app, **kw)
     end

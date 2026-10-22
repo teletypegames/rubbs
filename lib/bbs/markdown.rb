@@ -14,6 +14,7 @@ module BBS
     module_function
 
     def to_lines(text, width:, theme:)
+      text = FrameBuffer.text(text)
       styles = {
         base:   theme[:text],
         h1:     theme[:text_bright],

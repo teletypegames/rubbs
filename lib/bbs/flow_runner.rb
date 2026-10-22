@@ -292,8 +292,7 @@ module BBS
       return :halt if input.nil?
       return nil   if input.empty?
 
-      idx = input.to_i - 1
-      picked = items[idx]
+      picked = input.match?(/\A\d+\z/) && input.to_i.between?(1, items.size) ? items[input.to_i - 1] : nil
       unless picked
         write "\r\n  #{STYLES[:error]}Invalid selection.\e[0m\r\n"
         return nil

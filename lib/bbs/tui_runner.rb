@@ -125,7 +125,7 @@ module BBS
 
       def text(content, x: nil, y: nil, style: nil)
         at(x, y) if x && y
-        @next_frame.write_ansi(content.to_s, base_sgr: resolve_style(style))
+        @next_frame.write_ansi(content.to_s, base_sgr: resolve_style(style), cursor: true)
       end
 
       def bar(y:, content:, width: nil, style: :muted)
@@ -134,7 +134,7 @@ module BBS
         at 1, y
         @next_frame.write(' ' * width, sgr: style_code)
         at 1, y
-        @next_frame.write_ansi(content.to_s, base_sgr: style_code)
+        @next_frame.write_ansi(content.to_s, base_sgr: style_code, cursor: true)
       end
 
       def list(items, x:, y:, selected: nil, style: :muted, highlight: :success)

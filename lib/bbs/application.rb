@@ -114,12 +114,24 @@ module BBS
       :halt
     end
 
+    # Hands the raw line to the block, a file transfer for one, on a clean
+    # screen without mouse reporting, and repaints the whole application
+    # when it returns. Returns what the block returns.
+    def with_line
+      @session.disable_mouse
+      @session.write("\e[0m\e[2J\e[H")
+      yield @session
+    ensure
+      @session.enable_mouse if BBS.config.mouse
+      @committed = nil
+    end
+
     def close_window(window = nil)
       window ||= @windows.last
       return unless window
       @windows.delete(window)
       window.focused = false
-      window.on_close&.call(window) if window.on_close
+      window.on_close.call(window) if window.on_close.respond_to?(:call)
     end
 
     def top_window
@@ -153,7 +165,15 @@ module BBS
 
         idle_elapsed = 0.0
         event  = build_event(key)
-        result = dispatch(event)
+        result = begin
+          dispatch(event)
+        rescue IOError, SystemCallError
+          raise
+        rescue StandardError => e
+          # One handler's fault must not end the caller's whole session.
+          warn "BBS event error: #{e.class}: #{e.message}\n#{e.backtrace.first(3).join("\n")}"
+          nil
+        end
         break if result == :halt
       end
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
@@ -174,6 +194,7 @@ module BBS
 
     def with_loading(text = 'Working...', &block)
       win = Dialogs.message(self, text, title: ' Please wait ', width: text.length + 8)
+      do_render
       Thread.new do
         begin
           @loading_result = block.call

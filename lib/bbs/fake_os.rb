@@ -208,6 +208,11 @@ module BBS
         else
           puts 'Bad command or file name', style: :error
         end
+      rescue IOError, SystemCallError
+        raise
+      rescue StandardError => e
+        warn "FakeOS command error: #{e.class}: #{e.message}"
+        puts "Error: #{e.message}", style: :error
       end
 
       def resolve_prompt

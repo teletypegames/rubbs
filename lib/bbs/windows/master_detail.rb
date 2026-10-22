@@ -31,6 +31,10 @@ module BBS
     # `actions:` are extra buttons (right-aligned by default). A `Close` button
     # is always appended on the right unless the caller suppresses it via
     # `close_button: false`.
+    #
+    # `on_activate` is optional: `->(item, window) { ... }`, called when the
+    # caller presses Enter on a list item. `replace_items` swaps the list in
+    # place (a file browser changing folders) and selects the first item.
     class MasterDetail < Window
       def self.open(app, **kw)
         new(app: app, **kw).tap(&:attach)
@@ -39,7 +43,7 @@ module BBS
       attr_reader :list_widget, :detail_view, :meta_label
 
       def initialize(app:, title:, items:, item_label:, render_detail:,
-                     list_width: nil, bottom_meta: nil, actions: nil,
+                     list_width: nil, bottom_meta: nil, actions: nil, on_activate: nil,
                      close_button: true, close_label: '&Close',
                      empty_message: '  (empty)',
                      width: nil, height: nil)
@@ -50,6 +54,7 @@ module BBS
         @item_label    = item_label
         @render_detail = render_detail
         @bottom_meta   = bottom_meta
+        @on_activate   = on_activate
         @actions       = (actions || []).dup
         @actions << { label: close_label, cancel: true } if close_button
         @list_width    = list_width
@@ -81,6 +86,15 @@ module BBS
         end
       end
 
+      def replace_items(items, title: nil)
+        @items = items
+        @list_widget.items    = items
+        @list_widget.selected = 0
+        @list_widget.scroll   = 0
+        self.title = title if title
+        reload_detail
+      end
+
       # Terminal resized: recompute the whole geometry against the new size
       # and re-render the detail at the new pane width.
       def relayout(_app = @app)
@@ -110,6 +124,12 @@ module BBS
         end
 
         @list_widget.on_select = ->(_, _) { reload_detail }
+        if @on_activate
+          @list_widget.on_activate = lambda do |item, _|
+            @on_activate.call(item, self) if item
+            :handled
+          end
+        end
 
         @bar = ButtonBar.attach(self, @app, @actions)
         place_panes
@@ -131,12 +151,13 @@ module BBS
         panel_h     = [panel_h, 3].max
 
         @list_w = @list_width || [(bounds.width / 3).clamp(20, 40), bounds.width - 10].min
+        @list_w = @list_w.clamp(1, [bounds.width / 2, 1].max)
         list_x  = bounds.x + 2
         list_y  = bounds.y + 2
         @list_widget.layout(list_x, list_y, @list_w, panel_h)
 
         detail_x = list_x + @list_w + 2
-        detail_w = bounds.width - @list_w - 5
+        detail_w = [bounds.width - @list_w - 5, 1].max
         @detail_view.layout(detail_x, list_y, detail_w, panel_h)
 
         if @meta_label

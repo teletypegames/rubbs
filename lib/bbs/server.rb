@@ -4,8 +4,12 @@ require 'socket'
 
 module BBS
   class Server
+    DEFAULT_TIMEOUT = 900
+
     def initialize(port:)
-      @port = port
+      @port     = port
+      @mu       = Mutex.new
+      @sessions = 0
     end
 
     def run
@@ -16,10 +20,20 @@ module BBS
           server.accept
         rescue Errno::ECONNABORTED, Errno::EMFILE, Errno::ENFILE, IOError => e
           warn "BBS accept error: #{e.class}: #{e.message}"
+          sleep 0.5
+          next
+        end
+
+        unless admit
+          client.write("Too many callers right now, try again later.\r\n") rescue nil
+          client.close rescue nil
           next
         end
 
         Thread.new(client) do |c|
+          # A line that stays silent (or stops reading) longer than the idle
+          # limit is dropped, at a login prompt or inside a door alike.
+          c.timeout = BBS.config.idle_seconds || DEFAULT_TIMEOUT if c.respond_to?(:timeout=)
           session = Session.new(c)
           begin
             session.run
@@ -29,12 +43,24 @@ module BBS
           rescue StandardError => e
             warn "BBS session error: #{e.class}: #{e.message}\n#{e.backtrace.first(3).join("\n")}"
           ensure
+            @mu.synchronize { @sessions -= 1 }
             BBS.config.on_session_end&.call(session)
           end
         end
       end
     rescue Interrupt
       puts "\nServer stopped."
+    end
+
+    private
+
+    def admit
+      @mu.synchronize do
+        return false if @sessions >= BBS.config.max_sessions
+
+        @sessions += 1
+        true
+      end
     end
   end
 end

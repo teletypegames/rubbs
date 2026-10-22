@@ -40,7 +40,7 @@ Connect with `telnet localhost 2323`.
 15. [Banner, ASCII art & ERB screens](#15-banner-ascii-art--erb-screens)
 16. [Persistence (`BBS::Store`)](#16-persistence-bbsstore)
 17. [AI characters (`BBS::AI`)](#17-ai-characters-bbsai)
-18. [Doors (`BBS::Door`)](#18-doors-bbsdoor)
+18. [Doors (`BBS::Door`)](#18-doors-bbsdoor) — and file downloads (`BBS::Zmodem`)
 19. [Telnet, sessions & input model](#19-telnet-sessions--input-model)
 20. [Source layout](#20-source-layout)
 
@@ -147,7 +147,8 @@ The `Server` reads it once at boot; per-session state lives on `BBS::Session`.
 | `flow` | — | The root `BBS::Flow` to run for each connection (required). |
 | `port` | `ENV["BBS_PORT"] \|\| 2323` | TCP port for `BBS::Server`. |
 | `mouse` | `false` | If true, sessions enable xterm SGR mouse reporting on negotiate. |
-| `idle_seconds` | `nil` | Hard idle-timeout. `nil` disables it. |
+| `idle_seconds` | `nil` | Hard idle-timeout of the Application loop. It is also each connection's socket read/write timeout (900 s when `nil`), so a line that stays silent at a login prompt or inside a door is dropped too. |
+| `max_sessions` | `100` | Connections served at once; one more is told to try later and closed. |
 | `theme` | `nil` | Default `BBS::Theme` for Applications. |
 | `screens_dir` | `nil` | Directory for ERB templates used by `Flow#screen`. |
 | `on_session_end` | `nil` | `->(session) { … }` invoked from the server thread after each session ends, even on errors. |
@@ -439,6 +440,7 @@ end
 | `close_window(window = top_window)` | Pop a window. Calls its `on_close` if any. |
 | `top_window` | The current modal target of input. |
 | `with_loading(text) { ... }` | Show a "Please wait" modal while the block runs in a thread; returns the block's value. |
+| `with_line { \|session\| ... }` | Hand the raw line to the block (a file transfer, say) on a clean screen without mouse reporting, then repaint everything; returns the block's value. |
 | `tick!` | Manually fire the periodic tick. |
 | `stop!` | Break out of the run loop. |
 | `open_door(:name)` | Leave through a declared door: returns `:halt`, and `Builder#run` opens the door. |
@@ -455,7 +457,8 @@ end
    → root focus manager).
 
 Return `:halt` from any handler to end the application (and, via Flow, the
-session).
+session). An exception in a handler is logged and the event dropped: it does
+not end the caller's session.
 
 `Builder#run(session:, session_id:, context:)` is `build(...).run` that also
 takes the caller through doors: when the application ended with `open_door`,
@@ -488,13 +491,17 @@ default `:text`). Renders one line, clipped to width.
 
 ### `Widgets::Button`
 `label:` (e.g. `'&Save'` — ampersand marks hotkey), `on_click: ->(btn) { … }`.
-Alt+letter or Enter/Space fires. Mouse-clickable. `enabled = false` greys out.
+Enter/Space fires. Inside a window the hotkey letter fires it too, alone or
+with Alt, unless the focused widget takes the key (a text field takes plain
+letters, so there it is Alt+letter). Mouse-clickable. `enabled = false`
+greys out.
 
 ### `Widgets::TextInput`
 Single-line input. `value:`, `placeholder:`, `max_length:` (default 256),
 `password:` (mask with `*`), `on_submit: ->(value, self) { … }`,
 `on_change: ->(value, self) { … }`. Cursor with arrows / Home / End,
-Backspace, Delete.
+Backspace, Delete. Keys it has no use for (Esc, function keys, Alt+letter)
+go on to the window, so Esc closes a window from inside its text field.
 
 ### `Widgets::TextArea`
 Multi-line. `value:`, `max_length:` (default 8000), `on_change:`. Arrows
@@ -587,14 +594,15 @@ app.open_window(win)
 | `title` | `nil` | Centered title in the top border. |
 | `modal` | `false` | (Informational; the stack already gives the top window priority.) |
 | `shadow` | `true` | Draw the drop shadow. |
-| `on_close` | `nil` | Called when the user closes; pass `false` to suppress the close gadget. |
+| `on_close` | `nil` | Called once when the window is closed (by `Application#close_window`); pass `false` to suppress the close gadget. |
 | `close_key` | `:escape` | Key that triggers `close`. |
 
 Methods:
 
 - `focus_manager` — lazy `FocusManager` over the window's children.
 - `reset_focus` — rebuild the focus manager (call after adding widgets).
-- `close` — fire `on_close`, return `:close_window` (the application pops).
+- `close` — return `:close_window`: the application pops the window and
+  calls `on_close`.
 - `tick(app)` — override in subclasses for per-second polling.
 
 The close gadget `[■]` (top-left, columns x+2..x+4) is mouse-clickable.
@@ -701,6 +709,11 @@ nil shows nothing.
 
 A `[ &Close ]` button is appended unless `close_button: false`. Other
 `actions:` render to the left of close.
+
+`on_activate: ->(item, window) { … }` runs when the caller presses Enter on a
+list item. `replace_items(items, title: nil)` swaps the list in place and
+selects the first item — a file browser changing folders. In the window DSL
+the block is `w.on_activate { |item, window, ctx| … }`.
 
 Exposes `list_widget`, `detail_view`, `meta_label` for live manipulation.
 
@@ -954,7 +967,8 @@ Direct API:
 fb = BBS::FrameBuffer.new(cols, rows)
 fb.move(col, row)                              # 1-based
 fb.write('Hello', sgr: "\e[1;33m")
-fb.write_ansi("\e[1;33mbright\e[0m  normal")   # respects embedded SGR
+fb.write_ansi("\e[1;33mbright\e[0m  normal")   # embedded SGR adds to base_sgr, a reset returns to it
+fb.write_ansi(text, cursor: true)              # also honours \e[row;colH (TUI pages only)
 fb.fill(x:, y:, width:, height:, sgr:, char: ' ')
 fb.hline(x:, y:, length:, char: '─', sgr:)
 fb.vline(x:, y:, length:, char: '│', sgr:)
@@ -1169,6 +1183,28 @@ end
   the caller's echo and new lines. Give each colour role the same background,
   since an SGR that starts with `0;` clears it.
 
+### File downloads (`BBS::Zmodem`)
+
+The sending side of ZMODEM, so a caller's terminal can save a file from the
+board: SyncTERM, NetRunner, Qodem, `rz` behind a plain telnet, or zmodem.js
+in a web terminal (bbsweb). Run it inside `with_line`, so the screen is
+clean and the application repaints afterwards:
+
+```ruby
+result = app.with_line do |session|
+  session.write("  Sending README.TXT by ZMODEM; Esc gives up.\r\n")
+  BBS::Zmodem.send_files(session, [['README.TXT', bytes, mtime]])
+end
+# => :ok, :cancelled, :timeout (no receiver answered) or :hangup
+```
+
+- Control characters go out ZDLE-escaped and 0xFF as a doubled telnet IAC,
+  so it works without telnet BINARY mode; `telnet: false` for a plain pipe.
+- It waits `wait:` seconds (30) for the receiver; Esc or Ctrl-C gives up
+  meanwhile, and five CANs from the terminal cancel at any time.
+- Data goes with CRC-32 when the receiver offers it, else CRC-16, in
+  1 KB subpackets; a ZRPOS restarts from that position.
+
 ---
 
 ## 19. Telnet, sessions & input model
@@ -1190,8 +1226,14 @@ session.enable_mouse / disable_mouse
 ```
 
 Telnet options negotiated on connect: `SGA` (suppress go-ahead), `ECHO`
-(server-side echo), `NAWS` (terminal size). Mouse uses xterm 1000/1006
-SGR mode.
+(server-side echo), `NAWS` (terminal size, clamped to 20–500 × 8–200).
+Mouse uses xterm 1000/1006 SGR mode; X10 reports are read too.
+
+`readline` returns UTF-8 (invalid bytes dropped), takes at most 1024 bytes,
+and ends on CR, LF, CR LF or CR NUL. `readkey` returns one `:enter` for
+CR LF / CR NUL, a lone Esc after 0.15 s, and a UTF-8 character (`'á'`) as a
+one-character String. `read_raw_byte(timeout)` is for binary protocols
+(ZMODEM): one byte as an Integer, telnet commands taken out.
 
 ### `Session#readkey` return values
 
@@ -1264,6 +1306,7 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `bbs/store.rb` | Thread-safe cached CSV upsert. |
 | `bbs/fake_os.rb` | Character-mode OS simulator: boot script + command shell. |
 | `bbs/door.rb` | Doors: hand the line to a program and take it back. |
+| `bbs/zmodem.rb` | ZMODEM send: file downloads to the caller's terminal. |
 | `bbs/ai.rb` | AI characters: persona file, OpenAI-compatible streaming client, chat with memory and fallback, typewriter output. |
 | `bbs/banner.rb`, `bbs/renderer.rb` | FIGlet + ERB. |
 | `bbs/color.rb` | Simple ANSI colour helper. |

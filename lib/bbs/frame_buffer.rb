@@ -7,9 +7,15 @@ module BBS
 
     ANSI_ESC_RE = /\e\[[\d;]*[A-Za-z~]/.freeze
 
+    # The text as a String a regexp can read: invalid bytes become '?'.
+    def self.text(value)
+      s = value.to_s
+      s.valid_encoding? ? s : s.scrub('?')
+    end
+
     # Length of the visible portion of an ANSI-styled string.
     def self.visible_width(text)
-      text.to_s.gsub(ANSI_ESC_RE, '').length
+      self.text(text).gsub(ANSI_ESC_RE, '').length
     end
 
     # Truncate an ANSI-styled string so its visible width is ≤ max_width.
@@ -19,7 +25,7 @@ module BBS
       out     = +''
       visible = 0
       i       = 0
-      s       = text.to_s
+      s       = self.text(text)
       len     = s.length
       while i < len
         if s[i] == "\e" && i + 1 < len && s[i + 1] == '['
@@ -44,7 +50,7 @@ module BBS
     # that same SGR sequence so styling continues seamlessly.
     def self.wrap_ansi(text, width)
       return [''] if width <= 0
-      s = text.to_s
+      s = self.text(text)
       return [s] if visible_width(s) <= width
 
       lines       = []
@@ -103,24 +109,29 @@ module BBS
       @cy    = 0
     end
 
+    # Off-screen positions are kept as they are: whatever is written there
+    # is clipped, not piled up in the last column or row.
     def move(col, row)
-      @cx = col.clamp(1, @cols) - 1
-      @cy = row.clamp(1, @rows) - 1
+      @cx = col - 1
+      @cy = row - 1
     end
 
     def write(text, sgr: nil)
-      text.each_char do |ch|
+      text.to_s.each_char do |ch|
         break if @cy >= @rows
-        @cells[@cy][@cx] = Cell.new(ch, sgr) if @cx < @cols
+        @cells[@cy][@cx] = Cell.new(ch, sgr) if visible?
         @cx += 1
       end
     end
 
-    # Write text that may contain embedded ANSI SGR / cursor sequences.
-    # base_sgr is the initial style, overridden by any embedded \e[...m sequences.
-    def write_ansi(text, base_sgr: nil)
+    # Write text that may contain embedded ANSI SGR sequences. base_sgr is the
+    # initial style; an embedded \e[...m adds to it and a reset returns to it.
+    # \e[nC moves right; \e[row;colH is honoured only with `cursor: true`
+    # (a TUI page), so content in a widget cannot jump out of it.
+    def write_ansi(text, base_sgr: nil, cursor: false)
       cur_sgr = base_sgr
       s       = text.to_s
+      s       = s.scrub('?') unless s.valid_encoding?
       i       = 0
       len     = s.length
 
@@ -138,14 +149,17 @@ module BBS
             case term
             when 'm'
               seq     = s[i..j]
-              cur_sgr = (seq == "\e[0m" || seq == "\e[m") ? nil : seq
+              cur_sgr = ['', '0'].include?(inner) ? base_sgr : "#{cur_sgr}#{seq}"
+            when 'C'
+              [inner.to_i, 1].max.clamp(1, @cols).times do
+                @cells[@cy][@cx] = Cell.new(' ', cur_sgr) if visible?
+                @cx += 1
+              end
             when 'H', 'f'
-              parts = inner.split(';')
-              row   = [parts[0].to_i, 1].max
-              col   = [parts[1].to_i, 1].max
-              move(col, row)
-            when 'J'
-              clear if inner == '2'
+              if cursor
+                parts = inner.split(';')
+                move([parts[1].to_i, 1].max, [parts[0].to_i, 1].max)
+              end
             end
 
             i = j + 1
@@ -153,9 +167,7 @@ module BBS
             i += 1
           end
         elsif ch.ord >= 32
-          if @cy < @rows && @cx < @cols
-            @cells[@cy][@cx] = Cell.new(ch, cur_sgr)
-          end
+          @cells[@cy][@cx] = Cell.new(ch, cur_sgr) if visible?
           @cx += 1
           i += 1
         else
@@ -169,13 +181,13 @@ module BBS
     def fill(x:, y:, width:, height:, sgr: nil, char: ' ')
       height.times do |r|
         move(x, y + r)
-        write(char * width, sgr: sgr)
+        write(char * [width, 0].max, sgr: sgr)
       end
     end
 
     def hline(x:, y:, length:, char: '─', sgr: nil)
       move(x, y)
-      write(char * length, sgr: sgr)
+      write(char * [length, 0].max, sgr: sgr)
     end
 
     def vline(x:, y:, length:, char: '│', sgr: nil)
@@ -235,7 +247,7 @@ module BBS
       end
       # bottom edge
       move(x + 2, y + height)
-      write(' ' * width, sgr: sgr) if y + height <= @rows
+      write(' ' * [width, 0].max, sgr: sgr) if y + height <= @rows
     end
 
     # Compute the minimal ANSI byte stream to transform +from+ into +self+.
@@ -255,8 +267,10 @@ module BBS
             out << "\e[#{r + 1};#{c + 1}H"
           end
 
+          # Each style starts from a reset, so no attribute of the cell
+          # painted before it carries over.
           if nc.sgr != cur_sgr
-            out << (nc.sgr || "\e[0m")
+            out << "\e[0m" << nc.sgr.to_s
             cur_sgr = nc.sgr
           end
 
@@ -271,6 +285,8 @@ module BBS
     end
 
     protected
+
+    def visible? = @cy >= 0 && @cy < @rows && @cx >= 0 && @cx < @cols
 
     def cell_at(row, col)
       @cells[row][col]

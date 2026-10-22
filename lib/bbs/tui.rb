@@ -51,8 +51,8 @@ module BBS
         case mode
         when :menu
           size = coerce.(opts.fetch(:size))
-          key(:up)   { @menu_selection = (@menu_selection - 1) % instance_exec(&size) }
-          key(:down) { @menu_selection = (@menu_selection + 1) % instance_exec(&size) }
+          key(:up)   { n = instance_exec(&size); @menu_selection = (@menu_selection - 1) % n if n.positive? }
+          key(:down) { n = instance_exec(&size); @menu_selection = (@menu_selection + 1) % n if n.positive? }
 
         when :cycle
           key(:up)   { @item_selection = (@item_selection - 1) % @items.size if @items.any? }
@@ -85,6 +85,8 @@ module BBS
           end
           key(:home) { @item_selection = 0; @scroll = 0 }
           key(:end)  do
+            next if @items.empty?
+
             step = instance_exec(&window)
             @item_selection = @items.size - 1
             @scroll = [@items.size - step, 0].max

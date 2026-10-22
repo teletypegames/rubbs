@@ -70,13 +70,13 @@ module BBS
       # matches: questions a small model answers out of character.
       def deflect(text)
         _, reply = @deflect.find { |pattern, _| pattern.match?(text) }
-        reply&.gsub('{input}', text)
+        reply&.gsub('{input}') { text }
       end
 
       # The canned reply for `text`: the first matching rule, else the default.
       def fallback(text)
         _, reply = @replies.find { |pattern, _| pattern.match?(text) }
-        (reply || @default).gsub('{input}', text)
+        (reply || @default).gsub('{input}') { text }
       end
 
       # `facts` (a String) is added to the system prompt for one request:
@@ -181,7 +181,7 @@ module BBS
       #           the persona's canned one — e.g. the looked-up facts as they
       #           are.
       def reply(text, ctx = {}, facts: nil, fallback: nil, &on_text)
-        text  = text.to_s.strip
+        text  = text.to_s.dup.force_encoding(Encoding::UTF_8).scrub('').strip
         if (canned = @persona.deflect(text))
           return canned.tap { |line| on_text&.call(line) }
         end

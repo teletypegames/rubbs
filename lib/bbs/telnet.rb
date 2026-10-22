@@ -14,6 +14,11 @@ module BBS
     SGA_OPT  = 3
     NAWS_OPT = 31
 
+    MAX_LINE = 1024
+    MAX_COLS = 500
+    MAX_ROWS = 200
+    ESC_WAIT = 0.15
+
     MouseEvent = Struct.new(:kind, :button, :x, :y, :mods, keyword_init: true)
 
     def negotiate
@@ -49,6 +54,11 @@ module BBS
           next
         end
 
+        # CR LF and CR NUL are one Enter, not two.
+        after_cr  = @after_cr
+        @after_cr = byte == 13
+        next if after_cr && (byte == 10 || byte == 0)
+
         case byte
         when 13, 10  then return :enter
         when 9       then return :tab
@@ -56,7 +66,10 @@ module BBS
         when 8, 127  then return :backspace
         when 3       then return :interrupt
         when 1..26   then return :"ctrl_#{(byte + 96).chr}"
-        when 32..126 then return raw
+        when 32..126 then return raw.force_encoding(Encoding::UTF_8)
+        when 0xc2..0xf4
+          char = read_utf8(raw)
+          return char if char
         end
       end
     end
@@ -68,9 +81,25 @@ module BBS
       @client.read(1)
     end
 
+    # One byte of the line as an Integer, for binary protocols (ZMODEM):
+    # telnet commands are taken out and a doubled IAC comes back as 255.
+    # :timeout when nothing came within `timeout` seconds, nil on hangup.
+    def read_raw_byte(timeout)
+      loop do
+        raw = read_byte(timeout)
+        return raw if raw.nil? || raw == :timeout
+        return raw.ord unless raw.ord == IAC
+
+        cmd = @client.read(1)
+        return nil if cmd.nil?
+        return IAC if cmd.ord == IAC
+
+        absorb_iac(cmd)
+      end
+    end
+
     def readline(mask: nil)
-      line    = +""
-      last_cr = false
+      line = +''.b
 
       loop do
         raw  = @client.read(1)
@@ -79,35 +108,35 @@ module BBS
 
         if byte == IAC
           absorb_iac
-          last_cr = false
           next
         end
 
-        if byte == 13
-          last_cr = true
-          next
-        end
+        after_cr  = @after_cr
+        @after_cr = byte == 13
+        next if after_cr && (byte == 10 || byte == 0)
 
-        if byte == 10 || (byte == 0 && last_cr)
+        if byte == 13 || byte == 10
           write "\r\n"
-          return line
+          return line.force_encoding(Encoding::UTF_8).scrub('')
         end
-
-        last_cr = false
-        next if byte == 0
 
         if byte == 8 || byte == 127
           unless line.empty?
-            line.chop!
+            text = line.dup.force_encoding(Encoding::UTF_8)
+            line = (text.valid_encoding? ? text.chop : text.byteslice(0, text.bytesize - 1)).b
             write "\b \b"
           end
           next
         end
 
-        next if byte < 32
+        next if byte < 32 || line.bytesize >= MAX_LINE
 
         line << raw
-        write(mask || raw)
+        echo = if mask.nil? then raw
+               elsif (byte & 0xc0) == 0x80 then ''
+               else mask
+               end
+        write(echo)
       end
     end
 
@@ -128,6 +157,8 @@ module BBS
     # Reads a CSI / SS3 sequence after ESC. Returns a Symbol (key name),
     # a Symbol :"alt_<x>" (Alt-modified key), a MouseEvent, or :escape.
     def read_escape_sequence
+      return :escape unless IO.select([@client], nil, nil, ESC_WAIT)
+
       b1 = @client.read(1)
       return :escape if b1.nil?
 
@@ -139,6 +170,10 @@ module BBS
         b2 = @client.read(1)
         return :escape if b2.nil?
         case b2
+        when 'A' then :up
+        when 'B' then :down
+        when 'C' then :right
+        when 'D' then :left
         when 'P' then :f1
         when 'Q' then :f2
         when 'R' then :f3
@@ -172,6 +207,12 @@ module BBS
         break if raw.length > 32 # safety
       end
       return :escape if final.nil?
+
+      # X10 mouse report (no SGR 1006 support): ESC [ M b x y, each plus 32.
+      if final == 'M' && raw.empty?
+        b, x, y = 3.times.map { @client.read(1)&.ord.to_i - 32 }
+        return decode_mouse(b, x, y, pressed: (b & 3) != 3)
+      end
 
       # SGR mouse: ESC [ < b ; x ; y (M|m)
       if raw.start_with?('<') && (final == 'M' || final == 'm')
@@ -217,6 +258,22 @@ module BBS
       end
     end
 
+    # The rest of a UTF-8 character whose first byte is `lead`; nil when
+    # the bytes do not make one.
+    def read_utf8(lead)
+      bytes = lead.b
+      (lead.ord >= 0xf0 ? 3 : lead.ord >= 0xe0 ? 2 : 1).times do
+        return nil unless IO.select([@client], nil, nil, ESC_WAIT)
+
+        nxt = @client.read(1)
+        return nil if nxt.nil? || (nxt.ord & 0xc0) != 0x80
+
+        bytes << nxt
+      end
+      char = bytes.force_encoding(Encoding::UTF_8)
+      char.valid_encoding? ? char : nil
+    end
+
     def decode_mouse(b, x, y, pressed:)
       mods = []
       mods << :shift if b & 4 != 0
@@ -243,8 +300,7 @@ module BBS
       MouseEvent.new(kind: kind, button: button, x: x, y: y, mods: mods)
     end
 
-    def absorb_iac
-      cmd = @client.read(1)
+    def absorb_iac(cmd = @client.read(1))
       return if cmd.nil?
 
       case cmd.ord
@@ -257,15 +313,16 @@ module BBS
           if b.ord == IAC
             s = @client.read(1)
             break if s.nil? || s.ord == SE
-          else
+            buf << IAC if s.ord == IAC && buf.size < 64
+          elsif buf.size < 64
             buf << b.ord
           end
         end
         if opt&.ord == NAWS_OPT && buf.size >= 4
           cols = (buf[0] << 8) | buf[1]
           rows = (buf[2] << 8) | buf[3]
-          @term_cols = cols if cols > 0
-          @term_rows = rows if rows > 0
+          @term_cols = cols.clamp(20, MAX_COLS) if cols > 0
+          @term_rows = rows.clamp(8, MAX_ROWS) if rows > 0
           @naws_reported = true
         end
       when WILL, WONT, DO, DONT

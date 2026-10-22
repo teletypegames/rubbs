@@ -52,6 +52,8 @@ module BBS
     def selected_item   = opened_menu&.items&.[](@item_index)
 
     def open(index)
+      return if @menus.empty?
+
       idx = index.clamp(0, @menus.size - 1)
       @open_index = idx
       @item_index = first_selectable_index(@menus[idx].items) || 0
@@ -166,7 +168,7 @@ module BBS
 
       if open?
         menu = opened_menu
-        x0   = menu.x
+        x0   = dropdown_x(menu)
         y0   = bounds.y + 1
         w    = menu_width(menu)
         h    = menu.items.size + 2
@@ -234,10 +236,15 @@ module BBS
       max_label + max_short + 6
     end
 
+    # A dropdown near the right edge is shifted left so it fits the screen.
+    def dropdown_x(menu)
+      [[menu.x.to_i, bounds.x + bounds.width - menu_width(menu)].min, 1].max
+    end
+
     def render_dropdown(frame)
       menu = opened_menu
       return unless menu
-      x = menu.x
+      x = dropdown_x(menu)
       y = bounds.y + 1
       w = menu_width(menu)
       h = menu.items.size + 2
@@ -268,7 +275,7 @@ module BBS
         idx_amp = label.index('&')
         if idx_amp && item.enabled != false
           frame.write(label[0, idx_amp], sgr: sgr)
-          frame.write(label[idx_amp + 1], sgr: selected ? sgr : style(:menu_hotkey))
+          frame.write(label[idx_amp + 1].to_s, sgr: selected ? sgr : style(:menu_hotkey))
           rest = label[(idx_amp + 2)..]
           frame.write(rest, sgr: sgr) if rest
         else
@@ -288,7 +295,7 @@ module BBS
       if idx
         frame.move(x, y)
         frame.write(label[0, idx], sgr: sgr) if idx > 0
-        frame.write(label[idx + 1], sgr: hotkey_sgr)
+        frame.write(label[idx + 1].to_s, sgr: hotkey_sgr)
         rest = label[(idx + 2)..]
         frame.write(rest, sgr: sgr) if rest && !rest.empty?
       else

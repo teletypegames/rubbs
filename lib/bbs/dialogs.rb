@@ -20,10 +20,12 @@ module BBS
 
     # Show a one-line message with an OK button.
     def self.message(app, text, title: ' Message ', width: nil)
-      lines  = wrap(text, 50)
-      w      = (width || ([lines.map(&:length).max + 6, 30].max))
+      lines  = wrap(text, width ? width - 6 : 50)
+      w      = (width || [(lines.map(&:length).max || 0) + 6, 30].max)
       h      = lines.size + 5
       window = centred_window(app, width: w, height: h, title: title)
+      w      = window.bounds.width
+      h      = window.bounds.height
 
       lines.each_with_index do |line, i|
         label = Widgets::Label.new(text: line, style_key: :window_text)
@@ -42,9 +44,11 @@ module BBS
     # Yes/No confirmation. Calls on_yes / on_no.
     def self.confirm(app, text, title: ' Confirm ', on_yes: nil, on_no: nil)
       lines = wrap(text, 50)
-      w     = [lines.map(&:length).max + 6, 36].max
+      w     = [(lines.map(&:length).max || 0) + 6, 36].max
       h     = lines.size + 5
       window = centred_window(app, width: w, height: h, title: title)
+      w      = window.bounds.width
+      h      = window.bounds.height
 
       lines.each_with_index do |line, i|
         label = Widgets::Label.new(text: line, style_key: :window_text)
@@ -70,6 +74,8 @@ module BBS
       w      = width
       h      = 7
       window = centred_window(app, width: w, height: h, title: title)
+      w      = window.bounds.width
+      h      = window.bounds.height
 
       label = Widgets::Label.new(text: prompt, style_key: :window_text)
       label.layout(window.bounds.x + 2, window.bounds.y + 1, w - 4, 1)

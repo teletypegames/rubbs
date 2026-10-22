@@ -69,7 +69,7 @@ module BBS
           right = @label[(idx + 2)..] || ''
           frame.write('[ ', sgr: sgr)
           frame.write(left, sgr: sgr) unless left.empty?
-          frame.write(hot, sgr: style(:button_hotkey))
+          frame.write(hot.to_s, sgr: style(:button_hotkey))
           frame.write(right, sgr: sgr)
           frame.write(' ]', sgr: sgr)
         else
@@ -177,7 +177,10 @@ module BBS
         when :enter
           return @on_submit ? @on_submit.call(@value, self) || :handled : :handled
         else
-          if event.char? && @value.length < @max_length
+          # Keys it has no use for (Esc, function keys) go on to the window.
+          return nil unless event.char?
+
+          if @value.length < @max_length
             @value.insert(@cursor, event.key)
             @cursor += 1
             adjust_scroll
@@ -268,7 +271,9 @@ module BBS
           end
           @on_change&.call(value, self)
         else
-          if event.char? && length < @max_length
+          return nil unless event.char?
+
+          if length < @max_length
             @lines[@cursor_r].insert(@cursor_c, event.key)
             @cursor_c += 1
             @on_change&.call(value, self)
@@ -447,6 +452,8 @@ module BBS
       def focusable? = true
 
       def render(frame)
+        return if bounds.width <= 0 || bounds.height <= 0
+
         sgr = style(:text)
         bounds.height.times do |r|
           frame.move(bounds.x, bounds.y + r)
