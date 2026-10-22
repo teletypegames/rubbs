@@ -81,12 +81,18 @@ module BBS
       label.layout(window.bounds.x + 2, window.bounds.y + 1, w - 4, 1)
       window.add(label)
 
-      input = Widgets::TextInput.new(value: value)
+      # Enter in the field is the OK button.
+      input  = nil
+      submit = lambda do |_|
+        app.close_window(window)
+        on_submit&.call(input.value)
+        :handled
+      end
+      input = Widgets::TextInput.new(value: value, on_submit: ->(_text, _field) { submit.call(nil) })
       input.layout(window.bounds.x + 2, window.bounds.y + 3, w - 4, 1)
       window.add(input)
 
-      ok = Widgets::Button.new(label: '&OK',
-                               on_click: ->(_) { app.close_window(window); on_submit&.call(input.value) })
+      ok = Widgets::Button.new(label: '&OK', on_click: submit)
       cancel = Widgets::Button.new(label: '&Cancel',
                                    on_click: ->(_) { app.close_window(window) })
       ok.layout(window.bounds.x + w / 2 - 9,     window.bounds.y + h - 2, 8, 1)

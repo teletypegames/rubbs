@@ -6,7 +6,7 @@ module BBS
   # A status bar at the bottom of the screen. Render a list of hotkey hints
   # like "F1=Help F2=Save Esc=Cancel". Optionally a right-aligned status text.
   class Statusbar < Widget
-    Hint = Struct.new(:key, :label, :on_activate, keyword_init: true)
+    Hint = Struct.new(:key, :label, :on_activate, :hidden, keyword_init: true)
 
     attr_accessor :hints, :right_text
 
@@ -16,9 +16,12 @@ module BBS
       @right_text = right_text
     end
 
-    def add_hint(key, label, &on_activate)
-      @hints << Hint.new(key: key, label: label, on_activate: on_activate)
+    # A hidden hint is a key binding only: it works, but takes no room.
+    def add_hint(key, label, hidden: false, &on_activate)
+      @hints << Hint.new(key: key, label: label, on_activate: on_activate, hidden: hidden)
     end
+
+    def shown = @hints.reject(&:hidden)
 
     def render(frame)
       sgr = style(:statusbar)
@@ -27,7 +30,7 @@ module BBS
       frame.write(' ' * bounds.width, sgr: sgr)
 
       cx = bounds.x + 1
-      @hints.each do |hint|
+      shown.each do |hint|
         text_key = hint.key.to_s
         text_lbl = " #{hint.label} "
         break if cx + text_key.length + text_lbl.length > bounds.x + bounds.width - 1
@@ -57,7 +60,7 @@ module BBS
       return nil unless event.mouse? && event.mouse.kind == :press &&
                         event.mouse.button == :left && event.y == bounds.y
       cx = bounds.x + 1
-      @hints.each do |hint|
+      shown.each do |hint|
         text_key = hint.key.to_s
         text_lbl = " #{hint.label} "
         width    = text_key.length + text_lbl.length

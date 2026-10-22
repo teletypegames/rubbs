@@ -43,6 +43,11 @@ module BBS
       else
         @program.call(session, context)
       end
+    rescue IOError, SystemCallError
+      raise
+    rescue StandardError => e
+      # A door's fault must not end the caller's call: back to the board.
+      warn "BBS door #{@name}: #{e.class}: #{e.message}\n#{e.backtrace&.first(3)&.join("\n")}"
     ensure
       (session.enable_mouse if BBS.config.mouse) rescue nil
     end

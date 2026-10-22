@@ -424,7 +424,9 @@ end
 | `init { ... }` | Runs in the Application context after building, before `body`. |
 | `body { ... }` | Block evaluated against a `BodyContext` — call `add(widget)` to attach widgets to the root container. |
 | `menubar { menu '&X' do item '&Y' do … end end }` | Define the top menubar (see [§11](#11-menubar-statusbar-focus)). |
-| `status_hint(key, label) { ... }` | Append one status bar hotkey hint. |
+| `status_hint(key, label, hidden: false) { ... }` | Append one status bar hotkey hint. `hidden: true` keeps the key working without showing it (room for `right_text`). |
+| `on_tick { ... }` | Runs in the Application context once a second while the caller is idle (a clock on `statusbar.right_text`, a counter). |
+| `on_door { \|door, context\| ... }` | Runs just before `Builder#run` hands the line to a door (who is where, a log line). |
 | `window(:name, type: :info\|:form\|:master_detail\|:stream) { \|w\| ... }` | Register a declarative window spec (see [§9](#9-pre-built-window-types-bbswindows)). |
 | `door(:name, program, label: nil)` | Declare a door the caller can step into (see [§18](#18-doors-bbsdoor)). Inside `menu`, `doors` adds one item per declared door. |
 
@@ -451,7 +453,7 @@ end
 
 1. Render full frame, diff against the committed buffer, write the delta.
 2. Wait for a key (`Session#readkey(timeout: 1.0)`).
-3. On `:idle` — fire `tick!` (which calls `@on_tick` and `window.tick(self)`
+3. On `:idle` — fire `tick!` (which runs the `on_tick` block and `window.tick(self)`
    for every open window), then check the idle-disconnect timeout.
 4. Otherwise build an `Event` and dispatch (top window → menubar → statusbar
    → root focus manager).
@@ -872,7 +874,7 @@ BBS::Dialogs.confirm(app, 'Delete this message?',
   on_no:  -> { … })
 
 BBS::Dialogs.input(app, prompt: 'New name:', value: '',
-  on_submit: ->(value) { rename(value) })
+  on_submit: ->(value) { rename(value) })   # Enter in the field is OK
 ```
 
 `BBS::Dialogs.centred_window(app, width:, height:, title:)` is the underlying
@@ -921,7 +923,8 @@ status_hint('Alt-X', 'Quit') { :halt }
 ```
 
 Renders left-aligned hints. Optional `statusbar.right_text = '...'` for a
-right-aligned indicator (set after build via `app.statusbar.right_text=`).
+right-aligned indicator (set after build via `app.statusbar.right_text=`, in
+`init` and again in `on_tick` for a clock).
 Mouse-click on a hint fires its handler. Key matching is forgiving:
 `F10` → `:f10`, `Alt-X` → `:alt_x`, `Esc` → `:escape`, `Tab` → `:tab`, anything
 else uses case-insensitive name match.
@@ -1045,6 +1048,7 @@ Supports:
 - `> quoted text` (rendered with a `│` gutter).
 - `- ` / `* ` / `+ ` bullet lists, with hanging indents on wrap.
 - `1. ` numbered lists.
+- An indented line under a list item continues the item.
 - `---` / `***` / `___` horizontal rules.
 - Backslash escapes for `\* \_ \` \[ \( \{ \# …`.
 
@@ -1214,7 +1218,11 @@ end
   again; a plain `APP.build(...).run` would only end.
 - `Door#run(session, context)` clears the screen and switches mouse reporting
   off for the program, and switches it back on (if `BBS.config.mouse`) when it
-  returns. It can be used without an Application.
+  returns. It can be used without an Application. An exception in the program
+  is logged and the caller comes back to the board: a door's fault does not end
+  the call (a dropped line still does).
+- `on_door { |door, context| … }` in the Application DSL runs just before the
+  line goes to a door: who is in which door, for a node list.
 - The context hash is the same before, inside and after the door, so a door can
   keep its state for the rest of the call (the AI chat history, for example).
 - A `BBS::Flow` door runs on a copy of the context instead, so its `ask` steps

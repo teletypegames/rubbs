@@ -96,7 +96,7 @@ module BBS
 
         elsif (m = line.match(/\A(\s*)[-*+]\s+(.+)/))
           indent = m[1].length
-          body   = m[2]
+          body, consumed = item_body(m[2], lines, i)
           flush_paragraph.call
           prefix_w = indent + 2
           inner_w  = [width - prefix_w, 1].max
@@ -113,7 +113,7 @@ module BBS
         elsif (m = line.match(/\A(\s*)(\d+)\.\s+(.+)/))
           indent = m[1].length
           num    = m[2]
-          body   = m[3]
+          body, consumed = item_body(m[3], lines, i)
           flush_paragraph.call
           prefix  = "#{' ' * indent}#{num}. "
           inner_w = [width - prefix.length, 1].max
@@ -135,6 +135,18 @@ module BBS
 
       flush_paragraph.call
       result
+    end
+
+    # A list item's text with its indented continuation lines, and how many
+    # source lines it took.
+    def item_body(first, lines, index)
+      body = [first.strip]
+      j    = index + 1
+      while j < lines.size && lines[j].match?(/\A\s+\S/) && !lines[j].match?(/\A\s*([-*+]|\d+\.)\s+/)
+        body << lines[j].strip
+        j += 1
+      end
+      [body.join(' '), j - index]
     end
 
     def inline(text, styles, base_sgr)

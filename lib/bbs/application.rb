@@ -323,6 +323,8 @@ module BBS
         @services        = {}
         @window_specs    = {}
         @doors           = {}
+        @tick_block      = nil
+        @door_block      = nil
       end
 
       # Declares a door: `program` is a BBS::FakeOS definition or a
@@ -360,11 +362,19 @@ module BBS
       end
 
       def init(&block) = (@init_block = block)
+
+      # Runs on the application (like a menu item) once a second while the
+      # caller is idle: a clock, a counter on the statusbar, a poll.
+      def on_tick(&block) = (@tick_block = block)
+
+      # Runs with the door and the context just before Builder#run hands the
+      # line to a door: who is where, a log line.
+      def on_door(&block) = (@door_block = block)
       def helpers(&block) = @helper_module.module_eval(&block)
       def menubar(&block) = (@menubar_block = block)
 
-      def status_hint(key, label, &on_activate)
-        @statusbar_hints << [key, label, on_activate]
+      def status_hint(key, label, hidden: false, &on_activate)
+        @statusbar_hints << [key, label, on_activate, hidden]
       end
 
       def body(&block)
@@ -378,7 +388,8 @@ module BBS
           helpers: @helper_module,
           services: @services,
           window_specs: @window_specs,
-          doors: @doors
+          doors: @doors,
+          on_tick: @tick_block && ->(a) { a.instance_exec(&@tick_block) }
         )
         if @menubar_block
           menubar_widget = Menubar.new
@@ -390,9 +401,9 @@ module BBS
         unless @statusbar_hints.empty?
           sb = Statusbar.new
           sb.theme = app.theme
-          @statusbar_hints.each do |k, l, blk|
+          @statusbar_hints.each do |k, l, blk, hidden|
             wrapped = blk ? ->{ app.instance_exec(&blk) } : ->{ nil }
-            sb.add_hint(k, l, &wrapped)
+            sb.add_hint(k, l, hidden: hidden, &wrapped)
           end
           app.statusbar = sb
         end
@@ -413,6 +424,7 @@ module BBS
           door = context.delete(:door)
           break unless door
 
+          @door_block&.call(door, context)
           door.run(session, context)
         end
       end
