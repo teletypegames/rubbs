@@ -58,13 +58,14 @@ for the main shell.
 | `BBS::TUI` | Single-screen page router with frame-buffer delta rendering | Single-purpose full-screen UIs |
 | `BBS::Application` | Widget framework: Menubar, Window, Button, TextInput, ListBox, … | Multi-window Synchronet-style BBSes |
 
-Three building blocks sit beside them:
+Four building blocks sit beside them:
 
 | Block | What it is | When to use |
 |---|---|---|
 | `BBS::FakeOS` | A character-mode OS simulator: boot script + command shell | A simulated machine the caller types into |
 | `BBS::Door` | Hands the line from an Application to a program and back | Games, simulated machines, anything full-line inside a menu-driven BBS |
 | `BBS::AI` | A persona-driven chat with a small model, streamed to the terminal | A character the caller can talk to, e.g. in a FakeOS `on_unknown` |
+| `BBS::Petscii` | A Commodore 64 on the line: PETSCII out, the C64's keys in (`session.petscii!`) | A C64 face of a board, on the same Flows and doors |
 
 The server boots a Telnet TCP listener, hands each connection a `Session`,
 which runs the configured `Flow`. Inside that flow you can hand off to a
@@ -147,6 +148,7 @@ The `Server` reads it once at boot; per-session state lives on `BBS::Session`.
 | `flow` | — | The root `BBS::Flow` to run for each connection (required). |
 | `port` | `ENV["BBS_PORT"] \|\| 2323` | TCP port for `BBS::Server`. |
 | `mouse` | `false` | If true, sessions enable xterm SGR mouse reporting on negotiate. |
+| `mouse_on_connect` | `true` | With `mouse`, whether reporting starts on connect. `false` leaves it to the flow (`session.enable_mouse`), e.g. after asking whether the caller has a C64, which would print the escape sequence. Applications and doors still switch it on and off. |
 | `idle_seconds` | `nil` | Hard idle-timeout of the Application loop. It is also each connection's socket read/write timeout (900 s when `nil`), so a line that stays silent at a login prompt or inside a door is dropped too. |
 | `max_sessions` | `100` | Connections served at once; one more is told to try later and closed. |
 | `theme` | `nil` | Default `BBS::Theme` for Applications. |
@@ -158,7 +160,7 @@ The `Server` reads it once at boot; per-session state lives on `BBS::Session`.
 Boots a `BBS::Server` (one thread per client). Each thread:
 1. Creates a `BBS::Session` (assigns a hex `session_id`).
 2. Performs Telnet negotiation (SGA, ECHO, NAWS — terminal size).
-3. Enables mouse reporting if `BBS.config.mouse`.
+3. Enables mouse reporting if `BBS.config.mouse` (and `mouse_on_connect`).
 4. Runs `FlowRunner.new(session, session_id, BBS.config.flow).run`.
 
 ### `BBS::Server`
@@ -1299,6 +1301,9 @@ session.naws_reported?   # true once the client sent its window size (NAWS)
 session.readkey(timeout: 1.0)
 session.write(bytes)
 session.enable_mouse / disable_mouse
+session.settle(timeout: 1.5) # wait for the telnet answers (NAWS), drop typeahead
+session.petscii!         # from here on the line speaks PETSCII to a C64
+session.petscii?
 ```
 
 Telnet options negotiated on connect: `SGA` (suppress go-ahead), `ECHO`
@@ -1310,6 +1315,38 @@ and ends on CR, LF, CR LF or CR NUL. `readkey` returns one `:enter` for
 CR LF / CR NUL, a lone Esc after 0.15 s, and a UTF-8 character (`'á'`) as a
 one-character String. `read_raw_byte(timeout)` is for binary protocols
 (ZMODEM): one byte as an Integer, telnet commands taken out.
+
+### PETSCII: a Commodore 64 on the line (`BBS::Petscii`)
+
+`session.petscii!` turns the line into a C64's: 40×25 (`term_cols` /
+`term_rows`), the lowercase character set (it sends `LOWERCASE`, `LOCK_CASE`
+and `CLEAR`), and no mouse. From then on everything written goes through a
+`BBS::Petscii::Encoder`, so the code above keeps writing UTF-8 with ANSI:
+
+- letters swap case the PETSCII way; box drawing, blocks (`█` as a reversed
+  space), `£ ← ↑ ✓` map to the C64's own glyphs; typography (`— … • ◄`) and
+  accented letters to their nearest ASCII; anything else is `?`;
+- ANSI colours become the C64's (`\e[1;33m` yellow, `\e[2;37m` grey, black is
+  dark grey so a black-on-grey door stays readable; backgrounds are dropped),
+  `\e[7m` / `\e[27m` reverse, `\e[2J` CLR, `\e[H` / `\e[r;cH` home and cursor
+  moves, `\e[A`–`\e[D` the cursor keys; other sequences are dropped, even when a
+  write cuts one in two;
+- CR LF is one RETURN, and a lone CR goes back to the start of the line; the
+  Encoder counts columns, so a line of exactly 40 characters, which the C64
+  wraps by itself, gets no empty line after it;
+- PETSCII control codes can be written directly as the C0/C1 code points of a
+  UTF-8 string: `"#{BBS::Petscii::YELLOW}READY."`. `LOCK_CASE` is ASCII's
+  backspace, so send it raw.
+
+`readkey` and `readline` read the C64's keys: letters in either case, RETURN
+`:enter`, INST/DEL `:backspace`, the cursor keys, HOME, F1–F8, and RUN/STOP or
+`←` as `:escape`; `readline` echoes in PETSCII. A Flow, a FakeOS or a door that
+draws for 40 columns runs on a C64 unchanged; one drawn for 80 wraps.
+
+`settle(timeout:)` waits for the client's answers to the negotiation and
+drops whatever arrives meanwhile, so a board can guess the terminal before it
+asks: a reported window wider than 40 columns is a modern terminal, 40 or no
+report at all (a C64 behind a WiFi modem speaks plain TCP) most likely a C64.
 
 ### `Session#readkey` return values
 
@@ -1361,7 +1398,8 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `lib/bbs.rb` | Public surface: `BBS.configure`, `BBS.config`, `BBS.start`. |
 | `bbs/server.rb` | TCP accept loop, one thread per client, on-session-end hook. |
 | `bbs/session.rb` | Telnet negotiation, mouse enable/disable, idle timer. |
-| `bbs/telnet.rb` | Telnet protocol, full key parsing, xterm SGR mouse. |
+| `bbs/telnet.rb` | Telnet protocol, full key parsing, xterm SGR mouse, PETSCII mode. |
+| `bbs/petscii.rb` | PETSCII: the C64's colours and controls, the UTF-8/ANSI → PETSCII encoder, the C64's keys. |
 | `bbs/config.rb` | `BBS::Config` value object. |
 | `bbs/flow.rb`, `bbs/flow_runner.rb` | Flow DSL + interpreter. |
 | `bbs/tui.rb`, `bbs/tui_runner.rb` | Page-router with frame-buffer rendering and the drawing-primitive context. |

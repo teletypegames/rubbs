@@ -31,7 +31,7 @@ module BBS
     end
 
     def enable_mouse
-      return if @mouse_enabled
+      return if @mouse_enabled || @petscii
       # 1002: presses, releases and motion while a button is held (drags).
       write "\e[?1002h\e[?1006h"
       @mouse_enabled = true
@@ -53,6 +53,12 @@ module BBS
         if byte == IAC
           absorb_iac
           next
+        end
+
+        if @petscii
+          key = Petscii.key(byte)
+          next if key.nil?
+          return key
         end
 
         # CR LF and CR NUL are one Enter, not two.
@@ -112,6 +118,12 @@ module BBS
           next
         end
 
+        if @petscii
+          line = petscii_edit(line, Petscii.key(byte), mask)
+          return line if line.encoding == Encoding::UTF_8
+          next
+        end
+
         after_cr  = @after_cr
         @after_cr = byte == 13
         next if after_cr && (byte == 10 || byte == 0)
@@ -147,8 +159,40 @@ module BBS
       @naws_reported == true
     end
 
+    # Waits up to +timeout+ seconds for the client's answers to the
+    # negotiation, its window size above all, and drops whatever it types
+    # meanwhile: a bot's "root" sent before any prompt goes nowhere. True
+    # when the window size came.
+    def settle(timeout: 1.5)
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+      until naws_reported?
+        left = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        break if left <= 0 || !IO.select([@client], nil, nil, left)
+
+        raw = @client.read(1)
+        break if raw.nil?
+
+        absorb_iac if raw.ord == IAC
+      end
+      naws_reported?
+    end
+
+    # From here on the line speaks PETSCII to a Commodore 64 (see
+    # BBS::Petscii): 40×25, lowercase character set, no mouse.
+    def petscii!
+      return if @petscii
+
+      @mouse_enabled = false
+      @term_cols     = Petscii::COLS
+      @term_rows     = Petscii::ROWS
+      send_raw Petscii.bytes("#{Petscii::LOWERCASE}#{Petscii::LOCK_CASE}#{Petscii::CLEAR}")
+      @petscii = Petscii::Encoder.new
+    end
+
+    def petscii? = !@petscii.nil?
+
     def write(data)
-      @client.write(data)
+      @client.write(@petscii ? @petscii.encode(data) : data)
     rescue StandardError
       nil
     end
@@ -340,13 +384,36 @@ module BBS
         if opt&.ord == NAWS_OPT && buf.size >= 4
           cols = (buf[0] << 8) | buf[1]
           rows = (buf[2] << 8) | buf[3]
-          @term_cols = cols.clamp(20, MAX_COLS) if cols > 0
-          @term_rows = rows.clamp(8, MAX_ROWS) if rows > 0
+          unless @petscii
+            @term_cols = cols.clamp(20, MAX_COLS) if cols > 0
+            @term_rows = rows.clamp(8, MAX_ROWS) if rows > 0
+          end
           @naws_reported = true
         end
       when WILL, WONT, DO, DONT
         @client.read(1)
       end
+    end
+
+    # One key of readline on a C64: the line so far (binary) while it goes
+    # on, the finished line (UTF-8) on RETURN.
+    def petscii_edit(line, key, mask)
+      case key
+      when :enter
+        write "\r\n"
+        return line.dup.force_encoding(Encoding::UTF_8).scrub('')
+      when :backspace
+        unless line.empty?
+          line = line.dup.force_encoding(Encoding::UTF_8).chop.b
+          write "\b \b"
+        end
+      when String
+        if line.bytesize < MAX_LINE
+          line = line + key.b
+          write(mask.nil? ? key : mask)
+        end
+      end
+      line
     end
 
     def send_raw(data)
