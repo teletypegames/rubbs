@@ -40,7 +40,7 @@ Connect with `telnet localhost 2323`.
 15. [Banner, ASCII art & ERB screens](#15-banner-ascii-art--erb-screens)
 16. [Persistence (`BBS::Store`)](#16-persistence-bbsstore)
 17. [AI characters (`BBS::AI`)](#17-ai-characters-bbsai)
-18. [Doors (`BBS::Door`)](#18-doors-bbsdoor) — and file downloads (`BBS::Zmodem`)
+18. [Doors (`BBS::Door`)](#18-doors-bbsdoor) — telnet gateways (`BBS::Gateway`) and file downloads (`BBS::Zmodem`)
 19. [Telnet, sessions & input model](#19-telnet-sessions--input-model)
 20. [Source layout](#20-source-layout)
 
@@ -1262,6 +1262,29 @@ end
   the caller's echo and new lines. Give each colour role the same background,
   since an SGR that starts with `0;` clears it.
 
+### Telnet gateways (`BBS::Gateway`)
+
+A door to another telnet board, the telnet gateway of the old BBSes: the line
+goes on to that board as it is, and comes back when it hangs up. The other
+board runs its own code on its own server; this one only carries the bytes.
+
+```ruby
+FEEDIA = BBS::Gateway.new(host: 'host.docker.internal', port: 2327, name: 'Feedia')
+door :feedia, FEEDIA, label: '&Feedia'
+```
+
+- Towards the other board the gateway is the telnet client: it answers the
+  negotiation (DO for ECHO and SGA, WILL for SGA, NAWS and TTYPE, a refusal for
+  the rest), reports the caller's window size and passes later size changes
+  on. Everything else goes through untouched both ways, mouse reports and
+  PETSCII included.
+- A PETSCII line reports no window size, so a two-faced board on the other end
+  (`BBS::Terminal`) takes the caller for a Commodore 64.
+- When the other board hangs up, the caller is asked for a key and comes back;
+  when it does not answer (5 s), the caller is told so and comes back. A caller
+  who hangs up inside ends the call, and the other board's connection with it.
+- `session.line` is the caller's socket, for a door like this one.
+
 ### File downloads (`BBS::Zmodem`)
 
 The sending side of ZMODEM, so a caller's terminal can save a file from the
@@ -1454,6 +1477,7 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `bbs/store.rb` | Thread-safe cached CSV upsert. |
 | `bbs/fake_os.rb` | Character-mode OS simulator: boot script + command shell. |
 | `bbs/door.rb` | Doors: hand the line to a program and take it back. |
+| `bbs/gateway.rb` | Telnet gateway doors: the line handed on to another board. |
 | `bbs/zmodem.rb` | ZMODEM send: file downloads to the caller's terminal. |
 | `bbs/ai.rb` | AI characters: persona file, OpenAI-compatible streaming client, chat with memory and fallback, typewriter output. |
 | `bbs/banner.rb`, `bbs/renderer.rb` | FIGlet + ERB. |

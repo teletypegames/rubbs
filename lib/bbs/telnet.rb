@@ -191,6 +191,10 @@ module BBS
 
     def petscii? = !@petscii.nil?
 
+    # The caller's line itself, for a door that hands it on as it is
+    # (BBS::Gateway).
+    def line = @client
+
     def write(data)
       @client.write(@petscii ? @petscii.encode(data) : data)
     rescue StandardError
