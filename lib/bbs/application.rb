@@ -134,16 +134,22 @@ module BBS
       raise_window(list[(index + step) % list.size])
     end
 
-    # Leaves the application through a declared door: returns :halt, so a
-    # menu item or key handler can end with it, and Builder#run opens the
-    # door once the event loop has stopped.
+    # Leaves the application through a declared door, from any handler: a
+    # menu item, a key, a window button or a list's Enter. The event loop
+    # stops after this event, and Builder#run opens the door. Returns :halt,
+    # so a handler can also end with it.
     def open_door(name)
       door = @doors[name.to_sym]
       raise ArgumentError, "Unknown door: #{name.inspect}" unless door
 
       @context[:door] = door
+      stop!
       :halt
     end
+
+    # True when the run ended because the line did (a hang-up, the idle
+    # limit): no door is opened after it.
+    def line_lost? = @line_lost == true
 
     # Hands the raw line to the block, a file transfer for one, on a clean
     # screen without mouse reporting, and repaints the whole application
@@ -188,7 +194,10 @@ module BBS
       while @running
         do_render
         key = @session.readkey(timeout: tick_seconds)
-        break if key.nil?
+        if key.nil?
+          @line_lost = true
+          break
+        end
 
         if key == :idle
           idle_elapsed += tick_seconds
@@ -198,6 +207,7 @@ module BBS
                                  title: ' Idle ')
             do_render
             sleep 0.5
+            @line_lost = true
             break
           end
           next
@@ -217,6 +227,7 @@ module BBS
         break if result == :halt
       end
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
+      @line_lost = true
       nil
     ensure
       @session.write("\e[?25h\e[2J\e[H")
@@ -391,8 +402,8 @@ module BBS
         @door_block      = nil
       end
 
-      # Declares a door: `program` is a BBS::FakeOS definition or a
-      # callable(session, context); `label` is its menu item.
+      # Declares a door: `program` is a BBS::FakeOS definition, a BBS::Flow
+      # or a callable(session, context); `label` is its menu item.
       def door(name, program, label: nil)
         @doors[name.to_sym] = Door.new(name, program, label: label)
       end
@@ -409,7 +420,12 @@ module BBS
         spec
       end
 
+      # `theme BBS::Theme.dosnavigator`, `theme :dosnavigator`, or either
+      # with a block that overrides roles. Without arguments it returns the
+      # theme set so far.
       def theme(base = nil, &block)
+        return @theme if base.nil? && block.nil?
+
         if block
           starting = case base
                      when Symbol then Theme.public_send(base)
@@ -421,7 +437,7 @@ module BBS
           builder.instance_eval(&block)
           @theme = builder.build
         else
-          @theme = base
+          @theme = base.is_a?(Symbol) ? Theme.public_send(base) : base
         end
       end
 
@@ -484,9 +500,10 @@ module BBS
       # the caller leaves without one. The context lives through it all.
       def run(session:, session_id:, context: {})
         loop do
-          build(session: session, session_id: session_id, context: context).run
+          app = build(session: session, session_id: session_id, context: context)
+          app.run
           door = context.delete(:door)
-          break unless door
+          break if door.nil? || app.line_lost?
 
           @door_block&.call(door, context)
           door.run(session, context)
@@ -516,7 +533,13 @@ module BBS
         @items = []
       end
 
+      # `enabled:` is true, false, or a lambda the application answers
+      # each time the menu is drawn or used: `enabled: -> { current_doc }`.
       def item(label, shortcut: nil, enabled: true, &block)
+        if enabled.is_a?(Proc)
+          check   = enabled
+          enabled = -> { @app.instance_exec(&check) }
+        end
         @items << Menubar::MenuItem.new(
           label: label, shortcut: shortcut, enabled: enabled, separator: false,
           on_select: block ? ->(item) { @app.instance_exec(item, &block) } : nil

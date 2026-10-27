@@ -21,7 +21,7 @@ module BBS
         row = @rows.find { |r| r['session_id'] == session_id }
 
         if row
-          fields.each { |k, v| row[k.to_s] = clean(v) }
+          fields.each { |k, v| row[k.to_s] = clean(v) if @headers.include?(k.to_s) }
           flush!
         else
           @rows << build_row(session_id, fields)

@@ -85,7 +85,7 @@ TCPServer → Session → FlowRunner ─┬→ TUIRunner
 ### Gemfile
 
 ```ruby
-gem 'bbs', git: 'https://git.teletype.hu/tools/rubbs.git'
+gem 'bbs', git: 'https://git.teletypegames.org/engines/rubbs.git'
 ```
 
 ### Hello world — Flow only

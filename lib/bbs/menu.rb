@@ -26,6 +26,14 @@ module BBS
       end
 
       def display = separator ? '─' : label.sub('&', '')
+
+      # A lambda is asked every time; otherwise only false disables.
+      def enabled?
+        return false if separator
+        return enabled.call ? true : false if enabled.respond_to?(:call)
+
+        enabled != false
+      end
     end
 
     attr_reader :menus
@@ -176,7 +184,7 @@ module BBS
           inner_y = event.y - y0 - 1
           if inner_y >= 0 && inner_y < menu.items.size
             item = menu.items[inner_y]
-            unless item.separator || item.enabled == false
+            unless item.separator || !item.enabled?
               @item_index = inner_y
               return activate_current
             end
@@ -191,7 +199,7 @@ module BBS
 
     def activate_current
       item = selected_item
-      return :handled unless item && !item.separator && item.enabled != false
+      return :handled unless item&.enabled?
       close
       result = item.on_select&.call(item)
       @on_activate&.call(item)
@@ -200,14 +208,14 @@ module BBS
 
     def activate_by_hotkey(items, ch)
       down = ch.downcase
-      idx = items.find_index { |i| !i.separator && i.enabled != false && i.hotkey == down }
+      idx = items.find_index { |i| i.enabled? && i.hotkey == down }
       return nil unless idx
       @item_index = idx
       activate_current
     end
 
     def first_selectable_index(items)
-      items.find_index { |i| !i.separator && i.enabled != false }
+      items.find_index(&:enabled?)
     end
 
     def next_selectable_index(items, from)
@@ -215,7 +223,7 @@ module BBS
       i = from
       n.times do
         i = (i + 1) % n
-        return i if !items[i].separator && items[i].enabled != false
+        return i if items[i].enabled?
       end
       from
     end
@@ -225,7 +233,7 @@ module BBS
       i = from
       n.times do
         i = (i - 1) % n
-        return i if !items[i].separator && items[i].enabled != false
+        return i if items[i].enabled?
       end
       from
     end
@@ -259,7 +267,8 @@ module BBS
           next
         end
         selected = (idx == @item_index)
-        sgr = if !item.enabled.nil? && item.enabled == false
+        enabled = item.enabled?
+        sgr = if !enabled
                 style(:menu_disabled)
               elsif selected
                 style(:menu_selected)
@@ -273,7 +282,7 @@ module BBS
         frame.move(x + 2, row_y)
         label = item.label
         idx_amp = label.index('&')
-        if idx_amp && item.enabled != false
+        if idx_amp && enabled
           frame.write(label[0, idx_amp], sgr: sgr)
           frame.write(label[idx_amp + 1].to_s, sgr: selected ? sgr : style(:menu_hotkey))
           rest = label[(idx_amp + 2)..]

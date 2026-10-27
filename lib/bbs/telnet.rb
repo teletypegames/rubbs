@@ -195,6 +195,16 @@ module BBS
     # (BBS::Gateway).
     def line = @client
 
+    # The caller's window size, as its NAWS reports it: clamped to sane
+    # bounds, and left at 40×25 on a PETSCII line.
+    def resize!(cols, rows)
+      unless @petscii
+        @term_cols = cols.clamp(20, MAX_COLS) if cols.positive?
+        @term_rows = rows.clamp(8, MAX_ROWS) if rows.positive?
+      end
+      @naws_reported = true
+    end
+
     def write(data)
       @client.write(@petscii ? @petscii.encode(data) : data)
     rescue StandardError
@@ -386,13 +396,7 @@ module BBS
           end
         end
         if opt&.ord == NAWS_OPT && buf.size >= 4
-          cols = (buf[0] << 8) | buf[1]
-          rows = (buf[2] << 8) | buf[3]
-          unless @petscii
-            @term_cols = cols.clamp(20, MAX_COLS) if cols > 0
-            @term_rows = rows.clamp(8, MAX_ROWS) if rows > 0
-          end
-          @naws_reported = true
+          resize!((buf[0] << 8) | buf[1], (buf[2] << 8) | buf[3])
         end
       when WILL, WONT, DO, DONT
         @client.read(1)

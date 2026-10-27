@@ -354,9 +354,7 @@ module BBS
     end
 
     def run_app(step)
-      builder = step[:definition]
-      app = builder.build(session: @session, session_id: @session_id, context: @ctx)
-      app.run
+      step[:definition].run(session: @session, session_id: @session_id, context: @ctx)
       nil
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       :halt
@@ -395,6 +393,7 @@ module BBS
       case validator
       when :email     then value.match?(/\A[^@\s]+@[^@\s]+\.[^@\s]+\z/)
       when :non_empty then !value.empty?
+      when Proc, Method then validator.call(value) ? true : false
       else true
       end
     end

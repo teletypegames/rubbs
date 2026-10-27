@@ -208,10 +208,15 @@ module BBS
         send_remote([IAC, SB, TTYPE, 0, *@terminal.bytes, IAC, SE])
       end
 
+      # The caller's new window size: the board keeps it for after the
+      # crossing, and the other board hears it when it asked for NAWS.
       def resize(sub)
-        return unless @naws && sub[0] == NAWS_OPT && sub.size >= 5
+        return unless sub[0] == NAWS_OPT && sub.size >= 5
 
-        naws((sub[1] << 8) | sub[2], (sub[3] << 8) | sub[4])
+        cols = (sub[1] << 8) | sub[2]
+        rows = (sub[3] << 8) | sub[4]
+        @session.resize!(cols, rows)
+        naws(cols, rows) if @naws
       end
 
       def naws(cols, rows)
