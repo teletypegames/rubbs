@@ -52,9 +52,9 @@ module BBS
     end
 
     # The whole first step as a Flow: ask, switch the line (PETSCII on a C64,
-    # mouse reporting on a modern terminal), then run that face's Flow. The
-    # board keeps config.mouse_on_connect off: the mouse's escape sequence
-    # would be garbage on a C64.
+    # mouse reporting on a modern terminal when config.mouse is on), then run
+    # that face's Flow. The board keeps config.mouse_on_connect off: the
+    # mouse's escape sequence would be garbage on a C64.
     def self.flow(title:, modern:, c64:)
       faces = { modern: modern, c64: c64 }
       Flow.define do
@@ -62,7 +62,11 @@ module BBS
           face = Terminal.choose(runner.session, title: title)
           next :halt if face.nil?
 
-          face == :c64 ? runner.session.petscii! : runner.session.enable_mouse
+          if face == :c64
+            runner.session.petscii!
+          elsif BBS.config.mouse
+            runner.session.enable_mouse
+          end
           FlowRunner.new(runner.session, ctx[:session_id], faces[face], context: ctx).run
           nil
         end

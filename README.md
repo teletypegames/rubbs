@@ -1372,7 +1372,7 @@ end
 ```
 
 `Terminal.flow` asks, switches the line (`petscii!` on a C64, `enable_mouse`
-on a modern terminal) and runs that face's Flow. The question is plain ASCII
+on a modern terminal when `config.mouse` is on) and runs that face's Flow. The question is plain ASCII
 capitals, which both machines print alike. A key (`1`/`M`, `2`/`C`/`P`) only
 picks and RETURN takes it, so the RETURN of a line-mode telnet does not reach
 the first screen; no answer in 60 s takes the pick or the guess.
