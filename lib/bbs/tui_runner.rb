@@ -15,9 +15,9 @@ module BBS
       @context    = context
     end
 
-    # Runs the TUI until it halts, the line drops, or a key read times out
-    # after <tt>BBS.config.idle_seconds</tt>. An +:idle+ key is dispatched
-    # like any other. Clears the screen and shows the cursor on the way out.
+    # Runs the TUI until it halts or the line drops. A key read times out
+    # after the session's +idle_seconds+ (BBS.config.idle_seconds when the
+    # session has none) and dispatches an +:idle+ key like any other. Clears the screen and shows the cursor on the way out.
     #
     # Returns +nil+.
     def run
@@ -26,7 +26,7 @@ module BBS
       context.instance_eval(&@tui.init_block) if @tui.init_block
       context.go(@tui.start_page)
 
-      idle = BBS.config.idle_seconds
+      idle = @session.respond_to?(:idle_seconds) ? @session.idle_seconds : BBS.config.idle_seconds
       loop do
         context.do_render
         key = @session.readkey(timeout: idle)

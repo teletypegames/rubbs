@@ -737,9 +737,16 @@ module BBS
         @box_style = box_style
       end
 
+      # Sets the panel's bounds to +x+, +y+, +w+, +h+ and gives every child
+      # the area inside the border (one cell in on each side). Use one child,
+      # or a VBox / HBox, to place several widgets.
+      def layout(x, y, w, h)
+        super
+        @children.each { |c| c.layout(x + 1, y + 1, [w - 2, 0].max, [h - 2, 0].max) }
+      end
+
       # Draws the bordered, filled box over the bounds into +frame+, then the
-      # children. The panel does not lay out its children: they keep the
-      # bounds given to them, so leave room for the border.
+      # children.
       def render(frame)
         frame.box(
           x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height,

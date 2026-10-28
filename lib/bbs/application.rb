@@ -65,9 +65,11 @@ module BBS
     # [session]      the BBS::Session to run on
     # [session_id]   the session's id
     # [context]      the caller's context Hash
-    # [theme]        the BBS::Theme; default BBS::Theme.synchronet
-    # [on_idle]      a callable kept by the application; the event loop does
-    #                not call it
+    # [theme]        the BBS::Theme; default <tt>BBS.config.theme</tt>, or
+    #                BBS::Theme.synchronet when that is not set either
+    # [on_idle]      callable invoked as <tt>call(app)</tt> when the caller
+    #                reaches the idle limit (see #run); returning +:keep+
+    #                keeps the caller on and starts the count again
     # [on_tick]      callable invoked as <tt>call(app)</tt> on every tick (see
     #                #tick!)
     # [helpers]      a Module the application is extended with
@@ -79,7 +81,7 @@ module BBS
       @session       = session
       @session_id    = session_id
       @context       = context
-      @theme         = theme || Theme.synchronet
+      @theme         = theme || BBS.config.theme || Theme.synchronet
       @root          = Container.new
       @root.theme    = @theme
       @menubar       = nil
@@ -241,14 +243,16 @@ module BBS
     # Draws the screen, reads a key with a one-second timeout and dispatches
     # it as a BBS::Event: an open menubar first, then window switching keys,
     # the top window, the menubar, the statusbar and the root container's
-    # focused widget. A second without input calls #tick!; after
-    # BBS.config.idle_seconds without input it shows a message and ends.
+    # focused widget. A second without input calls #tick!. After the idle
+    # limit without input (the session's +idle_seconds+, set from
+    # BBS.config.idle_seconds) the +on_idle+ callable runs; unless it
+    # returns +:keep+, the loop shows a message and ends.
     # A handler's StandardError is logged and the loop goes on. Ends when a
     # handler returns :halt, #stop! is called or the line drops (see
     # #line_lost?), then shows the cursor and clears the screen.
     def run
       @running     = true
-      idle_max     = BBS.config.idle_seconds
+      idle_max     = idle_limit
       tick_seconds = 1.0
       idle_elapsed = 0.0
       while @running
@@ -263,6 +267,11 @@ module BBS
           idle_elapsed += tick_seconds
           tick!
           if idle_max && idle_elapsed >= idle_max
+            if @on_idle&.call(self) == :keep
+              idle_elapsed = 0.0
+              idle_max     = idle_limit
+              next
+            end
             BBS::Dialogs.message(self, "Disconnected after #{idle_max.to_i}s idle.",
                                  title: ' Idle ')
             do_render
@@ -292,6 +301,12 @@ module BBS
     ensure
       @session.write("\e[?25h\e[2J\e[H")
       @running = false
+    end
+
+    # The idle limit in seconds for this run: the session's +idle_seconds+
+    # when it has one, else BBS.config.idle_seconds; +nil+ means no limit.
+    def idle_limit
+      @session.respond_to?(:idle_seconds) ? @session.idle_seconds : BBS.config.idle_seconds
     end
 
     # Periodic tick: notify on_tick callback and let each open window pull
@@ -474,6 +489,7 @@ module BBS
         @window_specs    = {}
         @doors           = {}
         @tick_block      = nil
+        @idle_block      = nil
         @door_block      = nil
       end
 
@@ -506,8 +522,9 @@ module BBS
       # Sets the application's theme: <tt>theme BBS::Theme.dosnavigator</tt>,
       # <tt>theme :dosnavigator</tt>, or either with a block that overrides
       # roles (evaluated in a ThemeBuilder; a block alone starts from
-      # BBS::Theme.synchronet). Without arguments it returns the theme set so
-      # far.
+      # <tt>BBS.config.theme</tt>, or BBS::Theme.synchronet). Without
+      # arguments it returns the theme set so far. With no #theme call at all
+      # the application gets <tt>BBS.config.theme</tt> (see Application.new).
       def theme(base = nil, &block)
         return @theme if base.nil? && block.nil?
 
@@ -515,7 +532,7 @@ module BBS
           starting = case base
                      when Symbol then Theme.public_send(base)
                      when Theme  then base
-                     when nil    then Theme.synchronet
+                     when nil    then BBS.config.theme || Theme.synchronet
                      else             base
                      end
           builder = ThemeBuilder.new(starting)
@@ -534,6 +551,11 @@ module BBS
       # Runs on the application (like a menu item) once a second while the
       # caller is idle: a clock, a counter on the statusbar, a poll.
       def on_tick(&block) = (@tick_block = block)
+
+      # Runs on the application when the caller reaches the idle limit,
+      # before the line is dropped. Return +:keep+ to keep the caller on (a
+      # "still there?" dialog that got an answer); anything else ends the run.
+      def on_idle(&block) = (@idle_block = block)
 
       # Runs with the door and the context just before Builder#run hands the
       # line to a door: who is where, a log line.
@@ -560,18 +582,20 @@ module BBS
       end
 
       # Makes an Application for +session+ from the recorded parts: theme
-      # (default BBS::Theme.synchronet), helpers, services, window specs,
-      # doors, on_tick, menubar and statusbar, then runs the #init and #body
+      # (default <tt>BBS.config.theme</tt>, then BBS::Theme.synchronet),
+      # helpers, services, window specs, doors, on_tick, on_idle, menubar and
+      # statusbar, then runs the #init and #body
       # blocks. Returns the Application, not yet running.
       def build(session:, session_id:, context: {})
         app = Application.new(
           session: session, session_id: session_id, context: context,
-          theme: @theme || Theme.synchronet,
+          theme: @theme,
           helpers: @helper_module,
           services: @services,
           window_specs: @window_specs,
           doors: @doors,
-          on_tick: @tick_block && ->(a) { a.instance_exec(&@tick_block) }
+          on_tick: @tick_block && ->(a) { a.instance_exec(&@tick_block) },
+          on_idle: @idle_block && ->(a) { a.instance_exec(&@idle_block) }
         )
         if @menubar_block
           menubar_widget = Menubar.new

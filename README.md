@@ -150,7 +150,7 @@ The `Server` reads it once at boot; per-session state lives on `BBS::Session`.
 | `port` | `ENV["BBS_PORT"] \|\| 2323` | TCP port for `BBS::Server`. |
 | `mouse` | `false` | If true, sessions enable xterm SGR mouse reporting on negotiate. |
 | `mouse_on_connect` | `true` | With `mouse`, whether reporting starts on connect. `false` leaves it to the flow (`session.enable_mouse`), e.g. after asking whether the caller has a C64, which would print the escape sequence. Applications and doors still switch it on and off. |
-| `idle_seconds` | `nil` | Hard idle-timeout of the Application loop. It is also each connection's socket read/write timeout (900 s when `nil`), so a line that stays silent at a login prompt or inside a door is dropped too. |
+| `idle_seconds` | `nil` | Hard idle-timeout of the Application loop and the TUI. It is also each connection's socket read/write timeout (900 s when `nil`), so a line that stays silent at a login prompt or inside a door is dropped too. Every session starts with this value; `session.idle_seconds = 3600` changes it for one caller (the loop and the socket timeout alike). |
 | `max_sessions` | `ENV["BBS_MAX_SESSIONS"] \|\| 100` | Connections served at once; one more is told to try later and closed, and the server logs `BBS busy: …`. |
 | `theme` | `nil` | Default `BBS::Theme` for Applications. |
 | `screens_dir` | `nil` | Directory for ERB templates used by `Flow#screen`. |
@@ -429,6 +429,7 @@ end
 | `menubar { menu '&X' do item '&Y' do … end end }` | Define the top menubar (see [§11](#11-menubar-statusbar-focus)). |
 | `status_hint(key, label, hidden: false) { ... }` | Append one status bar hotkey hint. `hidden: true` keeps the key working without showing it (room for `right_text`). |
 | `on_tick { ... }` | Runs in the Application context once a second while the caller is idle (a clock on `statusbar.right_text`, a counter). |
+| `on_idle { ... }` | Runs in the Application context when the caller reaches the idle limit. Return `:keep` to keep them on (a "still there?" dialog that got an answer); anything else drops the line. |
 | `on_door { \|door, context\| ... }` | Runs just before `Builder#run` hands the line to a door (who is where, a log line). |
 | `window(:name, type: :info\|:form\|:master_detail\|:stream) { \|w\| ... }` | Register a declarative window spec (see [§9](#9-pre-built-window-types-bbswindows)). |
 | `door(:name, program, label: nil)` | Declare a door the caller can step into (see [§18](#18-doors-bbsdoor)). Inside `menu`, `doors` adds one item per declared door. |
@@ -459,7 +460,9 @@ end
 1. Render full frame, diff against the committed buffer, write the delta.
 2. Wait for a key (`Session#readkey(timeout: 1.0)`).
 3. On `:idle` — fire `tick!` (which runs the `on_tick` block and `window.tick(self)`
-   for every open window), then check the idle-disconnect timeout.
+   for every open window), then check the idle-disconnect timeout: at the
+   session's `idle_seconds` the `on_idle` block runs, and unless it returns
+   `:keep` the loop shows a message and ends.
 4. Otherwise build an `Event` and dispatch (top window → menubar → statusbar
    → root focus manager).
 
@@ -546,7 +549,7 @@ centered label.
 |---|---|
 | `Widgets::HBox(gap: 1)` | Horizontal split. Equal widths, minus `gap` per child. |
 | `Widgets::VBox(gap: 0)` | Vertical split. |
-| `Widgets::Panel(title:, box_style: :single\|:double)` | Bordered container; renders box first then children. |
+| `Widgets::Panel(title:, box_style: :single\|:double)` | Bordered container; `layout` gives each child the area inside the border; renders box first then children. |
 
 ### `Widgets::AnsiArt`
 

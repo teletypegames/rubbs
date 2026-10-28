@@ -14,15 +14,17 @@ module BBS
     #                    error; default +nil+
     # [port]             TCP port BBS.start listens on; default the
     #                    +BBS_PORT+ environment variable or 2323
-    # [theme]            meant as the default BBS::Theme for applications;
-    #                    stored here but not read by the library itself;
-    #                    default +nil+
+    # [theme]            the BBS::Theme of every Application that does not
+    #                    set one with its own +theme+ call; +nil+ (the
+    #                    default) means BBS::Theme.synchronet
     # [mouse]            whether the board uses mouse reporting at all;
     #                    default +false+
     # [mouse_on_connect] whether a session turns mouse reporting on as soon
     #                    as it connects (when +mouse+ is on); default +true+
-    # [idle_seconds]     idle limit in seconds of the Application loop, and
-    #                    each connection's socket read/write timeout;
+    # [idle_seconds]     idle limit in seconds of the Application loop and
+    #                    the TUI, and each connection's socket read/write
+    #                    timeout; each session starts with it and may change
+    #                    its own (<tt>Session#idle_seconds=</tt>);
     #                    +nil+ (the default) means no Application limit and
     #                    a 900-second socket timeout
     # [max_sessions]     the most callers served at once; more are turned
