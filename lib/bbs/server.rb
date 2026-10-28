@@ -26,7 +26,7 @@ module BBS
 
         unless admit
           # One line per turned-away caller, so a log pipeline can count them.
-          puts "BBS busy: #{BBS.config.max_sessions} callers on, turned one away"
+          warn "BBS busy: #{BBS.config.max_sessions} callers on, turned one away"
           client.write("Too many callers right now, try again later.\r\n") rescue nil
           client.close rescue nil
           next
