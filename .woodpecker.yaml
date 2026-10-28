@@ -56,7 +56,7 @@ steps:
       - |
         ruby -rnet/http -e '
           uri = URI("https://git.teletypegames.org/api/packages/engines/generic/bbs-rdoc/#{ARGV[0]}/rdoc.tar.gz")
-          req = Net::HTTP::Put.new(uri, "Authorization" => "token #{ENV.fetch("GITEA_TOKEN").strip}")
+          req = Net::HTTP::Put.new(uri, "Authorization" => "token #{ENV.fetch("GITEA_TOKEN").strip}", "Content-Type" => "application/octet-stream")
           req.body = File.binread("rdoc.tar.gz")
           res = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |h| h.request(req) }
           puts "#{res.code} #{uri}"
