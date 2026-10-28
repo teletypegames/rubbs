@@ -25,7 +25,8 @@ steps:
 
   # A dokumentáció a kód része: 100% alatt elbukik (CLAUDE.md).
   - name: rdoc-coverage
-    image: ruby:3.3-slim
+    # nem slim: az rdoc 8 rbs-függősége natív kiterjesztést fordít
+    image: ruby:3.3
     commands:
       - gem install --no-document rdoc -v 8.1.0
       - rdoc -C lib | tee coverage.txt
@@ -40,7 +41,7 @@ steps:
       - event: tag
 
   - name: publish-rdoc
-    image: ruby:3.3-slim
+    image: ruby:3.3
     environment:
       GITEA_TOKEN:
         from_secret: gitea_token
