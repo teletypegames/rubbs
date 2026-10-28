@@ -151,7 +151,7 @@ The `Server` reads it once at boot; per-session state lives on `BBS::Session`.
 | `mouse` | `false` | If true, sessions enable xterm SGR mouse reporting on negotiate. |
 | `mouse_on_connect` | `true` | With `mouse`, whether reporting starts on connect. `false` leaves it to the flow (`session.enable_mouse`), e.g. after asking whether the caller has a C64, which would print the escape sequence. Applications and doors still switch it on and off. |
 | `idle_seconds` | `nil` | Hard idle-timeout of the Application loop. It is also each connection's socket read/write timeout (900 s when `nil`), so a line that stays silent at a login prompt or inside a door is dropped too. |
-| `max_sessions` | `100` | Connections served at once; one more is told to try later and closed. |
+| `max_sessions` | `ENV["BBS_MAX_SESSIONS"] \|\| 100` | Connections served at once; one more is told to try later and closed, and the server logs `BBS busy: …`. |
 | `theme` | `nil` | Default `BBS::Theme` for Applications. |
 | `screens_dir` | `nil` | Directory for ERB templates used by `Flow#screen`. |
 | `on_session_end` | `nil` | `->(session) { … }` invoked from the server thread after each session ends, even on errors. |

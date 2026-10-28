@@ -10,7 +10,7 @@ module BBS
       @mouse        = false
       @mouse_on_connect = true
       @idle_seconds = nil
-      @max_sessions = 100
+      @max_sessions = (ENV['BBS_MAX_SESSIONS'] || 100).to_i
     end
   end
 end
