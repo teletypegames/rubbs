@@ -8,19 +8,29 @@ module BBS
   # the caller directly, and the line comes back when the program exits.
   #
   # The program is a BBS::FakeOS definition, a BBS::Flow, or anything that
-  # responds to `call(session, context)`. A flow gets a copy of the caller's
-  # context (so its `ask` steps cannot overwrite the BBS's own keys), and
+  # responds to <tt>call(session, context)</tt>. A flow gets a copy of the
+  # caller's context (so its +ask+ steps cannot overwrite the BBS's own keys), and
   # since a flow ends without an exit command of its own, the door waits for
   # ENTER before handing the line back:
   #
   #   SERMO = BBS::Door.new(:sermo, Sermo::OS, label: '&SERMO')
   #   SERMO.run(session, ctx)
   #
-  # Inside an Application, declare doors with the `door` DSL and let
-  # `Builder#run` take the caller through them (see Application).
+  # Inside an Application, declare doors with the +door+ DSL and let
+  # BBS::Application::Builder#run take the caller through them (see
+  # BBS::Application).
   class Door
+    # The door's name as a Symbol, its menu label, and the program it runs.
     attr_reader :name, :label, :program
 
+    # Creates a door.
+    #
+    # [name]    the door's name, stored as a Symbol
+    # [program] a BBS::FakeOS::Definition, a BBS::Flow, or an object that
+    #           responds to <tt>call(session, context)</tt>
+    # [label]   the text shown in menus; defaults to +name+ in capitals
+    #
+    # Raises ArgumentError when +program+ is none of the three.
     def initialize(name, program, label: nil)
       raise ArgumentError, "Door #{name.inspect}: not a FakeOS definition or a callable" unless
         program.is_a?(FakeOS::Definition) || program.is_a?(Flow) || program.respond_to?(:call)
@@ -32,6 +42,14 @@ module BBS
 
     # Hands the line to the program on a clean screen without mouse
     # reporting, and takes it back when the program returns.
+    #
+    # [session] the caller's BBS::Session
+    # [context] the caller's context Hash; a Flow program gets a copy
+    #
+    # An error raised by the program is logged to stderr and swallowed, so
+    # the caller lands back on the board; IOError and SystemCallError (the
+    # line dropped) are re-raised. Mouse reporting is switched back on
+    # afterwards when <tt>BBS.config.mouse</tt> is set.
     def run(session, context = {})
       session.disable_mouse
       session.write("\e[0m\e[2J\e[H")

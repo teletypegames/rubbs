@@ -6,23 +6,35 @@ module BBS
   # A status bar at the bottom of the screen. Render a list of hotkey hints
   # like "F1=Help F2=Save Esc=Cancel". Optionally a right-aligned status text.
   class Statusbar < Widget
+    # One hint: the key as shown (+F1+, <tt>Alt-x</tt>, +Esc+, +Tab+ or a
+    # literal key), its label, the block run when it is activated, and
+    # whether it is hidden.
     Hint = Struct.new(:key, :label, :on_activate, :hidden, keyword_init: true)
 
+    # The Array of Hint objects, and the text shown at the right end (or
+    # +nil+).
     attr_accessor :hints, :right_text
 
+    # Creates a status bar with +hints+ (an Array of Hint) and an optional
+    # +right_text+. Other keywords go to Widget.new.
     def initialize(hints: [], right_text: nil, **kw)
       super(**kw)
       @hints      = hints
       @right_text = right_text
     end
 
-    # A hidden hint is a key binding only: it works, but takes no room.
+    # Adds a hint for +key+ with +label+; the block runs when the key is
+    # pressed or the hint is clicked. A hidden hint is a key binding only:
+    # it works, but takes no room.
     def add_hint(key, label, hidden: false, &on_activate)
       @hints << Hint.new(key: key, label: label, on_activate: on_activate, hidden: hidden)
     end
 
+    # Returns the hints that are not hidden.
     def shown = @hints.reject(&:hidden)
 
+    # Draws the bar across its bounds in +frame+: the shown hints from the
+    # left, as many as fit, and the right text when there is room for it.
     def render(frame)
       sgr = style(:statusbar)
       key_sgr = style(:statusbar_key)
@@ -50,6 +62,11 @@ module BBS
       end
     end
 
+    # Runs the hint whose key matches a key +event+, or the shown hint under
+    # a left click on the bar.
+    #
+    # Returns the hint block's result, or +:handled+ when it returns +nil+;
+    # +nil+ when no hint matches.
     def handle_event(event)
       if event.key?
         hint = match_key(event.key)

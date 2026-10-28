@@ -1,24 +1,46 @@
 # frozen_string_literal: true
 
 module BBS
-  # A Theme maps named style roles (e.g. :window_border, :button_focused)
-  # to ANSI SGR sequences. Widgets fetch styles via Widget#style(key).
+  # A Theme maps named style roles (such as +:window_border+ or
+  # +:button_focused+) to ANSI SGR sequences. Widgets fetch styles through
+  # Widget#style.
   #
-  # Two presets are provided:
-  #   Theme.synchronet — yellow/cyan Synchronet-inspired palette
-  #   Theme.mono       — black & white, for terminals without color
+  # Five presets are provided:
+  #
+  # [Theme.synchronet]      white and yellow on blue windows over a black
+  #                         screen, after Synchronet
+  # [Theme.nortoncommander] cyan and blue panels, after Norton Commander
+  # [Theme.dosnavigator]    black on light grey with cyan bars, after DOS
+  #                         Navigator
+  # [Theme.neumanntronics]  teal and amber on black in 256 colours
+  # [Theme.mono]            no colour, only bold, dim, underline and
+  #                         reverse, for terminals without colour
+  #
+  # Derive a variant with #merge:
+  #
+  #   BBS::Theme.synchronet.merge(window_bg: "\e[41m")
   class Theme
+    # The style Hash (role Symbol => SGR String) and the theme's name Symbol.
     attr_reader :styles, :name
 
+    # Creates a theme called +name+ from +styles+, a Hash of role Symbols to
+    # SGR Strings.
     def initialize(name, styles)
       @name   = name
       @styles = styles
     end
 
+    # Returns the SGR String for the role +key+, or +nil+ when the theme
+    # does not define it.
     def style(key)        = @styles[key]
+    # Same as #style.
     def [](key)           = @styles[key]
+    # Returns a new Theme with the same name and the roles in the Hash
+    # +overrides+ replacing or adding to this theme's styles.
     def merge(overrides)  = Theme.new(@name, @styles.merge(overrides))
 
+    # Returns the +:synchronet+ preset: white and yellow on blue windows
+    # over a black screen, light grey menu and status bars.
     def self.synchronet
       Theme.new(:synchronet, {
         screen:           "\e[40m",
@@ -77,6 +99,8 @@ module BBS
       }.freeze).freeze
     end
 
+    # Returns the +:nortoncommander+ preset: a blue screen with cyan borders
+    # and bars and light grey menus. Defines no +:check_on+/+:check_off+.
     def self.nortoncommander
       Theme.new(:nortoncommander, {
         screen:           "\e[44m",
@@ -132,6 +156,8 @@ module BBS
       }.freeze).freeze
     end
 
+    # Returns the +:dosnavigator+ preset: black on light grey with cyan bars
+    # and green selections. Defines no +:check_on+/+:check_off+.
     def self.dosnavigator
       Theme.new(:dosnavigator, {
         screen:           "\e[47m",
@@ -187,6 +213,8 @@ module BBS
       }.freeze).freeze
     end
 
+    # Returns the +:neumanntronics+ preset: teal and amber on black, using
+    # 256-colour SGR codes.
     def self.neumanntronics
       Theme.new(:neumanntronics, {
         screen:           "\e[48;5;16m",
@@ -245,6 +273,8 @@ module BBS
       }.freeze).freeze
     end
 
+    # Returns the +:mono+ preset: no colour, only bold, dim, underline and
+    # reverse video, for terminals without colour.
     def self.mono
       Theme.new(:mono, {
         screen:           "",

@@ -22,29 +22,58 @@ module BBS
     #     buttons: [{ label: '&Continue', primary: true }]
     #   )
     #
-    # When `scroll: true`, body items are flattened into a single ScrollView
-    # filling the inner area. Use this for long, paginated content lists.
+    # When <tt>scroll: true</tt>, body items are flattened into a single
+    # ScrollView filling the inner area. Use this for long, paginated content
+    # lists.
     #
     # Body item types:
-    #   String                              → label with :window_text style
-    #   :spacer | '' | nil                  → blank row
-    #   :rule                               → horizontal ─── line
-    #   { text:, style:, align: }           → styled label
-    #   { kv: [[k, v], ...], label_width: } → key/value rows
-    #   { widget:, height: }                → arbitrary widget (non-scroll only)
-    #   BBS::Widget                         → as-is, 1 row (non-scroll only)
     #
-    # Default buttons: a single centered `[ &Close ]` if `buttons:` is nil.
+    # [String]                                 label with the +:window_text+ style
+    # [<tt>:spacer</tt>, <tt>''</tt>, +nil+]   blank row
+    # [<tt>:rule</tt>]                         horizontal line
+    # [<tt>{ text:, style:, align: }</tt>]     styled label
+    # [<tt>{ kv: [[k, v], ...], label_width: }</tt>] key/value rows
+    # [<tt>{ widget:, height: }</tt>]          arbitrary widget (non-scroll only)
+    # [BBS::Widget]                            as-is, its own height or 1 row
+    #                                          (non-scroll only)
+    #
+    # Default buttons: a single centered <tt>[ Close ]</tt> if
+    # <tt>buttons:</tt> is nil.
     class Info < Window
+      # The button row used when no +buttons+ are given: one Close button.
       DEFAULT_BUTTON  = [{ label: '&Close', cancel: true }].freeze
+      # The blank cells around the body: columns on each side, rows above,
+      # and rows below the button row.
       DEFAULT_PADDING = { sides: 2, top: 1, bottom: 2 }.freeze
 
+      # Creates an info window with the keywords of Info.new and opens it on
+      # +app+.
+      #
+      # Returns the Info window.
       def self.open(app, **kw)
         new(app: app, **kw).tap(&:attach)
       end
 
+      # The BBS::Widgets::ScrollView holding the body in scroll mode; +nil+
+      # otherwise.
       attr_reader :scroll_view
 
+      # Creates the window and its widgets, centred on +app+'s screen. It is
+      # not opened; see #attach.
+      #
+      # [app]         the BBS::Application
+      # [title]       the window title
+      # [body]        an Array of body items (see above)
+      # [buttons]     an Array of BBS::Windows::ButtonBar descriptors;
+      #               +nil+ gives DEFAULT_BUTTON, <tt>[]</tt> no buttons
+      # [width]       the window width (default 60)
+      # [height]      the window height; by default it fits the body (10
+      #               body rows in scroll mode)
+      # [scroll]      puts the body in a scrolling view
+      # [padding]     a Hash overriding DEFAULT_PADDING entries
+      # [maximizable] gives the window the zoom gadget
+      #
+      # Raises ArgumentError when a widget body item is used in scroll mode.
       def initialize(app:, title:, body: [], buttons: nil, width: 60, height: nil,
                      scroll: false, padding: nil, maximizable: false)
         super(title: title, modal: false, maximizable: maximizable)
@@ -59,6 +88,10 @@ module BBS
         build
       end
 
+      # Opens the window on the application and focuses the primary button,
+      # when there is one.
+      #
+      # Returns +self+.
       def attach
         @app.open_window(self)
         reset_focus
@@ -69,6 +102,9 @@ module BBS
       # Only the scrolling body can be laid out at another size.
       def resizable? = @scroll
 
+      # Returns the un-maximized bounds as <tt>[x, y, width, height]</tt>:
+      # the requested size (or the fitted height), shrunk to leave a
+      # two-cell margin, centred on the screen.
       def normal_rect
         button_h  = @buttons.any? ? 2 : 0
         body_rows = @scroll ? 10 : @body.sum { |it| item_rows(it) }

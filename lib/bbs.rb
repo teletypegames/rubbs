@@ -39,15 +39,34 @@ require_relative 'bbs/tui_runner'
 require_relative 'bbs/session'
 require_relative 'bbs/server'
 
+# The +bbs+ gem: a library for telnet BBS servers. Requiring it loads the
+# whole library. Configure it with BBS.configure, then start the server with
+# BBS.start:
+#
+#   require 'bbs'
+#
+#   BBS.configure do |c|
+#     c.port = 2323
+#     c.flow = MY_FLOW
+#   end
+#   BBS.start
+#
+# See README.md for the guide.
 module BBS
+  # Yields the global BBS::Config (created on first use) so the block can set
+  # its fields. Returns the block's value.
   def self.configure
     yield(@config ||= Config.new)
   end
 
+  # The global BBS::Config, created with its defaults on first use.
   def self.config
     @config ||= Config.new
   end
 
+  # Starts a BBS::Server listening on +port+ (default: BBS.config.port) on
+  # all interfaces and serves callers until the process is interrupted.
+  # Blocks; returns +nil+ after Ctrl-C.
   def self.start(port: config.port)
     Server.new(port: port).run
   end

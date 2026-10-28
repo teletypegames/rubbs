@@ -21,27 +21,56 @@ module BBS
     #     bottom_meta: ->(item) { "...optional 1-line meta..." }
     #   )
     #
-    # `render_detail` is called with `(item, width)` whenever the selection
-    # changes and on first paint. It must return an Array of strings (each one
-    # is one rendered line; ANSI is supported). Returning nil shows nothing.
+    # +render_detail+ is called with <tt>(item, width)</tt> whenever the
+    # selection changes and on first paint. It must return an Array of
+    # strings (each one is one rendered line; ANSI is supported). Returning
+    # nil shows nothing.
     #
-    # `bottom_meta` is optional; if given, it's a `->(item) { text }` lambda
-    # for a single info line below the detail pane.
+    # +bottom_meta+ is optional; if given, it's a <tt>->(item) { text }</tt>
+    # lambda for a single info line below the detail pane.
     #
-    # `actions:` are extra buttons (right-aligned by default). A `Close` button
-    # is always appended on the right unless the caller suppresses it via
-    # `close_button: false`.
+    # <tt>actions:</tt> are extra buttons (right-aligned by default). A
+    # +Close+ button is always appended on the right unless the caller
+    # suppresses it via <tt>close_button: false</tt>.
     #
-    # `on_activate` is optional: `->(item, window) { ... }`, called when the
-    # caller presses Enter on a list item. `replace_items` swaps the list in
-    # place (a file browser changing folders) and selects the first item.
+    # +on_activate+ is optional: <tt>->(item, window) { ... }</tt>, called
+    # when the caller presses Enter on a list item. #replace_items swaps the
+    # list in place (a file browser changing folders) and selects the first
+    # item.
     class MasterDetail < Window
+      # Creates a master/detail window with the keywords of MasterDetail.new
+      # and opens it on +app+.
+      #
+      # Returns the MasterDetail window.
       def self.open(app, **kw)
         new(app: app, **kw).tap(&:attach)
       end
 
+      # The BBS::Widgets::ListBox of items, the BBS::Widgets::ScrollView of
+      # details, and the BBS::Widgets::Label of the meta line (+nil+ without
+      # +bottom_meta+).
       attr_reader :list_widget, :detail_view, :meta_label
 
+      # Creates the window and its panes, centred on +app+'s screen. It is
+      # not opened; see #attach.
+      #
+      # [app]           the BBS::Application
+      # [title]         the window title
+      # [items]         the Array of items in the list
+      # [item_label]    called with an item, returns its list text
+      # [render_detail] called with <tt>(item, width)</tt>, returns the
+      #                 detail lines
+      # [list_width]    the list pane width; by default a third of the
+      #                 window, 20 to 40 columns
+      # [bottom_meta]   called with an item, returns the meta line text
+      # [actions]       an Array of BBS::Windows::ButtonBar descriptors
+      # [on_activate]   called with <tt>(item, window)</tt> on Enter
+      # [close_button]  appends a Close button (default true)
+      # [close_label]   the Close button's label
+      # [empty_message] the detail text when nothing is selected
+      # [width]         the window width; by default the screen less 4
+      # [height]        the window height; by default the screen less 6
+      # [maximizable]   gives the window the zoom gadget
       def initialize(app:, title:, items:, item_label:, render_detail:,
                      list_width: nil, bottom_meta: nil, actions: nil, on_activate: nil,
                      close_button: true, close_label: '&Close',
@@ -64,6 +93,10 @@ module BBS
         build
       end
 
+      # Opens the window on the application, focuses the list, and renders
+      # the detail of the selected item.
+      #
+      # Returns +self+.
       def attach
         @app.open_window(self)
         reset_focus
@@ -72,6 +105,10 @@ module BBS
         self
       end
 
+      # Renders the selected item into the detail pane and the meta line, or
+      # shows the empty message when nothing is selected. With
+      # +keep_scroll+ the detail keeps its scroll position (clamped to the
+      # new length); otherwise it scrolls to the top.
       def reload_detail(keep_scroll: false)
         item = @list_widget&.selected_item
         if item.nil?
@@ -87,6 +124,8 @@ module BBS
         end
       end
 
+      # Replaces the list with +items+, selects the first one, and renders its
+      # detail. +title+, when given, becomes the window title.
       def replace_items(items, title: nil)
         @items = items
         @list_widget.items    = items
@@ -96,8 +135,13 @@ module BBS
         reload_detail
       end
 
+      # A master/detail window can be resized; #place lays the panes out
+      # again.
       def resizable? = true
 
+      # Returns the un-maximized bounds as <tt>[x, y, width, height]</tt>:
+      # the requested size, or the screen less 4 columns and 6 rows,
+      # centred.
       def normal_rect
         w = @width  || @app.cols - 4
         h = @height || @app.rows - 6

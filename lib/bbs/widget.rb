@@ -3,12 +3,15 @@
 module BBS
   # Base widget. All visual elements inherit from this.
   #
-  #   bounds — Rect (x, y, width, height) in screen coordinates
-  #   parent — enclosing Container, or nil
-  #   id     — optional symbol for lookup via Container#find
+  # [bounds] a Rect (x, y, width, height) in screen coordinates
+  # [parent] the enclosing Container, or +nil+
+  # [id]     an optional Symbol for lookup via Container#find
   #
-  # Subclasses override render(frame) and optionally handle_event(event).
+  # Subclasses override #render and optionally #handle_event.
   class Widget
+    # A rectangle of screen cells: +x+ and +y+ are the 1-based top-left cell,
+    # +width+ and +height+ the size. <tt>contains?(px, py)</tt> tells whether
+    # a cell lies inside it.
     Rect = Struct.new(:x, :y, :width, :height) do
       def contains?(px, py)
         px >= x && px < x + width && py >= y && py < y + height
@@ -17,9 +20,18 @@ module BBS
       def to_s = "##{x},#{y} #{width}x#{height}"
     end
 
+    # The Rect the widget occupies, its parent Container, its lookup id, and
+    # whether it is visible, has the focus, and is enabled. A new widget is
+    # visible, enabled and not focused.
     attr_accessor :bounds, :parent, :id, :visible, :focused, :enabled
+    # The BBS::Theme set on this widget, or +nil+ to use the parent's.
     attr_reader   :theme
 
+    # Creates a widget.
+    #
+    # [id]     an optional Symbol for Container#find
+    # [bounds] a Rect; defaults to an empty one at 1, 1
+    # [theme]  a BBS::Theme; defaults to the parent's
     def initialize(id: nil, bounds: nil, theme: nil)
       @id       = id
       @bounds   = bounds || Rect.new(1, 1, 0, 0)
@@ -74,6 +86,8 @@ module BBS
 
     protected
 
+    # Returns the SGR style for +key+ from this widget's theme, or from the
+    # parent's when none is set; +nil+ when neither has a theme.
     def style(key)
       th = @theme || (parent && parent.theme)
       th ? th.style(key) : nil

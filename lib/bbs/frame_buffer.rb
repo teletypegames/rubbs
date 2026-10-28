@@ -1,25 +1,43 @@
 # frozen_string_literal: true
 
 module BBS
+  # An off-screen grid of character cells, each holding one character and
+  # the SGR escape sequence that styles it. Widgets and windows draw into a
+  # frame buffer with 1-based coordinates; #diff then turns the changes
+  # since the previous frame into the ANSI bytes to send to the terminal.
+  #
+  #   buf = BBS::FrameBuffer.new(80, 24)
+  #   buf.box(x: 1, y: 1, width: 20, height: 5, title: 'Hello')
+  #   session.write(buf.diff(BBS::FrameBuffer.new(80, 24)))
+  #
+  # Anything drawn outside the grid is clipped.
   class FrameBuffer
+    # One screen cell: +char+ is the character shown, +sgr+ the SGR escape
+    # sequence that styles it (+nil+ for the terminal default).
     Cell = Struct.new(:char, :sgr)
+    # The empty cell a cleared buffer is filled with: a space, no style.
     BLANK = Cell.new(' ', nil).freeze
 
+    # Matches one CSI escape sequence (<tt>ESC [</tt> parameters and a final
+    # letter or <tt>~</tt>), used to strip styling when measuring text.
     ANSI_ESC_RE = /\e\[[\d;]*[A-Za-z~]/.freeze
 
-    # The text as a String a regexp can read: invalid bytes become '?'.
+    # Returns +value+ as a String a regexp can read: invalid bytes become
+    # <tt>?</tt>.
     def self.text(value)
       s = value.to_s
       s.valid_encoding? ? s : s.scrub('?')
     end
 
-    # Length of the visible portion of an ANSI-styled string.
+    # Returns the number of characters of +text+ left once its ANSI escape
+    # sequences are removed.
     def self.visible_width(text)
       self.text(text).gsub(ANSI_ESC_RE, '').length
     end
 
-    # Truncate an ANSI-styled string so its visible width is ≤ max_width.
-    # SGR escape sequences are preserved (they have zero visible width).
+    # Returns +text+ cut so that at most +max_width+ characters are visible.
+    # Escape sequences up to the cut are kept (they take no width); an empty
+    # String when +max_width+ is zero or less.
     def self.clip_ansi(text, max_width)
       return '' if max_width <= 0
       out     = +''
@@ -44,10 +62,13 @@ module BBS
       out
     end
 
-    # Word-wrap an ANSI-styled string to lines of visible width ≤ width.
-    # SGR state is carried across wrapped lines: when the original text has
-    # an active color/attribute at a wrap point, the next line starts with
-    # that same SGR sequence so styling continues seamlessly.
+    # Word-wraps the ANSI-styled +text+ to lines of at most +width+ visible
+    # characters and returns them as an Array of Strings, with trailing
+    # spaces removed. A word longer than +width+ stays on a line of its own.
+    #
+    # The style is carried across wrapped lines: when an SGR sequence is
+    # active at a wrap point, the next line starts with that sequence again.
+    # Returns <tt>['']</tt> when +width+ is zero or less.
     def self.wrap_ansi(text, width)
       return [''] if width <= 0
       s = self.text(text)
@@ -95,27 +116,35 @@ module BBS
       lines.empty? ? [''] : lines
     end
 
+    # The width (+cols+) and height (+rows+) of the grid in cells.
     attr_reader :cols, :rows
 
+    # Creates a blank buffer of +cols+ by +rows+ cells with the cursor at the
+    # top left.
     def initialize(cols, rows)
       @cols = cols
       @rows = rows
       clear
     end
 
+    # Fills every cell with BLANK and moves the cursor to the top left.
     def clear
       @cells = Array.new(@rows) { Array.new(@cols) { BLANK } }
       @cx    = 0
       @cy    = 0
     end
 
-    # Off-screen positions are kept as they are: whatever is written there
-    # is clipped, not piled up in the last column or row.
+    # Moves the cursor to column +col+, row +row+ (1-based). Off-screen
+    # positions are kept as they are: whatever is written there is clipped,
+    # not piled up in the last column or row.
     def move(col, row)
       @cx = col - 1
       @cy = row - 1
     end
 
+    # Writes +text+ character by character from the cursor with style +sgr+,
+    # advancing the cursor. Escape sequences are not interpreted; characters
+    # off the grid are dropped.
     def write(text, sgr: nil)
       text.to_s.each_char do |ch|
         break if @cy >= @rows
@@ -124,10 +153,15 @@ module BBS
       end
     end
 
-    # Write text that may contain embedded ANSI SGR sequences. base_sgr is the
-    # initial style; an embedded \e[...m adds to it and a reset returns to it.
-    # \e[nC moves right; \e[row;colH is honoured only with `cursor: true`
-    # (a TUI page), so content in a widget cannot jump out of it.
+    # Writes +text+ from the cursor, interpreting the escape sequences in it.
+    #
+    # [base_sgr] the starting style; an embedded <tt>\e[...m</tt> adds to it
+    #            and a reset (<tt>\e[m</tt>, <tt>\e[0m</tt>) returns to it
+    # [cursor]   honour <tt>\e[row;colH</tt> cursor moves (a TUI page); off by
+    #            default so content in a widget cannot jump out of it
+    #
+    # <tt>\e[nC</tt> writes +n+ styled spaces. Other control characters and
+    # other escape sequences are skipped.
     def write_ansi(text, base_sgr: nil, cursor: false)
       cur_sgr = base_sgr
       s       = text.to_s
@@ -178,6 +212,8 @@ module BBS
 
     # ── Drawing helpers (1-based coordinates) ────────────────────────────────
 
+    # Fills the rectangle at +x+, +y+ of +width+ by +height+ cells with
+    # +char+ in style +sgr+.
     def fill(x:, y:, width:, height:, sgr: nil, char: ' ')
       height.times do |r|
         move(x, y + r)
@@ -185,11 +221,15 @@ module BBS
       end
     end
 
+    # Draws a horizontal line of +length+ +char+ characters from +x+, +y+
+    # in style +sgr+.
     def hline(x:, y:, length:, char: '─', sgr: nil)
       move(x, y)
       write(char * [length, 0].max, sgr: sgr)
     end
 
+    # Draws a vertical line of +length+ +char+ characters down from +x+, +y+
+    # in style +sgr+.
     def vline(x:, y:, length:, char: '│', sgr: nil)
       length.times do |r|
         move(x, y + r)
@@ -197,11 +237,22 @@ module BBS
       end
     end
 
+    # Box-drawing characters per frame style (+:single+, +:double+): the
+    # corners +:tl+, +:tr+, +:bl+, +:br+ and the edges +:h+, +:v+.
     BOX_CHARS = {
       single: { tl: '┌', tr: '┐', bl: '└', br: '┘', h: '─', v: '│' },
       double: { tl: '╔', tr: '╗', bl: '╚', br: '╝', h: '═', v: '║' },
     }.freeze
 
+    # Draws a frame of +width+ by +height+ cells with its top left at +x+,
+    # +y+. Does nothing when either side is under 2.
+    #
+    # [sgr]          style of the frame
+    # [fill_sgr]     when given, the inside is cleared with spaces in this style
+    # [style]        a BOX_CHARS key; an unknown one draws +:single+
+    # [title]        text set into the top edge, clipped to fit
+    # [title_sgr]    style of the title (defaults to +sgr+)
+    # [title_indent] edge characters drawn before the title
     def box(x:, y:, width:, height:, sgr: nil, fill_sgr: nil, style: :single, title: nil, title_sgr: nil, title_indent: 0)
       return if width < 2 || height < 2
       g  = BOX_CHARS[style] || BOX_CHARS[:single]
@@ -238,6 +289,9 @@ module BBS
       write(g[:br], sgr: sgr)
     end
 
+    # Draws the drop shadow of a +width+ by +height+ rectangle at +x+, +y+:
+    # two columns down its right side and one row under it, offset by one
+    # row and two columns, in style +sgr+ (black background by default).
     def shadow(x:, y:, width:, height:, sgr: nil)
       sgr ||= "\e[40m"
       # right edge
@@ -250,7 +304,11 @@ module BBS
       write(' ' * [width, 0].max, sgr: sgr) if y + height <= @rows
     end
 
-    # Compute the minimal ANSI byte stream to transform +from+ into +self+.
+    # Returns the ANSI byte String that turns a screen showing the frame
+    # buffer +from+ into this one: only changed cells are written, with a
+    # cursor move only where the next changed cell is not adjacent. Each
+    # style change starts from a reset; the stream ends with a reset when
+    # any styled cell was written. Both buffers must have the same size.
     def diff(from)
       out     = +""
       cur_sgr = :_none
@@ -286,8 +344,10 @@ module BBS
 
     protected
 
+    # Returns whether the cursor is inside the grid.
     def visible? = @cy >= 0 && @cy < @rows && @cx >= 0 && @cx < @cols
 
+    # Returns the Cell at the 0-based +row+ and +col+.
     def cell_at(row, col)
       @cells[row][col]
     end

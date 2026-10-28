@@ -16,11 +16,21 @@ module BBS
   # the other board takes it for a Commodore. Everything else goes through
   # untouched both ways, mouse reports and PETSCII included.
   class Gateway
+    # Seconds to wait for the other board to accept the connection.
     CONNECT_TIMEOUT = 5
+    # Seconds to wait for the caller's key before the line goes back to the
+    # board.
     BACK_WAIT       = 30
 
+    # The other board's host name, its port as an Integer, and the name
+    # shown to the caller.
     attr_reader :host, :port, :name
 
+    # Creates a gateway to +host+:+port+.
+    #
+    # [name]     the name shown to the caller; defaults to <tt>host:port</tt>
+    # [terminal] the terminal type reported to the other board when it asks
+    #            (not on a PETSCII line)
     def initialize(host:, port:, name: nil, terminal: 'XTERM-256COLOR')
       @host     = host
       @port     = port.to_i
@@ -30,7 +40,12 @@ module BBS
 
     # The door's program: connects, carries the line until the other board
     # hangs up, and waits for a key before the board takes the line back.
-    # A caller who hangs up meanwhile ends the call (IOError).
+    # A caller who hangs up meanwhile ends the call (IOError). When the
+    # other board does not answer, the caller is told so and the method
+    # returns after a key.
+    #
+    # [session]  the caller's BBS::Session
+    # [_context] the caller's context; not used
     def call(session, _context = {})
       remote = connect(session) or return
       begin
@@ -63,20 +78,35 @@ module BBS
     # One crossing: the bytes of the other board down to the caller, the
     # caller's up to it, each way a small telnet state machine.
     class Link
+      # Telnet "interpret as command" byte (BBS::Telnet::IAC).
       IAC      = Telnet::IAC
+      # Telnet WILL command byte.
       WILL     = Telnet::WILL
+      # Telnet WONT command byte.
       WONT     = Telnet::WONT
+      # Telnet DO command byte.
       DO       = Telnet::DO
+      # Telnet DONT command byte.
       DONT     = Telnet::DONT
+      # Telnet subnegotiation begin byte.
       SB       = Telnet::SB
+      # Telnet subnegotiation end byte.
       SE       = Telnet::SE
+      # Telnet ECHO option code.
       ECHO_OPT = Telnet::ECHO_OPT
+      # Telnet SUPPRESS-GO-AHEAD option code.
       SGA_OPT  = Telnet::SGA_OPT
+      # Telnet NAWS (window size) option code.
       NAWS_OPT = Telnet::NAWS_OPT
 
+      # Bytes read from either side at a time.
       CHUNK = 4096
+      # Telnet TERMINAL-TYPE option code.
       TTYPE = 24
 
+      # Creates a link between the caller's +session+ and the +remote+
+      # socket of the other board. +terminal+ is the terminal type reported
+      # when the other board asks.
       def initialize(session, remote, terminal:)
         @session  = session
         @client   = session.line
@@ -89,7 +119,11 @@ module BBS
         @hung_up  = false
       end
 
-      # True when the caller hung up, false when the other board did.
+      # Carries the bytes both ways until one side hangs up: the other
+      # board's down to the caller in this thread, the caller's up in a new
+      # one.
+      #
+      # Returns true when the caller hung up, false when the other board did.
       # The caller's side ends by shutting the other board's socket down,
       # which wakes the reader of this thread; it is closed by the gateway,
       # never by a thread that may be killed halfway through closing it.

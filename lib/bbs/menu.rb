@@ -4,10 +4,27 @@ require_relative 'widget'
 require_relative 'window'
 
 module BBS
-  # Menubar — a horizontal strip at the top of the screen with named
-  # menus. Each menu has a label like "&File" (Alt-F opens it) and a list of
-  # MenuItem objects.
+  # A horizontal strip at the top of the screen with named drop-down menus.
+  # Each menu has a label like <tt>&File</tt> (the letter after the
+  # <tt>&</tt> is the hotkey, so Alt-F opens it) and a list of MenuItem
+  # entries. F10 opens the first menu; the arrow keys, Enter, Esc, the item
+  # hotkeys and the mouse work inside an open one.
+  #
+  #   bar = BBS::Menubar.new
+  #   bar.add_menu('&File') do
+  #     item('&Open', shortcut: 'F3') { |item| open_file }
+  #     separator
+  #     item('E&xit', shortcut: 'Alt-X') { :halt }
+  #   end
+  #
+  # The bar itself never takes the keyboard focus (#focusable? is false);
+  # the application passes events to #handle_event first.
   class Menubar < Widget
+    # One menu on the bar: +label+ with an optional <tt>&</tt> before the
+    # hotkey letter, +items+ an Array of MenuItem, +x+ the column it was last
+    # drawn at (+nil+ before the first render). +hotkey+ returns the
+    # lower-case hotkey letter or +nil+, +display+ the label without the
+    # <tt>&</tt>.
     Menu = Struct.new(:label, :items, :x, keyword_init: true) do
       def hotkey
         idx = label.index('&')
@@ -17,6 +34,13 @@ module BBS
       def display = label.sub('&', '')
     end
 
+    # One entry of a menu, built by MenuBuilder: +label+ (with an optional
+    # <tt>&</tt> before the hotkey letter), +shortcut+ (text shown at the
+    # right edge, for display only), +enabled+ (+true+, +false+ or a callable
+    # asked each time), +on_select+ (the block called with the item when it
+    # is chosen) and +separator+ (a dividing line rather than an entry).
+    # +hotkey+ returns the lower-case hotkey letter or +nil+, +display+ the
+    # text shown, #enabled? whether the item can be chosen.
     MenuItem = Struct.new(:label, :shortcut, :enabled, :on_select, :separator,
                           keyword_init: true) do
       def hotkey
@@ -27,7 +51,9 @@ module BBS
 
       def display = separator ? '─' : label.sub('&', '')
 
-      # A lambda is asked every time; otherwise only false disables.
+      # Returns whether the item can be chosen: never for a separator; a
+      # callable +enabled+ is asked every time; otherwise only +false+
+      # disables.
       def enabled?
         return false if separator
         return enabled.call ? true : false if enabled.respond_to?(:call)
@@ -36,9 +62,14 @@ module BBS
       end
     end
 
+    # The Array of Menu entries, in bar order.
     attr_reader :menus
+    # A callable invoked with the MenuItem after any item is activated
+    # (after its own block), or +nil+.
     attr_accessor :on_activate
 
+    # Creates an empty menu bar; +kw+ (+id+, +bounds+, +theme+) go to
+    # Widget.new.
     def initialize(**kw)
       super
       @menus       = []
@@ -47,6 +78,10 @@ module BBS
       @on_activate = nil
     end
 
+    # Appends a menu called +label+ to the bar. The block is evaluated in a
+    # MenuBuilder, so its +item+ and +separator+ calls fill the menu.
+    #
+    # Returns +self+.
     def add_menu(label, &block)
       builder = MenuBuilder.new
       builder.instance_eval(&block) if block
@@ -54,11 +89,18 @@ module BBS
       self
     end
 
+    # Returns whether a menu is dropped down.
     def open?           = !@open_index.nil?
+    # Returns the Menu that is dropped down, or +nil+.
     def opened_menu     = @open_index ? @menus[@open_index] : nil
+    # Returns the index of the open menu in #menus, or +nil+.
     def open_index      = @open_index
+    # Returns the highlighted MenuItem of the open menu, or +nil+.
     def selected_item   = opened_menu&.items&.[](@item_index)
 
+    # Drops down the menu at +index+ (clamped to the existing menus) and
+    # highlights its first enabled item. Does nothing when there are no
+    # menus.
     def open(index)
       return if @menus.empty?
 
@@ -67,13 +109,18 @@ module BBS
       @item_index = first_selectable_index(@menus[idx].items) || 0
     end
 
+    # Closes the open menu, if any.
     def close
       @open_index = nil
       @item_index = 0
     end
 
+    # Returns +false+: the bar never takes the keyboard focus.
     def focusable? = false
 
+    # Draws the bar across its bounds into the BBS::FrameBuffer +frame+,
+    # with the hotkey letters highlighted, and the open menu's drop-down
+    # box with its shadow under it. Records each menu's column in Menu#x.
     def render(frame)
       sgr     = style(:menubar)
       sel     = style(:menubar_selected)
@@ -100,6 +147,12 @@ module BBS
       render_dropdown(frame) if open?
     end
 
+    # Handles a keyboard or mouse event: inside an open menu through
+    # #navigate, otherwise F10 or an Alt-hotkey opens a menu
+    # (#open_via_keyboard) and a left click on a label toggles it.
+    #
+    # Returns +:halt+ when an activated item's block returned +:halt+,
+    # +:handled+ when the bar used the event, +nil+ otherwise.
     def handle_event(event)
       return navigate(event) if open?
       return open_via_keyboard(event) if event.key?
@@ -109,6 +162,15 @@ module BBS
       nil
     end
 
+    # Handles +event+ while a menu is open: Left/Right switch menus, Up/Down
+    # move to the previous/next enabled item, Enter or the item's hotkey
+    # letter activates it, Esc or F10 closes the menu. A left click selects
+    # an item, switches menus or closes the menu when outside it; other
+    # mouse events are swallowed.
+    #
+    # Activating an item closes the menu, calls its +on_select+ block with
+    # the item, then #on_activate. Returns +:halt+ when the block returned
+    # +:halt+, +:handled+ otherwise, or +nil+ when no menu is open.
     def navigate(event)
       if event.mouse?
         if event.mouse.kind == :press && event.mouse.button == :left
@@ -143,6 +205,9 @@ module BBS
       :handled
     end
 
+    # Opens the first menu on F10, or the menu whose hotkey matches an
+    # Alt-letter +event+. Returns +:handled+ when a menu opened, +nil+
+    # otherwise.
     def open_via_keyboard(event)
       if event.key == :f10
         open(0)
@@ -313,18 +378,32 @@ module BBS
       end
     end
 
+    # The receiver of the block given to Menubar#add_menu: collects the
+    # menu's entries in order.
     class MenuBuilder
+      # The Array of MenuItem collected so far.
       attr_reader :items
 
+      # Creates a builder with no items.
       def initialize
         @items = []
       end
 
+      # Adds an entry labelled +label+.
+      #
+      # [shortcut] text shown at the right edge of the entry; it does not
+      #            bind a key
+      # [enabled]  +true+, +false+, or a callable asked each time the menu is
+      #            drawn or used
+      #
+      # The block is called with the MenuItem when the entry is chosen;
+      # returning +:halt+ from it ends the application.
       def item(label, shortcut: nil, enabled: true, &block)
         @items << MenuItem.new(label: label, shortcut: shortcut,
                                enabled: enabled, on_select: block, separator: false)
       end
 
+      # Adds a dividing line, which cannot be selected.
       def separator
         @items << MenuItem.new(label: '', shortcut: nil, enabled: false,
                                on_select: nil, separator: true)

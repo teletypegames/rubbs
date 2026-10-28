@@ -15,19 +15,29 @@ module BBS
   # two machines go back a character differently. A caller who does not answer
   # gets what is picked, or the guess.
   module Terminal
+    # Seconds to wait for the telnet negotiation before guessing.
     SETTLE = 1.5
+    # Seconds to wait for each key at the question before taking the pick.
     WAIT   = 60
 
+    # The two faces: for each, the digit shown, the label of its line in the
+    # question, and the keys that pick it.
     FACES = {
       modern: { digit: '1', label: 'MODERN (ANSI/XTERM, 256 COLORS)', keys: %w[1 a A m M] },
       c64:    { digit: '2', label: 'COMMODORE 64 (PETSCII, 40 COLUMNS)', keys: %w[2 c C p P] }
     }.freeze
 
+    # Guesses the face of +session+ from the telnet answers: +:modern+ when
+    # the terminal reported its window size within SETTLE seconds and it is
+    # wider than 40 columns, +:c64+ otherwise.
     def self.guess(session)
       session.settle(timeout: SETTLE) && session.term_cols > Petscii::COLS ? :modern : :c64
     end
 
-    # :modern or :c64; nil when the line drops.
+    # Asks the caller which face the terminal gets, with +title+ printed in
+    # capitals above the choices and the guess as the default.
+    #
+    # Returns +:modern+ or +:c64+; +nil+ when the line drops.
     def self.choose(session, title:)
       default = guess(session)
       prompt  = "YOUR TERMINAL [#{FACES[default][:digit]}]: "
@@ -55,6 +65,14 @@ module BBS
     # mouse reporting on a modern terminal when config.mouse is on), then run
     # that face's Flow. The board keeps config.mouse_on_connect off: the
     # mouse's escape sequence would be garbage on a C64.
+    #
+    # [title]  the board's name, shown above the question
+    # [modern] the BBS::Flow for a modern terminal
+    # [c64]    the BBS::Flow for a Commodore 64
+    #
+    # Returns a BBS::Flow that halts when the line drops at the question.
+    #
+    #   BBS.configure { |c| c.flow = BBS::Terminal.flow(title: 'My board', modern: MODERN, c64: C64) }
     def self.flow(title:, modern:, c64:)
       faces = { modern: modern, c64: c64 }
       Flow.define do

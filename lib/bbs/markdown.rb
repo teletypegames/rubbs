@@ -3,16 +3,28 @@
 require_relative 'frame_buffer'
 
 module BBS
-  # Markdown → ANSI line array renderer.
+  # Markdown to ANSI line array renderer.
   #
   #   BBS::Markdown.to_lines(text, width:, theme:)
   #
   # Returns an array of strings (one per terminal line) with embedded ANSI SGR
-  # codes — suitable for BBS::Widgets::ScrollView. Each inline span ends with
-  # the theme :text SGR so that trailing text keeps the right background.
+  # codes, suitable for BBS::Widgets::ScrollView. Each inline span ends with
+  # the theme +:text+ SGR so that trailing text keeps the right background.
+  #
+  # Handled: headings, paragraphs, fenced code blocks, block quotes, bullet
+  # and numbered lists, horizontal rules, GFM tables, and inline links, code,
+  # bold and italic. The methods are module functions.
   module Markdown
     module_function
 
+    # Renders the Markdown +text+ as terminal lines.
+    #
+    # [width] the line width in columns; paragraphs wrap and code lines are
+    #         clipped to it
+    # [theme] a BBS::Theme (or a Hash) whose +:text+, +:text_bright+,
+    #         +:text_dim+, +:accent+ and +:label+ SGR styles colour the output
+    #
+    # Returns an Array of String, one per line.
     def to_lines(text, width:, theme:)
       text = FrameBuffer.text(text)
       styles = {
@@ -149,6 +161,10 @@ module BBS
       [body.join(' '), j - index]
     end
 
+    # Returns +text+ with inline Markdown turned into SGR codes: links (the
+    # link text only), <tt>`code`</tt>, <tt>**bold**</tt>, and
+    # <tt>*italic*</tt> or <tt>_italic_</tt>, each span from the matching
+    # +styles+ entry followed by +base_sgr+. Backslash escapes are removed.
     def inline(text, styles, base_sgr)
       s = text.to_s
       s = s.gsub(/\[([^\]]+)\]\(([^)]+)\)/) { "#{styles[:link]}#{::Regexp.last_match(1)}#{base_sgr}" }
@@ -165,8 +181,8 @@ module BBS
 
     # ── GFM tables ───────────────────────────────────────────────────────────
 
-    # Split a `| a | b |` table row into trimmed cell strings, tolerating
-    # missing leading/trailing pipes.
+    # Splits a <tt>| a | b |</tt> table row into an Array of trimmed cell
+    # strings, tolerating missing leading/trailing pipes.
     def split_row(line)
       s = line.strip
       s = s[1..]  if s.start_with?('|')
@@ -174,15 +190,15 @@ module BBS
       s.split('|').map(&:strip)
     end
 
-    # True when a line is a table delimiter row, e.g. `|---|:--:|---:|`.
+    # True when a line is a table delimiter row, e.g. <tt>|---|:--:|---:|</tt>.
     def separator_row?(line)
       return false unless line.include?('-')
       cells = split_row(line)
       !cells.empty? && cells.all? { |c| c.match?(/\A:?-{1,}:?\z/) }
     end
 
-    # Per-column alignment (:left / :center / :right) derived from the
-    # delimiter row, padded/truncated to `ncols`.
+    # Returns the per-column alignment (+:left+, +:center+ or +:right+)
+    # derived from the delimiter row, padded or truncated to +ncols+.
     def parse_aligns(sep_line, ncols)
       cells = split_row(sep_line)
       aligns = cells.map do |c|
@@ -197,7 +213,9 @@ module BBS
       aligns[0, ncols]
     end
 
-    # Render a parsed table as box-drawn ANSI lines that fit within `width`.
+    # Renders a parsed table as box-drawn ANSI lines that fit within +width+,
+    # shrinking the widest columns when it overflows. Returns an Array of
+    # String.
     def render_table(header, aligns, rows, width, styles, base)
       ncols = header.size
       return [] if ncols.zero?
@@ -248,7 +266,8 @@ module BBS
       out
     end
 
-    # Clip-or-pad a pre-styled cell to the column width, honouring alignment.
+    # Clips or pads a pre-styled cell to the column width +w+, honouring
+    # +align+; a header cell is set in the bold style.
     def fit_cell(styled, w, align, styles, base, header_row)
       content = header_row ? "#{styles[:bold]}#{styled}#{base}" : styled
       vis     = FrameBuffer.visible_width(styled)

@@ -1,7 +1,21 @@
 # frozen_string_literal: true
 
 module BBS
+  # Runs a BBS::Flow on a session: walks its steps in order (screens,
+  # banners, prompts, menus, blocks, nested TUI, Application and FakeOS
+  # programs), writing to and reading from the caller's line, with a context
+  # Hash that +ask+, +set+, +fetch+ and +pick+ steps fill and later steps
+  # and blocks read.
+  #
+  #   BBS::FlowRunner.new(session, session_id, flow, context: { name: 'Zsolt' }).run
+  #
+  # An error raised in a block step is reported to the caller and on stderr
+  # and the flow carries on; a dropped line (IOError, EPIPE, ECONNRESET)
+  # ends it.
   class FlowRunner
+    # Named colours for the +style+ and +color+ options of the steps: style
+    # Symbol => SGR String. An unknown name falls back to +:muted+ (or
+    # +:success+ for banners).
     STYLES = {
       success: "\e[1;32m",
       muted:   "\e[0;37m",
@@ -18,10 +32,12 @@ module BBS
       red:     "\e[1;31m",
     }.freeze
 
+    # The caller's session ID and the BBS::Session the flow runs on.
     attr_reader :session_id, :session
 
-    # `context` seeds the flow's context, e.g. the caller's name when a flow
-    # runs as a door.
+    # Creates a runner for +flow+ (a BBS::Flow) on +session+. +context+
+    # seeds the flow's context, such as the caller's name when a flow runs
+    # as a door; +session_id+ is stored in it under +:session_id+.
     def initialize(session, session_id, flow, context: {})
       @session    = session
       @session_id = session_id
@@ -29,11 +45,20 @@ module BBS
       @ctx        = { **context, session_id: session_id }
     end
 
+    # Runs the flow's steps until they end or one stops the flow. Returns
+    # +:halt+ when the flow was stopped (a hang-up, a failed +ask+ or +gate+,
+    # a refused confirmation, a block returning +:halt+), +:exit_menu+ when
+    # an +exit_menu+ step ran outside a menu, +nil+ otherwise.
     def run
       execute(@flow.steps)
     end
 
+    # Writes +data+ to the caller's line. Blocks of +call+ steps get the
+    # runner as their second argument to write with.
     def write(data) = @session.write(data)
+    # Reads a line from the caller, echoing +mask+ in place of each
+    # character when given. Returns the line, or +nil+ when the caller hung
+    # up.
     def readline(mask: nil) = @session.readline(mask: mask)
 
     private

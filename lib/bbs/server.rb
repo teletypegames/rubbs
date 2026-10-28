@@ -3,15 +3,32 @@
 require 'socket'
 
 module BBS
+  # The telnet listener. It accepts connections on a TCP port and runs a
+  # BBS::Session for each caller in its own thread, up to
+  # <tt>BBS.config.max_sessions</tt> callers at once.
+  #
+  #   BBS::Server.new(port: 2323).run
   class Server
+    # Seconds a silent line may stay connected when
+    # <tt>BBS.config.idle_seconds</tt> is not set.
     DEFAULT_TIMEOUT = 900
 
+    # Creates a server that will listen on +port+ on all interfaces. Nothing
+    # is opened until #run.
     def initialize(port:)
       @port     = port
       @mu       = Mutex.new
       @sessions = 0
     end
 
+    # Opens the port and serves callers until the process is interrupted.
+    # Blocks the calling thread.
+    #
+    # Each accepted connection gets an idle timeout and a BBS::Session in a
+    # new thread. A caller over the session limit is told the board is busy
+    # and disconnected. Session errors are logged and end only that session;
+    # <tt>BBS.config.on_session_end</tt> is called with the session when it
+    # finishes. On Interrupt it prints "Server stopped." and returns.
     def run
       server = TCPServer.new('0.0.0.0', @port)
       puts "BBS listening on port #{@port} — connect with: telnet localhost #{@port}"

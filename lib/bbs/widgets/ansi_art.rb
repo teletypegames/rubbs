@@ -4,7 +4,7 @@ require_relative '../widget'
 
 module BBS
   module Widgets
-    # AnsiArt — render a CP437 / ANSI art file (or any pre-encoded ASCII art)
+    # AnsiArt: renders a CP437 / ANSI art file (or any pre-encoded ASCII art)
     # into a region of the screen.
     #
     #   art = BBS::Widgets::AnsiArt.from_file('art/welcome.ans')
@@ -12,22 +12,35 @@ module BBS
     #   container.add(art)
     #
     # File handling:
-    #   .ans / .asc / .nfo  → decoded as IBM437 → UTF-8
-    #   .ansi / .txt         → assumed to already be UTF-8 (or 7-bit ASCII +
-    #                          ANSI escapes)
-    #   any other extension  → tries UTF-8 first, falls back to IBM437
     #
-    # SAUCE metadata (last 129 bytes, marked by \x1A SUB) is stripped.
+    # [.ans, .asc, .nfo]    decoded as IBM437 to UTF-8
+    # [.ansi, .txt]         assumed to already be UTF-8 (or 7-bit ASCII +
+    #                       ANSI escapes)
+    # [any other extension] tries UTF-8 first, falls back to IBM437
+    #
+    # Everything from the first \x1A (SUB) byte on, the SAUCE metadata
+    # included, is stripped.
     #
     # Layout options:
-    #   align: :center (default), :left, :right    — horizontal placement
-    #   valign: :middle (default), :top, :bottom   — vertical placement
-    #   width  — clip art to this many visible columns (default: auto)
+    #
+    # [align]       +:center+ (default), +:left+ or +:right+: horizontal
+    #               placement
+    # [valign]      +:middle+ (default), +:top+ or +:bottom+: vertical
+    #               placement
+    # [fill_parent] take the parent's bounds on every render (default true)
+    #
+    # Lines wider or more than the bounds are clipped.
     #
     # See AnsiArt.random(dir) for picking a random file from a directory.
     class AnsiArt < Widget
+      # The art lines (Strings with ANSI escapes), the widest line's visible
+      # width, the number of lines, the horizontal and vertical alignment,
+      # and whether the widget takes its parent's bounds. The widths are
+      # computed by AnsiArt.new and not updated when +lines+ is set.
       attr_accessor :lines, :art_width, :art_height, :align, :valign, :fill_parent
 
+      # Creates the widget from +lines+, an Array of String. Other keywords
+      # go to Widget.new.
       def initialize(lines: [], align: :center, valign: :middle, fill_parent: true, **kw)
         super(**kw)
         @lines       = lines
@@ -38,10 +51,15 @@ module BBS
         @art_height  = lines.size
       end
 
+      # Creates the widget from the art file at +path+ (see the file handling
+      # above). +opts+ go to AnsiArt.new. Raises SystemCallError when the file
+      # cannot be read.
       def self.from_file(path, **opts)
         new(lines: load_file(path), **opts)
       end
 
+      # Creates the widget from +text+, split into lines at CR, LF or CRLF.
+      # +opts+ go to AnsiArt.new.
       def self.from_string(text, **opts)
         new(lines: split_lines(text), **opts)
       end
@@ -56,10 +74,14 @@ module BBS
         new(lines: built_in_fallback, **opts)
       end
 
+      # Returns the lines of the built-in art used when no file is available.
       def self.default_lines
         built_in_fallback
       end
 
+      # Draws the art into +frame+ within the bounds (the parent's when
+      # +fill_parent+ is set), aligned and clipped, on the theme's +:text+
+      # style.
       def render(frame)
         return if @lines.empty?
         if @fill_parent && parent && parent.bounds
@@ -87,6 +109,7 @@ module BBS
         end
       end
 
+      # The keys that scroll AnsiArt.view instead of leaving it.
       VIEW_SCROLL_KEYS = %i[up down page_up page_down home end].freeze
 
       # Shows art on the whole screen, the way an art viewer of the old boards
@@ -125,6 +148,9 @@ module BBS
         end
       end
 
+      # Returns the escape sequences that draw one screen of AnsiArt.view:
+      # +view_h+ of +lines+ from index +top+, centred on a +cols+ x +rows+
+      # screen, with the status line (+title+ and position) on the last row.
       def self.view_frame(lines, top, cols, rows, view_h, title)
         width  = lines.map { |l| FrameBuffer.visible_width(l) }.max || 0
         left   = [(cols - width) / 2, 0].max
@@ -140,6 +166,10 @@ module BBS
       end
 
       # ── File loading ────────────────────────────────────────────────────────
+
+      # Reads the art file at +path+, strips the SAUCE part, transcodes it to
+      # UTF-8, and returns its lines. Raises SystemCallError when the file
+      # cannot be read.
       def self.load_file(path)
         raw = File.binread(path)
         raw = strip_sauce(raw)
@@ -147,6 +177,8 @@ module BBS
         split_lines(text)
       end
 
+      # The SAUCE record of an art file: +title+, +author+, +group+, and
+      # +date+ as <tt>YYYY-MM-DD</tt> (empty when missing).
       Sauce = Struct.new(:title, :author, :group, :date, keyword_init: true)
 
       # The SAUCE record of an art file (title, author, group, date), or nil
@@ -170,11 +202,15 @@ module BBS
         nil
       end
 
+      # Returns +bytes+ cut before the first \x1A (SUB) byte, or unchanged
+      # when there is none.
       def self.strip_sauce(bytes)
         sub = bytes.index("\x1A".b)
         sub ? bytes.byteslice(0, sub) : bytes
       end
 
+      # Returns +bytes+ as a UTF-8 String, decoded by the extension of +path+
+      # (see the file handling above); undecodable bytes are replaced.
       def self.transcode(bytes, path)
         ext = File.extname(path).downcase
         case ext
@@ -190,6 +226,8 @@ module BBS
         end
       end
 
+      # Splits +text+ into an Array of lines at CR, LF or CRLF, keeping
+      # trailing empty lines.
       def self.split_lines(text)
         text.gsub(/\r\n?/, "\n").split("\n", -1)
       end

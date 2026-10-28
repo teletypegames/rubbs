@@ -5,9 +5,21 @@ require 'fileutils'
 require 'time'
 
 module BBS
+  # A small thread-safe CSV table keyed by session id, for keeping what
+  # callers entered. The file is created with a header row on first use and
+  # read once into memory.
+  #
+  #   store = BBS::Store.new(path: 'data/callers.csv', headers: %w[session_id timestamp name])
+  #   store.upsert(session_id: ctx[:session_id], name: 'Ada')
+  #
+  # A +session_id+ column is the key; a +timestamp+ column, when present, is
+  # filled with the UTC time a row is created.
   class Store
+    # The column names (an Array of String) and the CSV file path.
     attr_reader :headers, :path
 
+    # Creates a store over the CSV file at +path+ with the column names
+    # +headers+. The file is not touched until the first read or write.
     def initialize(path:, headers:)
       @path    = path
       @headers = headers
@@ -15,6 +27,11 @@ module BBS
       @rows    = nil
     end
 
+    # Updates the row of +session_id+ with +fields+, or appends a new row
+    # when there is none. Keys that are not columns are ignored; values are
+    # stored as strings with control characters removed. Writes the file.
+    #
+    # Returns +self+.
     def upsert(session_id:, **fields)
       @mutex.synchronize do
         load_rows!
@@ -31,6 +48,8 @@ module BBS
       self
     end
 
+    # Returns the row of +session_id+ as a Hash of column name to value, or
+    # +nil+.
     def find(session_id)
       @mutex.synchronize do
         load_rows!
@@ -39,6 +58,7 @@ module BBS
       end
     end
 
+    # Returns every row as an Array of Hash.
     def all
       @mutex.synchronize do
         load_rows!
@@ -46,6 +66,8 @@ module BBS
       end
     end
 
+    # Removes the row of +session_id+ and rewrites the file when there was
+    # one.
     def delete(session_id)
       @mutex.synchronize do
         load_rows!

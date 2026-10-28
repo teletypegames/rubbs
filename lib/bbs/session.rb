@@ -3,18 +3,35 @@
 require 'securerandom'
 
 module BBS
+  # One caller's telnet connection. The server creates one per accepted
+  # socket and calls #run in the connection's thread. The line I/O
+  # (+readkey+, +readline+, +write+ and the rest) comes from BBS::Telnet.
   class Session
     include Telnet
 
+    # [session_id] a random 16-character hex id for this session
+    # [term_cols]  the caller's terminal width in columns (set by
+    #              <tt>Telnet#negotiate</tt> and the client's NAWS reports)
+    # [term_rows]  the caller's terminal height in rows
     attr_reader :session_id, :term_cols, :term_rows
+    # An idle limit in seconds for this session, copied from
+    # BBS.config.idle_seconds when the session starts. The library itself
+    # reads the global setting, not this one.
     attr_accessor :idle_seconds
 
+    # Wraps +client+, the accepted socket (any IO with +read+, +write+ and
+    # +close+).
     def initialize(client)
       @client       = client
       @session_id   = SecureRandom.hex(8)
       @idle_seconds = BBS.config.idle_seconds
     end
 
+    # Negotiates the telnet options, turns on mouse reporting when
+    # BBS.config.mouse and BBS.config.mouse_on_connect are both set, and runs
+    # BBS.config.flow for the caller in a BBS::FlowRunner. Turns the mouse
+    # off and closes the socket when the flow ends or raises. Raises
+    # RuntimeError when BBS.config.flow is not set.
     def run
       negotiate
       enable_mouse if BBS.config.mouse && BBS.config.mouse_on_connect

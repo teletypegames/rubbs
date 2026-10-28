@@ -20,19 +20,40 @@ module BBS
     #     }
     #   )
     #
-    # `on_submit(text, app)` is called when the user presses Enter on a
-    # non-empty input. The input is cleared automatically afterwards unless
-    # the handler returns `:keep`.
+    # <tt>on_submit(text, app)</tt> is called when the user presses Enter on
+    # a non-empty input. The input is cleared automatically afterwards unless
+    # the handler returns +:keep+.
     #
-    # `on_poll(app)` is invoked from the application's idle tick (~1s). It
-    # should return an Array of new lines to append (or nil/[]).
+    # <tt>on_poll(app)</tt> is invoked from the application's idle tick
+    # (~1s). It should return an Array of new lines to append (or nil/[]).
     class Stream < Window
+      # Creates a stream window with the keywords of Stream.new and opens it
+      # on +app+.
+      #
+      # Returns the Stream window.
       def self.open(app, **kw)
         new(app: app, **kw).tap(&:attach)
       end
 
+      # The BBS::Widgets::ScrollView of past lines and the
+      # BBS::Widgets::TextInput under it.
       attr_reader :history, :input
 
+      # Creates the window and its widgets, centred on +app+'s screen. It is
+      # not opened; see #attach.
+      #
+      # [app]           the BBS::Application
+      # [title]         the window title
+      # [initial_lines] the lines the history starts with
+      # [placeholder]   the text the empty input shows
+      # [on_submit]     called with <tt>(text, app)</tt> on Enter
+      # [on_poll]       called with +app+ on each tick; returns new lines
+      # [buffer_size]   the most lines the history keeps (default 500)
+      # [width]         the window width; by default the screen less 8
+      # [height]        the window height; by default the screen less 6
+      # [close_button]  adds a Close button (default true)
+      # [close_label]   the Close button's label
+      # [maximizable]   gives the window the zoom gadget
       def initialize(app:, title:, initial_lines: [], placeholder: '',
                      on_submit: nil, on_poll: nil, buffer_size: 500,
                      width: nil, height: nil,
@@ -52,6 +73,9 @@ module BBS
         build
       end
 
+      # Opens the window on the application and focuses the input.
+      #
+      # Returns +self+.
       def attach
         @app.open_window(self)
         reset_focus
@@ -59,6 +83,9 @@ module BBS
         self
       end
 
+      # Called on the application's idle tick: appends the lines +on_poll+
+      # returns to the history, drops the oldest beyond +buffer_size+, and
+      # scrolls to the end. Does nothing without +on_poll+ or new lines.
       def tick(_app)
         return unless @on_poll
         new_lines = @on_poll.call(@app)
@@ -67,8 +94,12 @@ module BBS
         @history.scroll = [@history.lines.size - @history.bounds.height, 0].max
       end
 
+      # A stream window can be resized; #place lays it out again.
       def resizable? = true
 
+      # Returns the un-maximized bounds as <tt>[x, y, width, height]</tt>:
+      # the requested size, or the screen less 8 columns and 6 rows,
+      # centred.
       def normal_rect
         w = @width  || @app.cols - 8
         h = @height || @app.rows - 6

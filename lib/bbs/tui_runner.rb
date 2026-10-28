@@ -1,7 +1,13 @@
 # frozen_string_literal: true
 
 module BBS
+  # Runs a BBS::TUI on a session: renders the current page, reads a key,
+  # dispatches it to the page's bindings, and repeats until a binding
+  # returns +:halt+ or the line drops.
   class TUIRunner
+    # Creates a runner for +tui+ on +session+. The entries of +context+
+    # become instance variables of the page Context (<tt>:name</tt> becomes
+    # <tt>@name</tt>).
     def initialize(session, session_id, tui, context: {})
       @session    = session
       @session_id = session_id
@@ -9,6 +15,11 @@ module BBS
       @context    = context
     end
 
+    # Runs the TUI until it halts, the line drops, or a key read times out
+    # after <tt>BBS.config.idle_seconds</tt>. An +:idle+ key is dispatched
+    # like any other. Clears the screen and shows the cursor on the way out.
+    #
+    # Returns +nil+.
     def run
       context = Context.new(@session, @session_id, @tui)
       @context.each { |key, value| context.instance_variable_set(:"@#{key}", value) }
@@ -32,15 +43,24 @@ module BBS
       @session.write("\e[?25h\e[2J\e[H")
     end
 
+    # The +self+ of every TUI block: holds the page state in instance
+    # variables and offers the drawing primitives, which draw into the next
+    # frame. A +style:+ argument is a BBS::FlowRunner::STYLES key or a raw
+    # SGR string; a +background:+ argument is a BACKGROUND_COLORS key or a
+    # raw SGR string.
     class Context
+      # The named text styles, the same as BBS::FlowRunner::STYLES.
       STYLES = FlowRunner::STYLES
 
+      # Named background colours, as SGR sequences.
       BACKGROUND_COLORS = {
         black:  "\e[40m", red:    "\e[41m", green: "\e[42m",
         yellow: "\e[43m", blue:   "\e[44m", cyan:  "\e[46m",
         white:  "\e[47m",
       }.freeze
 
+      # Creates the context for +tui+ on +session+ and extends it with the
+      # TUI's helper Module.
       def initialize(session, session_id, tui)
         @session         = session
         @session_id      = session_id
@@ -50,6 +70,9 @@ module BBS
         extend(@tui.helper_module) if @tui.helper_module
       end
 
+      # Switches to the page +page_name+ and runs its +enter+ block.
+      #
+      # Returns +nil+.
       def go(page_name)
         @current_page = page_name
         page = @tui.pages[page_name]
@@ -57,8 +80,13 @@ module BBS
         nil
       end
 
+      # Runs the +enter+ block of the current page again.
       def reload = go(@current_page)
 
+      # Draws the chrome and the current page into a new frame and writes the
+      # difference from the last frame to the session. The first render, and
+      # the first after the terminal is resized, clears the screen and draws
+      # everything.
       def do_render
         columns = term_cols
         rows    = term_rows
@@ -83,6 +111,12 @@ module BBS
         end
       end
 
+      # Runs the current page's binding for +key+: the mouse handler for a
+      # BBS::Telnet::MouseEvent, the key's own binding, the printable
+      # handler for an unbound one-character String, or the any-key handler.
+      #
+      # Returns the handler's result (+:halt+ ends the TUI), or +nil+ when no
+      # handler applies.
       def dispatch_key(key)
         page = @tui.pages[@current_page]
         return nil unless page
@@ -112,22 +146,30 @@ module BBS
 
       # ── Drawing primitives ────────────────────────────────────────────────────
 
+      # Clears the frame being drawn.
       def clear
         @next_frame&.clear
       end
 
+      # The terminal width in columns; 80 when the terminal did not report it.
       def term_cols = @session.term_cols || 80
+      # The terminal height in rows; 24 when the terminal did not report it.
       def term_rows = @session.term_rows || 24
 
+      # Moves the drawing cursor to +column+, +row+ (1-based).
       def at(column, row)
         @next_frame.move(column, row)
       end
 
+      # Writes +content+ at +x+, +y+ (or at the cursor when they are not
+      # given). ANSI colour codes and cursor moves in +content+ are honoured.
       def text(content, x: nil, y: nil, style: nil)
         at(x, y) if x && y
         @next_frame.write_ansi(content.to_s, base_sgr: resolve_style(style), cursor: true)
       end
 
+      # Fills row +y+ from column 1, +width+ columns wide (default the full
+      # width), with +style+ and writes +content+ over it.
       def bar(y:, content:, width: nil, style: :muted)
         width ||= term_cols
         style_code = resolve_style(style)
@@ -137,6 +179,8 @@ module BBS
         @next_frame.write_ansi(content.to_s, base_sgr: style_code, cursor: true)
       end
 
+      # Writes +items+ one per row from +x+, +y+. The item at index
+      # +selected+ gets a <tt>▶</tt> marker and the +highlight+ style.
       def list(items, x:, y:, selected: nil, style: :muted, highlight: :success)
         normal_style    = resolve_style(style)     || STYLES[:muted]
         highlight_style = resolve_style(highlight) || STYLES[:success]
@@ -152,6 +196,14 @@ module BBS
         end
       end
 
+      # Writes the +height+ items of +items+ starting at index +scroll+, as
+      # #list does, or +empty+ when there are none.
+      #
+      # [selected] index into +items+ of the highlighted item
+      # [label]    a method name Symbol or a callable that gives an item's text
+      # [hint]     a method name Symbol or a callable whose text for the
+      #            selected item is written below the list (at +hint_y+, by
+      #            default one row under it)
       def list_view(items, x:, y:, height:, scroll:, selected: nil,
                    label: :to_s, hint: nil, hint_y: nil,
                    empty: 'No items found.',
@@ -173,6 +225,7 @@ module BBS
         text hint_text, x: x, y: (hint_y || y + height + 1), style: style unless hint_text.empty?
       end
 
+      # Fills a +width+ x +height+ block at +x+, +y+ with +background+.
       def fill(x:, y:, width:, height:, background:)
         background_code = BACKGROUND_COLORS.fetch(background, background.to_s)
         height.times do |row_offset|
@@ -181,10 +234,14 @@ module BBS
         end
       end
 
+      # Fills the whole screen with +background+.
       def screen_fill(background:)
         fill(x: 1, y: 1, width: term_cols, height: term_rows, background: background)
       end
 
+      # Draws a double-line frame at +x+, +y+, +width+ x +height+ cells, with
+      # an optional +title+ in the top edge and the inside filled with
+      # +background+. Yields the inner area as +x+, +y+, +width+, +height+.
       def box(x:, y:, width:, height:, title: nil, style: :muted, background: nil)
         style_code      = resolve_style(style) || STYLES[:muted]
         inner_width     = width - 2
@@ -212,6 +269,8 @@ module BBS
         yield x + 1, y + 1, inner_width, height - 2 if block_given?
       end
 
+      # Draws a #box centred on the screen, clamped to fit with a two-cell
+      # margin, and yields its inner area.
       def float(title: nil, width: 40, height: 20, style: :muted, background: :black, &block)
         clamped_width  = [[width,  term_cols - 4].min, 4].max
         clamped_height = [[height, term_rows - 4].min, 3].max
@@ -223,6 +282,8 @@ module BBS
 
       # ── Text utilities ────────────────────────────────────────────────────────
 
+      # Returns +text+ with simple Markdown marks removed and newlines folded,
+      # word-wrapped into an Array of lines at most +width+ characters wide.
       def wordwrap(text, width)
         words = text.to_s
                     .gsub(/\[([^\]]+)\]\([^)]+\)/, '\1')

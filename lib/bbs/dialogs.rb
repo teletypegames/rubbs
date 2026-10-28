@@ -4,8 +4,16 @@ require_relative 'window'
 require_relative 'widgets'
 
 module BBS
+  # Ready-made modal dialogs for a BBS::Application: a message, a yes/no
+  # confirmation, and a one-line input. Each opens a centred Window on +app+
+  # and returns it; the buttons close it.
+  #
+  #   BBS::Dialogs.confirm(app, 'Delete this post?', on_yes: -> { delete(post) })
   module Dialogs
-    # Build a centred Window with the given inner size.
+    # Builds a modal Window of +width+ x +height+ cells centred on +app+'s
+    # screen, shrunk to leave a two-cell margin. The window is not opened.
+    #
+    # Returns the Window.
     def self.centred_window(app, width:, height:, title: nil)
       cols  = app.cols
       rows  = app.rows
@@ -18,7 +26,10 @@ module BBS
       win
     end
 
-    # Show a one-line message with an OK button.
+    # Opens a message box with +text+, word-wrapped, and an OK button that
+    # closes it. +width+ fixes the box width; by default it fits the text.
+    #
+    # Returns the Window.
     def self.message(app, text, title: ' Message ', width: nil)
       lines  = wrap(text, width ? width - 6 : 50)
       w      = (width || [(lines.map(&:length).max || 0) + 6, 30].max)
@@ -41,7 +52,10 @@ module BBS
       window
     end
 
-    # Yes/No confirmation. Calls on_yes / on_no.
+    # Opens a Yes/No box with +text+. Each button closes the box, then calls
+    # +on_yes+ or +on_no+ when given.
+    #
+    # Returns the Window.
     def self.confirm(app, text, title: ' Confirm ', on_yes: nil, on_no: nil)
       lines = wrap(text, 50)
       w     = [(lines.map(&:length).max || 0) + 6, 36].max
@@ -69,7 +83,12 @@ module BBS
       window
     end
 
-    # Single-line text input dialog. Calls on_submit with the entered value.
+    # Opens a box with +prompt+, a text field holding +value+, and OK and
+    # Cancel buttons. OK, or Enter in the field, closes the box and calls
+    # +on_submit+ with the entered text; Cancel only closes it. The field
+    # has the focus.
+    #
+    # Returns the Window.
     def self.input(app, prompt:, title: ' Input ', value: '', width: 50, on_submit: nil)
       w      = width
       h      = 7
@@ -105,6 +124,8 @@ module BBS
       window
     end
 
+    # Splits +text+ into an Array of lines of whole words, each at most
+    # +width+ characters (a longer word gets a line of its own).
     def self.wrap(text, width)
       words = text.to_s.split
       lines = []

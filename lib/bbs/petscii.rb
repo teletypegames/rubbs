@@ -5,63 +5,99 @@ module BBS
   # colours and cursor moves as single control bytes, and the lowercase
   # character set (letters swap case against ASCII).
   #
-  # A session switched with `session.petscii!` sends everything it writes
+  # A session switched with <tt>session.petscii!</tt> sends everything it writes
   # through an Encoder, so the code above it keeps writing UTF-8 text with
   # ANSI colours and cursor moves (a Flow, a FakeOS, a door), and reads the
   # C64's keys as the usual key symbols. PETSCII control codes can be
   # written directly too: they are the C0 and C1 code points of a UTF-8
-  # string, so `"#{BBS::Petscii::YELLOW}READY."` is yellow on the C64.
+  # string, so <tt>"#{BBS::Petscii::YELLOW}READY."</tt> is yellow on the C64.
   module Petscii
+    # Control code: text colour white.
     WHITE       = "\u0005"
+    # Control code: text colour red.
     RED         = "\u001c"
+    # Control code: text colour green.
     GREEN       = "\u001e"
+    # Control code: text colour blue.
     BLUE        = "\u001f"
+    # Control code: text colour orange.
     ORANGE      = "\u0081"
+    # Control code: text colour black.
     BLACK       = "\u0090"
+    # Control code: text colour brown.
     BROWN       = "\u0095"
+    # Control code: text colour light red.
     LIGHT_RED   = "\u0096"
+    # Control code: text colour dark grey.
     DARK_GREY   = "\u0097"
+    # Control code: text colour medium grey.
     GREY        = "\u0098"
+    # Control code: text colour light green.
     LIGHT_GREEN = "\u0099"
+    # Control code: text colour light blue.
     LIGHT_BLUE  = "\u009a"
+    # Control code: text colour light grey.
     LIGHT_GREY  = "\u009b"
+    # Control code: text colour purple.
     PURPLE      = "\u009c"
+    # Control code: text colour yellow.
     YELLOW      = "\u009e"
+    # Control code: text colour cyan.
     CYAN        = "\u009f"
 
+    # Control code: clears the screen and homes the cursor.
     CLEAR     = "\u0093"
+    # Control code: moves the cursor to the top left.
     HOME      = "\u0013"
+    # Control code: turns reverse video on.
     RVS_ON    = "\u0012"
+    # Control code: turns reverse video off.
     RVS_OFF   = "\u0092"
+    # Control code: moves the cursor up.
     UP        = "\u0091"
+    # Control code: moves the cursor down.
     DOWN      = "\u0011"
+    # Control code: moves the cursor left.
     LEFT      = "\u009d"
+    # Control code: moves the cursor right.
     RIGHT     = "\u001d"
+    # Control code: deletes the character left of the cursor (the INST/DEL key).
     DEL       = "\u0014"
+    # Control code: rings the bell, where the terminal program supports it.
     BELL      = "\u0007"
+    # Control code: switches to the lowercase character set.
     LOWERCASE = "\u000e"
+    # Control code: switches to the uppercase/graphics character set.
     UPPERCASE = "\u008e"
-    # C= + Shift no longer switches the character set. Its byte is the
+    # Control code: locks the character set, so C= + Shift no longer
+    # switches it. Its byte is the
     # backspace of ASCII, so the Encoder moves the cursor left on it: send
     # it raw (Telnet#petscii! does).
     LOCK_CASE = "\u0008"
 
+    # Width of the C64 screen in characters.
     COLS = 40
+    # Height of the C64 screen in lines.
     ROWS = 25
 
     # The control bytes that go to the C64 as they are.
     CONTROLS = [0x05, 0x07, 0x0e, 0x11, 0x12, 0x13, 0x14, 0x1c, 0x1d, 0x1e, 0x1f,
                 0x81, 0x8e, *0x90..0x9f].freeze
 
-    # ANSI colours 0–7, dark and bright. Black is dark grey: the C64's
-    # terminal screen is black, and a black-on-grey door must stay readable.
+    # The PETSCII colours for the normal ANSI colours 0-7 (SGR 30-37). Black
+    # is dark grey: the C64's terminal screen is black, and a black-on-grey
+    # door must stay readable.
     ANSI_DARK   = [DARK_GREY, RED, GREEN, ORANGE, BLUE, PURPLE, CYAN, LIGHT_GREY].freeze
+    # The PETSCII colours for the bright ANSI colours 0-7 (SGR 90-97, or
+    # 30-37 with bold); black is dark grey here too.
     ANSI_BRIGHT = [DARK_GREY, LIGHT_RED, LIGHT_GREEN, YELLOW, LIGHT_BLUE, PURPLE, CYAN, WHITE].freeze
+    # The colour of plain text, after an SGR reset.
     DEFAULT     = LIGHT_GREY
+    # All sixteen colour control codes; the Encoder tracks the last one sent.
     COLORS      = [WHITE, RED, GREEN, BLUE, ORANGE, BLACK, BROWN, LIGHT_RED, DARK_GREY, GREY,
                    LIGHT_GREEN, LIGHT_BLUE, LIGHT_GREY, PURPLE, YELLOW, CYAN].freeze
 
-    # Unicode → the bytes of the lowercase set (box drawing, blocks, the
+    # Unicode -> the bytes of the lowercase set (box drawing, blocks, the
     # typography of the modern board). Letters, digits and most punctuation
     # are mapped by code in Encoder#glyph.
     GLYPHS = {
@@ -81,8 +117,11 @@ module BBS
       '≋' => '-', " " => ' ', 'ß' => 'ss', 'π' => 'pi'
     }.freeze
 
-    # A key of the C64 as BBS::Telnet#readkey returns keys: a Symbol, a
-    # one-character String, or nil for a byte that is not a key.
+    # Translates a +byte+ the C64 sent into a key the way BBS::Telnet#readkey
+    # returns keys: a Symbol (+:enter+, +:backspace+, the arrows, +:home+,
+    # +:escape+ for RUN/STOP and the left arrow key, +:f1+ ... +:f8+), a
+    # one-character String with the letter case swapped back to ASCII, or
+    # +nil+ for a byte that is not a key.
     def self.key(byte)
       case byte
       when 0x0d        then :enter
@@ -111,7 +150,8 @@ module BBS
       end
     end
 
-    # The bytes of a string of PETSCII code points, e.g. of the constants.
+    # Returns the binary String of bytes for +codes+, a String of PETSCII
+    # code points (such as the constants of this module).
     def self.bytes(codes) = codes.each_char.map { |c| c.ord.chr }.join.b
 
     # Turns what a BBS writes into PETSCII. It keeps the cursor's column, so
@@ -119,6 +159,8 @@ module BBS
     # followed by an empty one, and it keeps the state of an escape sequence
     # cut in two by separate writes.
     class Encoder
+      # Creates an encoder at column 0 with no colour, reverse video or
+      # escape sequence pending.
       def initialize
         @col     = 0
         @wrapped = false
@@ -131,6 +173,13 @@ module BBS
         @esc     = nil
       end
 
+      # Returns the PETSCII bytes (a binary String) for +data+, UTF-8 text
+      # with ANSI escape sequences. Letters swap case, box drawing and other
+      # symbols become the nearest PETSCII glyph (GLYPHS, accents dropped,
+      # <tt>?</tt> when there is none), SGR colours and reverse video become
+      # colour and RVS codes, cursor moves become cursor control codes, and
+      # <tt>\e[2J</tt> clears the screen. Other sequences are dropped. The
+      # encoder's column and colour state carry over to the next call.
       def encode(data)
         text = data.to_s.dup.force_encoding(Encoding::UTF_8)
         text = text.scrub('?') unless text.valid_encoding?

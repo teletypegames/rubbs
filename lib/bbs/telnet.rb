@@ -1,26 +1,57 @@
 # frozen_string_literal: true
 
 module BBS
+  # The telnet line I/O of a BBS::Session: option negotiation, key and line
+  # input with telnet commands filtered out, ANSI escape and mouse report
+  # decoding, window size (NAWS) tracking, and the PETSCII mode for Commodore
+  # 64 callers. The including class keeps the socket in +@client+.
   module Telnet
+    # Telnet "interpret as command" byte, the start of every telnet command.
     IAC  = 255
+    # Telnet WILL: the sender offers to use an option.
     WILL = 251
+    # Telnet WONT: the sender refuses an option.
     WONT = 252
+    # Telnet DO: the sender asks the other side to use an option.
     DO   = 253
+    # Telnet DONT: the sender asks the other side not to use an option.
     DONT = 254
+    # Telnet SB: start of a subnegotiation.
     SB   = 250
+    # Telnet SE: end of a subnegotiation.
     SE   = 240
 
+    # Telnet option ECHO (the server echoes what the caller types).
     ECHO_OPT = 1
+    # Telnet option SUPPRESS-GO-AHEAD (character-at-a-time mode).
     SGA_OPT  = 3
+    # Telnet option NAWS (the client reports its window size).
     NAWS_OPT = 31
 
+    # The most bytes #readline keeps in a line; further characters are dropped.
     MAX_LINE = 1024
+    # The widest terminal accepted from a NAWS report, in columns.
     MAX_COLS = 500
+    # The tallest terminal accepted from a NAWS report, in rows.
     MAX_ROWS = 200
+    # Seconds to wait for the rest of an escape sequence (or UTF-8
+    # character) before a lone ESC counts as the Escape key.
     ESC_WAIT = 0.15
 
+    # A decoded mouse report.
+    #
+    # [kind]   +:press+, +:release+, +:move+ (motion with a button held) or
+    #          +:wheel+
+    # [button] +:left+, +:middle+, +:right+ or +:none+; for +:wheel+, +:up+
+    #          or +:down+
+    # [x, y]   1-based terminal column and row
+    # [mods]   Array of the modifiers held: +:shift+, +:meta+, +:ctrl+
     MouseEvent = Struct.new(:kind, :button, :x, :y, :mods, keyword_init: true)
 
+    # Sets the terminal size to 80x24 until the client reports its own, and
+    # sends the opening negotiation: the server will echo and suppress
+    # go-ahead, and asks the client to suppress go-ahead and report its
+    # window size (NAWS).
     def negotiate
       @term_cols = 80
       @term_rows = 24
@@ -30,6 +61,9 @@ module BBS
       send_raw [IAC, DO,   NAWS_OPT].pack('C*')
     end
 
+    # Turns on xterm mouse reporting (button events, drags, SGR coordinates)
+    # by writing the escape sequences. Does nothing when it is already on or
+    # the line is in PETSCII mode.
     def enable_mouse
       return if @mouse_enabled || @petscii
       # 1002: presses, releases and motion while a button is held (drags).
@@ -37,12 +71,28 @@ module BBS
       @mouse_enabled = true
     end
 
+    # Turns xterm mouse reporting off, if #enable_mouse turned it on.
     def disable_mouse
       return unless @mouse_enabled
       write "\e[?1006l\e[?1002l\e[?1000l"
       @mouse_enabled = false
     end
 
+    # Reads one key press, skipping telnet commands (a NAWS report among
+    # them updates the window size). Returns:
+    #
+    # - a one-character String for a printable character (UTF-8 included),
+    # - a Symbol for a special key: +:enter+, +:tab+, +:backspace+,
+    #   +:escape+, +:interrupt+ (Ctrl-C), <tt>:ctrl_a</tt> ... <tt>:ctrl_z</tt>,
+    #   arrows, +:home+, +:end+, +:page_up+, +:f1+ ... +:f12+ and the like,
+    #   with an <tt>alt_</tt>, <tt>shift_</tt>, <tt>ctrl_</tt> or
+    #   <tt>ctrl_shift_</tt> prefix for modified keys,
+    # - a MouseEvent for a mouse report,
+    # - +:idle+ when nothing came within +timeout+ seconds,
+    # - +nil+ when the client hung up.
+    #
+    # On a PETSCII line the keys come from BBS::Petscii.key. CR LF and CR NUL
+    # count as one +:enter+. +timeout+ +nil+ waits forever.
     def readkey(timeout: nil)
       loop do
         raw  = read_byte(timeout)
@@ -81,6 +131,9 @@ module BBS
       end
     end
 
+    # Reads one raw byte from the socket as a one-byte String. With a
+    # +timeout+ in seconds, returns +:timeout+ when nothing arrives in time.
+    # Returns +nil+ on hangup.
     def read_byte(timeout = nil)
       return @client.read(1) if timeout.nil?
       ready = IO.select([@client], nil, nil, timeout)
@@ -88,9 +141,10 @@ module BBS
       @client.read(1)
     end
 
-    # One byte of the line as an Integer, for binary protocols (ZMODEM):
-    # telnet commands are taken out and a doubled IAC comes back as 255.
-    # :timeout when nothing came within `timeout` seconds, nil on hangup.
+    # Reads one byte of the line as an Integer, for binary protocols
+    # (ZMODEM): telnet commands are taken out and a doubled IAC comes back as
+    # 255. Returns +:timeout+ when nothing came within +timeout+ seconds and
+    # +nil+ on hangup.
     def read_raw_byte(timeout)
       loop do
         raw = read_byte(timeout)
@@ -105,6 +159,13 @@ module BBS
       end
     end
 
+    # Reads a line typed by the caller, echoing it back, and returns it as a
+    # UTF-8 String without the line end (invalid bytes removed), or +nil+ on
+    # hangup. Backspace deletes the last character; control characters and
+    # bytes beyond MAX_LINE are ignored. ENTER writes a CRLF.
+    #
+    # [mask] when given, echoed in place of each character (for passwords,
+    #        e.g. <tt>'*'</tt>); +nil+ echoes the characters themselves
     def readline(mask: nil)
       line = +''.b
 
@@ -153,8 +214,9 @@ module BBS
       end
     end
 
-    # True once the client has reported its window size (telnet NAWS). Real
-    # terminals do; port scanners and password-guessing bots usually do not.
+    # Returns true once the client has reported its window size (telnet
+    # NAWS). Real terminals do; port scanners and password-guessing bots
+    # usually do not.
     def naws_reported?
       @naws_reported == true
     end
@@ -177,8 +239,11 @@ module BBS
       naws_reported?
     end
 
-    # From here on the line speaks PETSCII to a Commodore 64 (see
-    # BBS::Petscii): 40×25, lowercase character set, no mouse.
+    # Switches the line to PETSCII for a Commodore 64 (see BBS::Petscii):
+    # sets the size to 40x25, sends the codes for the lowercase character set
+    # (locked) and a clear screen, and turns mouse reporting off. From then on
+    # #write encodes its output and #readkey / #readline decode PETSCII keys.
+    # Does nothing when the line is already in PETSCII mode.
     def petscii!
       return if @petscii
 
@@ -189,14 +254,16 @@ module BBS
       @petscii = Petscii::Encoder.new
     end
 
+    # True when the line is in PETSCII mode (see #petscii!).
     def petscii? = !@petscii.nil?
 
-    # The caller's line itself, for a door that hands it on as it is
-    # (BBS::Gateway).
+    # Returns the caller's socket itself, for a door that hands it on as it
+    # is (BBS::Gateway).
     def line = @client
 
-    # The caller's window size, as its NAWS reports it: clamped to sane
-    # bounds, and left at 40×25 on a PETSCII line.
+    # Sets the caller's window size from a NAWS report: +cols+ is clamped to
+    # 20..MAX_COLS and +rows+ to 8..MAX_ROWS, a zero value is ignored, and a
+    # PETSCII line keeps 40x25. Marks the size as reported (#naws_reported?).
     def resize!(cols, rows)
       unless @petscii
         @term_cols = cols.clamp(20, MAX_COLS) if cols.positive?
@@ -205,6 +272,8 @@ module BBS
       @naws_reported = true
     end
 
+    # Writes +data+ (a String) to the caller, encoded to PETSCII on a
+    # PETSCII line. Errors are swallowed: returns +nil+ when the write fails.
     def write(data)
       @client.write(@petscii ? @petscii.encode(data) : data)
     rescue StandardError

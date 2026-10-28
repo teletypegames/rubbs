@@ -3,28 +3,49 @@
 require_relative '../widgets'
 
 module BBS
+  # Ready-made window types for a BBS::Application: Info, Form,
+  # MasterDetail and Stream, and the ButtonBar they share. BBS::WindowSpec
+  # opens them from the +window+ DSL.
   module Windows
     # Lays out a row of buttons at the bottom of a window.
     #
-    # Button descriptor:
-    #   { key:, label:, on_click:, primary:, cancel:, align:, keep_open: }
+    # A button descriptor is a Hash:
     #
-    # `on_click` receives the BBS::Window as its only argument and may return
-    # :keep to keep the window open. Any other return value (or nil) causes
+    # [key]       a name for looking the button up in the +by_key+ result
+    # [label]     the button text; +&+ marks the hotkey letter
+    # [on_click]  called with the window
+    # [primary]   marks the button that should get the initial focus
+    # [cancel]    informational only
+    # [align]     +:left+, +:right+ or +:center+
+    # [keep_open] never close the window after the handler
+    #
+    # +on_click+ receives the BBS::Window as its only argument and may return
+    # +:keep+ to keep the window open. Any other return value (or nil) causes
     # the window to be closed after the handler.
     #
-    # `primary: true` gets initial focus on the button.
-    # `cancel: true` is informational only — ESC closes the window through the
-    # standard Window#close_key path. If you also want a cancel-specific side
-    # effect on ESC, set `window.on_close = ...` manually.
-    # `align: :left | :right | :center` — default is :center for a single
-    # button, :right otherwise. Left-aligned buttons stack from the left edge;
-    # right-aligned buttons stack flush against the right edge in declaration
-    # order (so the last right-aligned button sits closest to the edge).
+    # <tt>primary: true</tt> gets initial focus on the button.
+    # <tt>cancel: true</tt> is informational only: ESC closes the window
+    # through the standard Window#close_key path. If you also want a
+    # cancel-specific side effect on ESC, set <tt>window.on_close = ...</tt>
+    # manually.
+    # <tt>align: :left | :right | :center</tt>: default is +:center+ for a
+    # single button, +:right+ otherwise. Left-aligned buttons stack from the
+    # left edge; right-aligned buttons stack flush against the right edge in
+    # declaration order (so the last right-aligned button sits closest to the
+    # edge).
+    #
+    # The methods are module functions.
     module ButtonBar
       module_function
 
-      # Returns { widgets:, primary:, by_key: }.
+      # Builds a BBS::Widgets::Button for each of +descriptors+, places them
+      # on the bottom row of +window+ and adds them to it. A click runs the
+      # descriptor's +on_click+ and then closes the window on +app+ unless
+      # it returned +:keep+ or +keep_open+ is set.
+      #
+      # Returns <tt>{ widgets:, primary:, by_key: }</tt>: the buttons in
+      # order, the primary button (or +nil+), and a Hash of descriptor key to
+      # button.
       def attach(window, app, descriptors)
         return { widgets: [], primary: nil, by_key: {} } if descriptors.nil? || descriptors.empty?
 
@@ -88,10 +109,14 @@ module BBS
         end
       end
 
+      # Returns the width of +button+ on screen, brackets included.
       def button_width(button)
         "[ #{button.display_label} ]".length
       end
 
+      # Returns the click handler for +descriptor+: it calls the descriptor's
+      # +on_click+ with +window+, closes the window on +app+ unless the result
+      # is +:keep+ or +keep_open+ is set, and returns +:handled+.
       def build_handler(window, app, descriptor)
         on_click  = descriptor[:on_click]
         keep_open = descriptor[:keep_open]

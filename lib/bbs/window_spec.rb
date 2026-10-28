@@ -20,26 +20,44 @@ module BBS
   #     end
   #   end
   #
-  # `w.maximizable true` gives the window the zoom gadget (F5, Alt-Enter):
-  # it fills the screen and back. Worth it for windows with a lot to read.
+  # <tt>w.maximizable true</tt> gives the window the zoom gadget (F5,
+  # Alt-Enter): it fills the screen and back. Worth it for windows with a lot
+  # to read.
   #
-  # Open with `app.open_window(:compose, board: some_board)`. Block callbacks
-  # receive a `ctx` hash combining the app's services, app.context, and any
-  # extras passed to open_window.
+  # Open with <tt>app.open_window(:compose, board: some_board)</tt>. Block
+  # callbacks receive a +ctx+ hash combining the app's services, app.context,
+  # and any extras passed to open_window.
+  #
+  # The +type+ picks the window class: +:info+ (BBS::Windows::Info), +:form+
+  # (BBS::Windows::Form), +:master_detail+ (BBS::Windows::MasterDetail) or
+  # +:stream+ (BBS::Windows::Stream). Each name in SCALAR_ATTRS and
+  # BLOCK_ATTRS is a setter method that takes a value or a block; a block
+  # is called with +ctx+ (and the callback's own arguments first, for the
+  # callbacks) when the window opens.
   class WindowSpec
+    # The attributes usually given as plain values, each a setter method
+    # with an <tt>=</tt> alias; a block given instead is called with +ctx+.
     SCALAR_ATTRS = %i[
       title width height padding hint placeholder list_width buffer_size
       scroll close_button close_label empty_message submit_label cancel_label
       maximizable
     ].freeze
 
+    # The attributes usually given as blocks: content (+body+, +items+,
+    # +initial_lines+, +prefill+), item rendering (+item_label+,
+    # +render_detail+, +bottom_meta+) and callbacks (+on_submit+,
+    # +on_cancel+, +on_poll+, +on_activate+). Each is a setter method that
+    # takes a value or a block.
     BLOCK_ATTRS = %i[
       body items initial_lines item_label render_detail bottom_meta
       on_submit on_cancel on_poll on_activate prefill
     ].freeze
 
+    # The window's name (as used with +open_window+) and its type Symbol.
     attr_reader :name, :type
 
+    # Creates an empty spec for the window +name+ of +type+ (+:info+,
+    # +:form+, +:master_detail+ or +:stream+).
     def initialize(name, type:)
       @name    = name
       @type    = type
@@ -58,23 +76,36 @@ module BBS
       define_method(key) { |value = nil, &block| @attrs[key] = block || value }
     end
 
+    # Adds a form field stored under +key+. +opts+ is a
+    # BBS::Windows::Form field descriptor (+label+, +type+, +max_length+,
+    # ...); a Proc +value+ is called with +ctx+, and a field without a value
+    # takes it from the +prefill+ Hash.
     def field(key, **opts)
       @fields << opts.merge(key: key)
     end
 
+    # Adds an action button to a master/detail window. +opts+ is a
+    # BBS::Windows::ButtonBar descriptor; the block, when given, becomes its
+    # +on_click+ and is called with the window and +ctx+.
     def action(**opts, &block)
       opts = opts.merge(on_click: block) if block
       @actions << opts
     end
 
+    # Adds a button to an info window, replacing its default OK button.
+    # +opts+ is a BBS::Windows::ButtonBar descriptor; the block, when given,
+    # becomes its +on_click+ and is called with the window and +ctx+.
     def button(**opts, &block)
       @buttons ||= []
       opts = opts.merge(on_click: block) if block
       @buttons << opts
     end
 
-    # Resolves attrs + wraps callbacks with the runtime `ctx`, then opens the
-    # underlying rubbs window. `extras` flow into `ctx` (e.g., `board:`).
+    # Resolves the attributes, wraps the callbacks with the runtime +ctx+,
+    # then opens the underlying rubbs window on +app+. +extras+ flow into
+    # +ctx+ (e.g. <tt>board:</tt>).
+    #
+    # Returns the opened BBS::Window.
     def open(app, **extras)
       ctx = build_ctx(app, extras)
       window = send("open_#{@type}", app, ctx)

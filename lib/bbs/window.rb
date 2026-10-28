@@ -6,38 +6,64 @@ require_relative 'focus_manager'
 module BBS
   # A Window is a top-level Container with its own border, title, and focus
   # manager. The Application stacks windows; the top window is the active
-  # one and receives input first. Windows that are not `modal` can be
+  # one and receives input first. Windows that are not +modal+ can be
   # switched, Turbo Vision style: a click on one brings it to the front, F6
   # and Shift-F6 cycle them, Alt-1 … Alt-9 picks one by the number on its
   # frame. The active window has a double frame, the others a single one. A
-  # `modal` window (the Dialogs) keeps the front until it closes.
+  # +modal+ window (the Dialogs) keeps the front until it closes.
   #
-  # A `maximizable` window that can lay itself out at any size (`resizable?`:
+  # A +maximizable+ window that can lay itself out at any size (#resizable?:
   # MasterDetail, Stream, Form, a scrolling Info) gets a zoom gadget in its
   # top right corner, Turbo Vision style: [↑] fills the desktop between the
   # menubar and the statusbar, [↕] puts it back. F5, Alt-Enter and a double
   # click on the title bar do the same.
   #
   # A window that is not maximized can be moved and, when resizable?,
-  # resized (`movable: false` turns it off): drag the title bar to move it,
-  # the bottom right corner to size it. From the keyboard Ctrl-F5 (or F6)
-  # starts it (F6 only while it is the only window), Turbo Vision style: the arrows move the window, Shift and the
-  # arrows size it (Tab switches the arrows between moving and sizing), and
+  # resized (<tt>movable: false</tt> turns it off): drag the title bar to
+  # move it, the bottom right corner to size it. From the keyboard Ctrl-F5
+  # (or F6) starts it (F6 only while it is the only window), Turbo Vision
+  # style: the arrows move the window, Shift and the arrows size it (Tab switches the arrows between moving and sizing), and
   # Enter or Esc ends it. A window moved or sized keeps its place when the
   # terminal is resized, pulled back onto the screen if needed.
   class Window < Container
+    # Keys that toggle the maximized state of a zoomable window.
     ZOOM_KEYS    = %i[f5 alt_enter].freeze
+    # Keys that start (and end) moving or sizing the window from the
+    # keyboard.
     MOVE_KEYS    = %i[ctrl_f5 f6].freeze
+    # Arrow key Symbol => <tt>[dx, dy]</tt> step for keyboard moving and
+    # sizing.
     ARROWS       = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }.freeze
+    # Seconds within which a second click on the title bar counts as a
+    # double click.
     DOUBLE_CLICK = 0.5
+    # Smallest width a resizable window can be sized to (or the desktop
+    # width when that is smaller).
     MIN_WIDTH    = 24
+    # Smallest height a resizable window can be sized to (or the desktop
+    # height when that is smaller).
     MIN_HEIGHT   = 7
+    # Titles shown in the frame while the window is moved (+:move+) or sized
+    # (+:size+) from the keyboard.
     KBD_TITLES   = { move: ' Move: arrows · Shift+arrows or Tab: size · Enter: done ',
                      size: ' Size: arrows · Tab: move · Enter: done ' }.freeze
 
+    # The window's settings, as given to ::new: +title+ (shown in the top
+    # border), +modal+ (keeps the front, always a double frame), +shadow+
+    # (draws a drop shadow), +on_close+ (callable run with the window when it
+    # closes, or +false+ for no close gadget), +close_key+ (key that closes
+    # it), +maximizable+ (gets a zoom gadget when #resizable?), +movable+
+    # (may be moved and sized). +number+ is the number shown on the frame for
+    # Alt-1 ... Alt-9, assigned by the Application to non-modal windows.
     attr_accessor :title, :modal, :shadow, :on_close, :close_key, :maximizable, :movable, :number
+    # The Application the window is shown in; set by the Application when it
+    # opens the window. Moving, sizing and zooming need it.
     attr_writer :app
 
+    # Creates a window. +title+, +modal+, +shadow+, +on_close+,
+    # +close_key+, +maximizable+ and +movable+ set the attributes of the same
+    # name; +kw+ (+id+, +bounds+, +theme+) go to Container.new. The window
+    # starts not maximized and without a number.
     def initialize(title: nil, modal: false, shadow: true, on_close: nil,
                    close_key: :escape, maximizable: false, movable: true, **kw)
       super(**kw)
@@ -59,14 +85,20 @@ module BBS
     # True while the window is being moved or sized: the keys are its own.
     def busy? = !@kbd_mode.nil? || !@drag.nil?
 
+    # Returns whether the window fills the desktop.
     def maximized? = @maximized
 
     # True for windows that can lay out their content at any size; they
-    # override `place(x, y, width, height)` and `normal_rect`.
+    # override <tt>place(x, y, width, height)</tt> and +normal_rect+.
     def resizable? = false
 
+    # Returns whether the window can be maximized: it is +maximizable+,
+    # #resizable? and shown in an Application.
     def zoomable? = @maximizable && resizable? && !@app.nil?
 
+    # Maximizes the window to the desktop, or puts it back to its normal
+    # place, ending any move or size in progress. Does nothing unless
+    # #zoomable?. Returns +:handled+.
     def toggle_maximize
       return :handled unless zoomable?
 
@@ -77,11 +109,17 @@ module BBS
       :handled
     end
 
+    # Returns whether the window can be moved now: +movable+, not maximized
+    # and shown in an Application.
     def movable? = @movable && !@maximized && !@app.nil?
+    # Returns whether the window can be sized now: #movable? and
+    # #resizable?.
     def sizable? = movable? && resizable?
 
     # Moves (and, when resizable?, sizes) the window to the rect, kept on
-    # the desktop; the window keeps it through later relayouts.
+    # the desktop; the window keeps it through later relayouts. A resizable
+    # window is clamped to MIN_WIDTH by MIN_HEIGHT and the desktop size; any
+    # other keeps its size. Does nothing unless #movable?.
     def move_to(x, y, width = bounds.width, height = bounds.height)
       return unless movable?
 
@@ -98,14 +136,22 @@ module BBS
       end
     end
 
+    # Returns the window's FocusManager, created on first use.
     def focus_manager
       @focus_mgr ||= FocusManager.new(self)
     end
 
+    # Replaces the FocusManager with a new one, so the focus starts over
+    # from the window's current widgets.
     def reset_focus
       @focus_mgr = FocusManager.new(self)
     end
 
+    # Draws the window into the BBS::FrameBuffer +frame+: the shadow (unless
+    # maximized), the frame (double when focused or modal) with the title,
+    # the close gadget <tt>[■]</tt>, the window number, the zoom gadget and
+    # the size corner as they apply and fit, then the visible children.
+    # While moving or sizing from the keyboard the title shows KBD_TITLES.
     def render(frame)
       if @shadow && !@maximized
         frame.shadow(x: bounds.x, y: bounds.y, width: bounds.width,
@@ -145,6 +191,8 @@ module BBS
       @children.each { |c| c.render(frame) if c.visible }
     end
 
+    # Returns +self+ for the close gadget area on the top border, otherwise
+    # the deepest widget at +x+, +y+ as Container#hit_test does.
     def hit_test(x, y)
       # close gadget area
       if @on_close != false && y == bounds.y &&
@@ -154,6 +202,17 @@ module BBS
       super
     end
 
+    # Handles a keyboard or mouse event for the window, in this order:
+    # keyboard move/size mode, an ongoing mouse drag, the ZOOM_KEYS and
+    # MOVE_KEYS, left clicks on the gadgets, title bar and size corner (a
+    # click elsewhere focuses the focusable widget under it), wheel events
+    # for the widget under the pointer, focus keys and the focused widget
+    # (a modified arrow or paging key nothing took is retried plain), a
+    # button hotkey, and finally +close_key+.
+    #
+    # Returns +:close_window+ when the window should close, +:halt+ or
+    # +:handled+ as the widgets return them, or +nil+ when nothing used the
+    # event.
     def handle_event(event)
       return keyboard_move(event) if @kbd_mode
       return drag(event) if @drag && event.mouse?
@@ -210,6 +269,7 @@ module BBS
     # Application#close_window), so the callback runs once.
     def close = :close_window
 
+    # Returns the column where the zoom gadget is drawn.
     def zoom_x = bounds.x + bounds.width - 5
 
     # The zoom gadget, or a second click on the title bar soon after a first.
@@ -223,17 +283,21 @@ module BBS
       double
     end
 
+    # Returns whether the mouse +event+ is on the bottom right size corner.
     def corner?(event)
       event.y == bounds.y + bounds.height - 1 && event.x >= bounds.x + bounds.width - 2 &&
         event.x <= bounds.x + bounds.width - 1
     end
 
+    # Starts a mouse drag in +mode+ (+:move+ or +:size+) from the position
+    # of +event+, remembering the current bounds. Returns +:handled+.
     def start_drag(mode, event)
       @drag = { mode: mode, x: event.x, y: event.y, rect: [bounds.x, bounds.y, bounds.width, bounds.height] }
       :handled
     end
 
-    # Follows the mouse while the button is held; the release ends it.
+    # Follows the mouse while the button is held, moving or sizing the
+    # window through #move_to; the release ends it. Returns +:handled+.
     def drag(event)
       x, y, w, h = @drag[:rect]
       dx = event.x - @drag[:x]
@@ -249,6 +313,11 @@ module BBS
       :handled
     end
 
+    # Handles +event+ in keyboard move/size mode: the arrows move or (with
+    # Shift, or in size mode) size the window by one cell, Tab switches
+    # between moving and sizing when #sizable?, and Enter, Esc or a
+    # MOVE_KEYS key ends the mode. Every key is swallowed: returns
+    # +:handled+.
     def keyboard_move(event)
       return :handled unless event.key?
 
@@ -265,6 +334,8 @@ module BBS
       :handled
     end
 
+    # Returns the enabled Widgets::Button in the window whose hotkey matches
+    # +key+ (a single character or an +alt_+ letter Symbol), or +nil+.
     def hotkey_button(key)
       letter = key.is_a?(String) && key.length == 1 ? key.downcase : key.to_s[/\Aalt_(.)\z/, 1]
       return nil unless letter
@@ -272,14 +343,17 @@ module BBS
       focusable_descendants.find { |w| w.is_a?(Widgets::Button) && w.enabled && w.hotkey == letter }
     end
 
-    # Called once per Application idle tick (~1s). Override in subclasses that
-    # need to poll for asynchronous updates (e.g. BBS::Windows::Stream).
+    # Called once per Application idle tick (about a second) with the
+    # Application. Does nothing; subclasses that poll for asynchronous
+    # updates override it (such as BBS::Windows::Stream).
     def tick(app); end
 
     # Called by the Application when the terminal is resized. The default
     # keeps the window's size and re-centers it, shifting every descendant
     # along. Subclasses whose geometry depends on the terminal size override
-    # this (e.g. BBS::Windows::MasterDetail).
+    # this (such as BBS::Windows::MasterDetail). A window moved or sized by
+    # the user goes back to its place, a resizable one is placed at the
+    # desktop (maximized) or its +normal_rect+.
     def relayout(app)
       return move_to(*@placed) if @placed && !@maximized
       return place(*(@maximized ? app.desktop_rect : normal_rect)) if resizable?
@@ -289,7 +363,8 @@ module BBS
       shift(dx, dy)
     end
 
-    # Move the window and all its descendants by (dx, dy).
+    # Moves the window and all its descendants by +dx+ columns and +dy+
+    # rows.
     def shift(dx, dy)
       return if dx.zero? && dy.zero?
       walk do |w|

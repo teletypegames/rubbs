@@ -4,11 +4,20 @@ require_relative 'widget'
 require_relative 'container'
 
 module BBS
+  # The stock widgets: labels, buttons, text fields, lists, scrolling text,
+  # progress indicators and layout containers. Each takes the BBS::Widget
+  # keyword arguments (+id+, +bounds+, +theme+) besides its own.
   module Widgets
     # ── Label ─────────────────────────────────────────────────────────────────
+    # A single line of text. The text may carry ANSI colour codes.
     class Label < Widget
+      # [text]      the text shown (anything; +to_s+ is called on it)
+      # [align]     +:left+, +:center+ or +:right+ within the bounds
+      # [style_key] the theme role the text is drawn in
       attr_accessor :text, :align, :style_key
 
+      # Creates a label with +text+, +align+ (default +:left+) and
+      # +style_key+ (default +:text+).
       def initialize(text: '', align: :left, style_key: :text, **kw)
         super(**kw)
         @text       = text
@@ -16,6 +25,8 @@ module BBS
         @style_key  = style_key
       end
 
+      # Draws the text on the first row of the bounds into +frame+, a
+      # BBS::FrameBuffer, cut to the width and aligned.
       def render(frame)
         return if bounds.width <= 0
         line  = @text.to_s
@@ -34,24 +45,35 @@ module BBS
     # Label syntax: "Save" or "&Save" (ampersand marks the hotkey letter).
     # Pressing Alt+letter or Enter (when focused) fires on_click.
     class Button < Widget
+      # [label]    the button text; an <tt>&</tt> marks the hotkey letter
+      # [on_click] callable invoked as <tt>call(button)</tt> when the button
+      #            fires; returning :halt ends the application
       attr_accessor :label, :on_click
 
+      # Creates a button with +label+ (default <tt>'OK'</tt>) and +on_click+.
       def initialize(label: 'OK', on_click: nil, **kw)
         super(**kw)
         @label    = label
         @on_click = on_click
       end
 
+      # True: a button takes the focus.
       def focusable? = true
 
+      # The hotkey letter after the <tt>&</tt> in the label, downcased, or
+      # +nil+ when the label has none.
       def hotkey
         idx = @label.index('&')
         return nil unless idx && idx + 1 < @label.length
         @label[idx + 1].downcase
       end
 
+      # The label without its <tt>&</tt> marker.
       def display_label = @label.sub('&', '')
 
+      # Draws the button as <tt>[ label ]</tt> centred on the first row of
+      # the bounds into +frame+, in the focused, normal or disabled button
+      # style, with the hotkey letter highlighted.
       def render(frame)
         return if bounds.width <= 0
         sgr     = focused ? style(:button_focused) : style(:button)
@@ -77,12 +99,17 @@ module BBS
         end
       end
 
+      # Calls +on_click+ with the button, unless the button is disabled.
+      # Returns :halt when +on_click+ returned :halt, :handled otherwise.
       def fire
         return :handled if !enabled
         result = @on_click&.call(self)
         result == :halt ? :halt : :handled
       end
 
+      # Fires the button on Enter, Space, or a left click inside its bounds;
+      # returns the result of #fire. Returns +nil+ for other events and when
+      # disabled.
       def handle_event(event)
         return nil unless enabled
         if event.key?
@@ -98,10 +125,22 @@ module BBS
     end
 
     # ── TextInput ─────────────────────────────────────────────────────────────
+    # A one-line text field that scrolls sideways when the text is wider than
+    # the field.
     class TextInput < Widget
+      # The current text.
       attr_reader   :value
+      # [placeholder] dim text shown while the field is empty and unfocused
+      # [max_length]  the most characters the field accepts
+      # [on_submit]   callable invoked as <tt>call(value, input)</tt> on Enter;
+      #               its result (e.g. :halt) is returned from #handle_event
+      # [on_change]   callable invoked as <tt>call(value, input)</tt> after
+      #               each edit
+      # [password]    when true, the text is shown as asterisks
       attr_accessor :placeholder, :max_length, :on_submit, :on_change, :password
 
+      # Creates a text field holding a copy of +value+, with the cursor at
+      # its end. +max_length+ defaults to 256.
       def initialize(value: '', placeholder: '', max_length: 256,
                      on_submit: nil, on_change: nil, password: false, **kw)
         super(**kw)
@@ -115,16 +154,21 @@ module BBS
         @scroll      = 0
       end
 
-      # A new value puts the cursor at its end: a cursor left past the end
-      # (after a submit clears the field) would make the next key fail.
+      # Replaces the text with <tt>text.to_s</tt> and puts the cursor at its
+      # end: a cursor left past the end (after a submit clears the field)
+      # would make the next key fail. Does not call +on_change+.
       def value=(text)
         @value  = text.to_s.dup
         @cursor = @value.length
         @scroll = 0
       end
 
+      # True: a text field takes the focus.
       def focusable? = true
 
+      # Draws the visible part of the text (or the placeholder) on the first
+      # row of the bounds into +frame+, with an underscore cursor when
+      # focused.
       def render(frame)
         return if bounds.width <= 0 || bounds.height <= 0
         sgr = focused ? style(:input_focused) : style(:input)
@@ -149,6 +193,11 @@ module BBS
         end
       end
 
+      # Edits the text on a key event: Left, Right, Home and End move the
+      # cursor, Backspace and Delete remove a character, a printable
+      # character is inserted (up to +max_length+), Enter calls +on_submit+.
+      # Returns :handled (or +on_submit+'s result on Enter), and +nil+ for
+      # other keys, mouse events, or when disabled, so the window gets them.
       def handle_event(event)
         return nil unless event.key? && enabled
         case event.key
@@ -202,9 +251,14 @@ module BBS
     end
 
     # ── TextArea ──────────────────────────────────────────────────────────────
+    # A multi-line text editor. Lines are not wrapped: a line wider than the
+    # area is cut off.
     class TextArea < Widget
+      # Callable invoked as <tt>call(value, area)</tt> after each edit.
       attr_accessor :on_change
 
+      # Creates an editor holding +value+ (lines separated by LF), accepting
+      # at most +max_length+ characters (default 8000).
       def initialize(value: '', max_length: 8_000, on_change: nil, **kw)
         super(**kw)
         @lines      = value.empty? ? [+''] : value.split("\n", -1).map { |l| +l }
@@ -215,11 +269,16 @@ module BBS
         @scroll_r   = 0
       end
 
+      # True: a text area takes the focus.
       def focusable? = true
 
+      # The whole text, lines joined with LF.
       def value = @lines.join("\n")
+      # The length of #value in characters.
       def length = value.length
 
+      # Draws the visible lines into the bounds of +frame+, with an
+      # underscore cursor when focused.
       def render(frame)
         return if bounds.width <= 0 || bounds.height <= 0
         sgr = focused ? style(:input_focused) : style(:input)
@@ -241,6 +300,12 @@ module BBS
         end
       end
 
+      # Edits the text on a key event: arrows move the cursor (Left and
+      # Right wrap across lines), Home and End go to the line's ends, Enter
+      # splits the line, Backspace deletes or joins with the line above, and
+      # a printable character is inserted while #length is under
+      # +max_length+. Returns :handled, or +nil+ for other keys, mouse events,
+      # or when disabled.
       def handle_event(event)
         return nil unless event.key? && enabled
         case event.key
@@ -311,9 +376,15 @@ module BBS
     end
 
     # ── Checkbox ──────────────────────────────────────────────────────────────
+    # A <tt>[x]</tt> / <tt>[ ]</tt> check box with a label.
     class Checkbox < Widget
+      # [label]     the text after the box
+      # [checked]   whether the box is ticked
+      # [on_change] callable invoked as <tt>call(checked, checkbox)</tt>
+      #             when the caller toggles the box
       attr_accessor :label, :checked, :on_change
 
+      # Creates a check box with +label+, ticked when +checked+.
       def initialize(label: '', checked: false, on_change: nil, **kw)
         super(**kw)
         @label = label
@@ -321,8 +392,10 @@ module BBS
         @on_change = on_change
       end
 
+      # True: a check box takes the focus.
       def focusable? = true
 
+      # Draws the box and label on the first row of the bounds into +frame+.
       def render(frame)
         sgr = focused ? style(:button_focused) : style(:text)
         mark = @checked ? '[x]' : '[ ]'
@@ -331,6 +404,8 @@ module BBS
         frame.write(text, sgr: sgr)
       end
 
+      # Toggles the box on Enter or Space and calls +on_change+; returns
+      # :handled. Returns +nil+ for other events and when disabled.
       def handle_event(event)
         return nil unless enabled && event.key?
         if event.key == :enter || event.key == ' '
@@ -343,9 +418,20 @@ module BBS
     end
 
     # ── ListBox ───────────────────────────────────────────────────────────────
+    # A scrolling list of items with one selected.
     class ListBox < Widget
+      # [items]       the Array of items shown
+      # [selected]    index of the selected item
+      # [scroll]      index of the item on the top row
+      # [on_select]   callable invoked as <tt>call(item, listbox)</tt> when
+      #               the selection moves to another item
+      # [on_activate] callable invoked as <tt>call(item, listbox)</tt> on
+      #               Enter; its result is returned from #handle_event
+      # [label]       callable turning an item into its display text;
+      #               +nil+ uses the item's +to_s+
       attr_accessor :items, :selected, :scroll, :on_select, :on_activate, :label
 
+      # Creates a list of +items+ with the first one selected.
       def initialize(items: [], on_select: nil, on_activate: nil, label: nil, **kw)
         super(**kw)
         @items       = items
@@ -356,9 +442,13 @@ module BBS
         @label       = label
       end
 
+      # True: a list takes the focus.
       def focusable? = true
+      # The selected item, or +nil+ when the list is empty.
       def selected_item = @items[@selected]
 
+      # Draws the visible items into the bounds of +frame+, the selected one
+      # highlighted (more strongly when the list has the focus).
       def render(frame)
         return if bounds.width <= 0 || bounds.height <= 0
         bg = style(:listbox)
@@ -381,6 +471,11 @@ module BBS
         end
       end
 
+      # Moves the selection with Up, Down, Page Up, Page Down, Home and End
+      # (calling +on_select+ when it changes), calls +on_activate+ on Enter,
+      # selects the clicked item on a left click and scrolls the selection by
+      # three on the mouse wheel. Returns :handled (or +on_activate+'s result
+      # on Enter), and +nil+ for other events or when disabled.
       def handle_event(event)
         return nil unless enabled
         if event.key?
@@ -441,16 +536,23 @@ module BBS
 
     # ── ScrollView: a scrollable text buffer (lines: Array[String]) ───────────
     class ScrollView < Widget
+      # [lines]  the Array of lines shown; they may carry ANSI colour codes
+      # [scroll] index of the line on the top row
       attr_accessor :lines, :scroll
 
+      # Creates a view of +lines+ scrolled to the top.
       def initialize(lines: [], **kw)
         super(**kw)
         @lines  = lines
         @scroll = 0
       end
 
+      # True: a scroll view takes the focus.
       def focusable? = true
 
+      # Draws the visible lines into the bounds of +frame+, each cut to the
+      # width, and a scrollbar in the rightmost column when the lines do not
+      # fit.
       def render(frame)
         return if bounds.width <= 0 || bounds.height <= 0
 
@@ -474,6 +576,8 @@ module BBS
         end
       end
 
+      # Scrolls with Up, Down, Page Up, Page Down, Home and End, and by three
+      # lines on the mouse wheel. Returns :handled, or +nil+ for other events.
       def handle_event(event)
         max = [@lines.size - bounds.height, 0].max
         if event.mouse?
@@ -500,9 +604,14 @@ module BBS
     end
 
     # ── ProgressBar / Spinner ─────────────────────────────────────────────────
+    # A horizontal bar filled in proportion to +value+ / +max+.
     class ProgressBar < Widget
+      # [value] the progress so far
+      # [max]   the value of a full bar (a zero +max+ draws an empty bar)
+      # [label] text centred on the bar, or +nil+
       attr_accessor :value, :max, :label
 
+      # Creates a bar at +value+ out of +max+ (default 0 of 100).
       def initialize(value: 0, max: 100, label: nil, **kw)
         super(**kw)
         @value = value
@@ -510,6 +619,8 @@ module BBS
         @label = label
       end
 
+      # Draws the bar on the first row of the bounds into +frame+, with the
+      # label over it.
       def render(frame)
         sgr  = style(:text)
         fill = style(:button_focused)
@@ -527,21 +638,28 @@ module BBS
       end
     end
 
+    # A turning spinner glyph followed by a label; call #tick to advance it.
     class Spinner < Widget
+      # The spinner glyphs, shown one after another.
       FRAMES = %w[⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏].freeze
 
+      # The text after the glyph.
       attr_accessor :label
 
+      # Creates a spinner with +label+ (default <tt>'Loading...'</tt>).
       def initialize(label: 'Loading...', **kw)
         super(**kw)
         @label = label
         @frame = 0
       end
 
+      # Advances to the next glyph of FRAMES. Returns the new frame index.
       def tick
         @frame = (@frame + 1) % FRAMES.size
       end
 
+      # Draws the current glyph and the label on the first row of the bounds
+      # into +frame+, in the accent style.
       def render(frame)
         sgr = style(:accent)
         text = "#{FRAMES[@frame]} #{@label}"
@@ -551,14 +669,20 @@ module BBS
     end
 
     # ── HBox / VBox ───────────────────────────────────────────────────────────
+    # A Container that lays its children out side by side, sharing the width
+    # equally.
     class HBox < Container
+      # Columns left empty between two children.
       attr_accessor :gap
 
+      # Creates an empty box with +gap+ columns between children (default 1).
       def initialize(gap: 1, **kw)
         super(**kw)
         @gap = gap
       end
 
+      # Sets the box's bounds to +x+, +y+, +w+, +h+ and gives each child an
+      # equal share of the width (less the gaps) at full height.
       def layout(x, y, w, h)
         super
         return if @children.empty?
@@ -572,14 +696,20 @@ module BBS
       end
     end
 
+    # A Container that stacks its children top to bottom, sharing the height
+    # equally.
     class VBox < Container
+      # Rows left empty between two children.
       attr_accessor :gap
 
+      # Creates an empty box with +gap+ rows between children (default 0).
       def initialize(gap: 0, **kw)
         super(**kw)
         @gap = gap
       end
 
+      # Sets the box's bounds to +x+, +y+, +w+, +h+ and gives each child an
+      # equal share of the height (less the gaps) at full width.
       def layout(x, y, w, h)
         super
         return if @children.empty?
@@ -595,14 +725,21 @@ module BBS
 
     # ── Panel: a Container with a border and optional title ──────────────────
     class Panel < Container
+      # [title]     text shown in the top border, or +nil+
+      # [box_style] the border style, +:single+ or +:double+
       attr_accessor :title, :box_style
 
+      # Creates an empty panel with +title+ and +box_style+ (default
+      # +:single+).
       def initialize(title: nil, box_style: :single, **kw)
         super(**kw)
         @title = title
         @box_style = box_style
       end
 
+      # Draws the bordered, filled box over the bounds into +frame+, then the
+      # children. The panel does not lay out its children: they keep the
+      # bounds given to them, so leave room for the border.
       def render(frame)
         frame.box(
           x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height,

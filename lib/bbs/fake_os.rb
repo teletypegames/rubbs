@@ -35,13 +35,16 @@ module BBS
   #
   #   BBS::FakeOS::Runner.new(session, DOS).run
   #
-  # The boot/ready blocks run against a Console (so primitives like `print`,
-  # `cls`, `pause`, `banner`, `type` are available without a receiver).
-  # Command and on_unknown blocks are called with `(args_or_input, console)` —
-  # use the console (`io`) for all output. `on_unknown` is the natural hook for
-  # a conversational / LLM-backed shell: anything that is not a registered
-  # command lands there.
+  # The boot/ready blocks run against a Console (so primitives like +print+,
+  # +cls+, +pause+, +banner+, +type+ are available without a receiver).
+  # Command and on_unknown blocks are called with
+  # <tt>(args_or_input, console)</tt>; use the console (+io+) for all output.
+  # +on_unknown+ is the natural hook for a conversational / LLM-backed shell:
+  # anything that is not a registered command lands there.
   module FakeOS
+    # The default SGR sequence for each colour role a Console uses: +text+,
+    # +bright+, +accent+, +error+, +dim+, +prompt+, and +base+, which every
+    # reset returns to.
     DEFAULT_COLORS = {
       text:   "\e[0;37m", # light grey on black — the classic console look
       bright: "\e[1;37m",
@@ -52,6 +55,9 @@ module BBS
       base:   '', # what every reset returns to: a background here colours the whole screen
     }.freeze
 
+    # Builds a Definition by evaluating the block in a new one.
+    #
+    # Returns the Definition.
     def self.define(&block)
       definition = Definition.new
       definition.instance_eval(&block)
@@ -60,6 +66,8 @@ module BBS
 
     # Immutable-ish description of one simulated OS, built via the define DSL.
     class Definition
+      # Creates a definition named +OS+ with a <tt>'> '</tt> prompt, the
+      # DEFAULT_COLORS, and no boot, ready or commands.
       def initialize
         @name        = 'OS'
         @prompt      = '> '
@@ -71,12 +79,14 @@ module BBS
         @unknown     = nil
       end
 
-      # `name 'MS-DOS'` to set, `name` to read.
+      # Sets the OS name with an argument (<tt>name 'MS-DOS'</tt>); returns
+      # it without one.
       def name(value = nil)
         value.nil? ? @name : (@name = value)
       end
 
-      # Prompt may be a String or a `->(ctx) { ... }` block evaluated per line.
+      # Sets the shell prompt with a String argument, or with a block called
+      # with the context before each line; returns it with neither.
       def prompt(value = nil, &block)
         if block then @prompt = block
         elsif !value.nil? then @prompt = value
@@ -84,16 +94,23 @@ module BBS
         end
       end
 
-      # Merge SGR overrides, e.g. `colors text: "\e[0;32m"`. Read with no args.
+      # Merges SGR overrides into the colour roles, e.g.
+      # <tt>colors text: "\e[0;32m"</tt>. Returns the colour Hash with no
+      # argument.
       def colors(overrides = nil)
         overrides ? @colors.merge!(overrides) : @colors
       end
 
+      # Sets the boot sequence, run in the Console before anything else.
       def boot(&block)  = (@boot_block = block)
+      # Sets the block run in the Console once after boot, before the first
+      # prompt.
       def ready(&block) = (@ready_block = block) # runs once after boot, before the first prompt
 
-      # Register a command under one or more names (the first is the canonical
-      # one shown in help). The block receives `(args_string, console)`.
+      # Registers a command under one or more names (the first is the
+      # canonical one shown in help); names match case-insensitively. The
+      # block receives <tt>(args_string, console)</tt>. +help+ is an optional
+      # description stored with the command.
       def command(*names, help: nil, &block)
         primary = names.first.to_s
         @order << primary unless @order.include?(primary)
@@ -102,17 +119,25 @@ module BBS
         end
       end
 
-      # Fallback for input that matches no command. Block gets `(input, console)`.
+      # Sets the fallback for input that matches no command. The block gets
+      # <tt>(input, console)</tt>. Without one, the shell prints "Bad command
+      # or file name".
       def on_unknown(&block) = (@unknown = block)
 
+      # The boot and ready blocks, the commands (a Hash of lower-case name to
+      # a Hash with +:name+, +:help+ and +:block+), the canonical command
+      # names in registration order, and the on_unknown block.
       attr_reader :boot_block, :ready_block, :commands, :order, :unknown
     end
 
     # The live terminal: owns the telnet session and all output primitives, and
-    # drives the boot sequence + shell loop. Handlers receive this as `io`.
+    # drives the boot sequence + shell loop. Handlers receive this as +io+.
     class Console
+      # The context Hash, the BBS::Session, and the Definition being run.
       attr_reader :ctx, :session, :definition
 
+      # Creates a console running +definition+ on +session+ with the context
+      # Hash +context+.
       def initialize(session, definition, context)
         @session    = session
         @definition = definition
@@ -121,6 +146,11 @@ module BBS
         @running    = true
       end
 
+      # Runs the boot block, the ready block, then the shell: prints the
+      # prompt, reads a line, and runs the matching command or the
+      # on_unknown block, until #halt is called or the line drops. An error
+      # raised by a command is logged and printed; IOError and
+      # SystemCallError are re-raised.
       def run
         instance_eval(&@definition.boot_block)  if @definition.boot_block
         instance_eval(&@definition.ready_block) if @definition.ready_block
@@ -129,19 +159,22 @@ module BBS
 
       # ── output primitives (also available unqualified inside boot/ready) ─────
 
-      # Write a line (or blank line) terminated by CRLF.
+      # Writes +text+ (or a blank line) in the colour role +style+, followed
+      # by CRLF.
       def puts(text = '', style: :text)
         @session.write("#{color(style)}#{text}#{reset}\r\n")
       end
 
-      # Write text followed by `newline` CRLFs, then sleep `delay` seconds.
-      # Handy for boot messages: `print 'POST OK', delay: 0.3`.
+      # Writes +text+ in +style+ followed by +newline+ CRLFs, then sleeps
+      # +delay+ seconds. Handy for boot messages:
+      # <tt>print 'POST OK', delay: 0.3</tt>.
       def print(text = '', delay: 0, style: :text, newline: 1)
         @session.write("#{color(style)}#{text}#{reset}#{"\r\n" * newline}")
         sleep_for(delay)
       end
 
-      # Typewriter effect — emit one character at a time at `cps` chars/second.
+      # Typewriter effect: writes +text+ one character at a time at +cps+
+      # characters a second, then +newline+ CRLFs.
       def type(text, style: :text, cps: 900, newline: 1)
         delay = cps.positive? ? 1.0 / cps : 0
         @session.write(color(style))
@@ -152,24 +185,30 @@ module BBS
         @session.write("#{reset}#{"\r\n" * newline}")
       end
 
+      # Writes +count+ CRLFs.
       def newline(count = 1) = @session.write("\r\n" * count)
 
+      # Resets the colours and clears the screen, cursor to the top left.
       def cls = @session.write("#{reset}\e[2J\e[H")
 
+      # Sleeps for +seconds+ (nothing for zero or +nil+).
       def pause(seconds) = sleep_for(seconds)
 
-      # Boxed single-line banner (BBS::Banner).
+      # Writes +text+ in a boxed single-line banner (BBS::Banner.render) in
+      # the colour role +style+.
       def banner(text, style: :accent)
         @session.write(Banner.render(text, color: color(style)))
       end
 
-      # Big figlet banner (BBS::Banner / artii).
+      # Writes +text+ as big FIGlet letters in +font+ (BBS::Banner.render_big)
+      # in the colour role +style+.
       def big_banner(text, style: :accent, font: 'standard')
         @session.write(Banner.render_big(text, color: color(style), font: font))
       end
 
-      # The classic counting memory test: `memtest 16_384` →
-      # "Memory Test : 16384K OK" counting up in place.
+      # The classic counting memory test: <tt>memtest 16_384</tt> writes
+      # "Memory Test : 16384K OK", counting up in place by +step+ kilobytes
+      # every +delay+ seconds.
       def memtest(kilobytes, step: 2048, delay: 0.03, label: 'Memory Test : ')
         counted = 0
         while counted < kilobytes
@@ -180,10 +219,13 @@ module BBS
         @session.write("#{color(:text)}#{label}#{kilobytes}K OK#{reset}\r\n")
       end
 
+      # The terminal width in columns; 80 when the terminal did not report it.
       def cols = (@session.term_cols || 80)
+      # The terminal height in rows; 24 when the terminal did not report it.
       def rows = (@session.term_rows || 24)
 
-      # Stop the shell loop (used by an `exit`/`quit` command).
+      # Stops the shell loop after the current command (used by an
+      # +exit+/+quit+ command).
       def halt = (@running = false)
 
       private
@@ -228,12 +270,17 @@ module BBS
     # Entry point: plays the boot sequence then runs the shell until the user
     # quits or disconnects.
     class Runner
+      # Creates a runner for +definition+ on +session+; +context+ is passed to
+      # the Console.
       def initialize(session, definition, context: {})
         @session    = session
         @definition = definition
         @context    = context
       end
 
+      # Runs a new Console. A dropped line ends it quietly.
+      #
+      # Returns +nil+ when the line dropped.
       def run
         Console.new(@session, @definition, @context).run
       rescue IOError, Errno::EPIPE, Errno::ECONNRESET

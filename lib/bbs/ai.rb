@@ -46,13 +46,34 @@ module BBS
     #         reply: I am here.
     #     default: 'You said: "{input}".'
     class Persona
+      # The system prompt String (stripped), the example turns as an Array of
+      # chat messages (<tt>{ role:, content: }</tt> Hashes, user and
+      # assistant in turn), and the extra request fields as a Hash with
+      # Symbol keys. All three are frozen or read-only data.
       attr_reader :system, :examples, :options
 
+      # Reads the YAML file at +path+ and returns a Persona built from its
+      # +system+, +examples+, +options+, +deflect+ and +fallback+ keys; other
+      # keys are ignored. Raises the usual file and Psych errors for a
+      # missing or invalid file.
       def self.load(path)
         data = YAML.safe_load(File.read(path), aliases: false) || {}
         new(**data.transform_keys(&:to_sym).slice(:system, :examples, :options, :deflect, :fallback))
       end
 
+      # Creates a persona from the parts of the YAML file (see the class
+      # description), with String keys inside +examples+, +deflect+ and
+      # +fallback+ as YAML gives them.
+      #
+      # [system]   the system prompt
+      # [examples] Array of <tt>{'user' => ..., 'assistant' => ...}</tt> turns
+      # [options]  extra fields for every request, such as +temperature+
+      # [deflect]  Array of <tt>{'match' => regexp, 'reply' => text}</tt> rules
+      #            answered without the model
+      # [fallback] Hash with +replies+ (rules as for +deflect+) and +default+
+      #
+      # Raises KeyError when an example or rule lacks a key, RegexpError for
+      # an invalid +match+.
       def initialize(system: '', examples: [], options: {}, deflect: [], fallback: {})
         @system   = system.to_s.strip
         @examples = Array(examples).flat_map do |turn|
@@ -66,22 +87,27 @@ module BBS
         @default  = fallback['default'].to_s.strip
       end
 
-      # The reply for `text` that needs no model, nil when no deflect rule
-      # matches: questions a small model answers out of character.
+      # Returns the reply for +text+ that needs no model, or +nil+ when no
+      # deflect rule matches: for questions a small model answers out of
+      # character. <tt>{input}</tt> in the reply is replaced by +text+.
       def deflect(text)
         _, reply = @deflect.find { |pattern, _| pattern.match?(text) }
         reply&.gsub('{input}') { text }
       end
 
-      # The canned reply for `text`: the first matching rule, else the default.
+      # Returns the canned reply for +text+: that of the first matching
+      # fallback rule, else the default (an empty String when the persona has
+      # none). <tt>{input}</tt> in the reply is replaced by +text+.
       def fallback(text)
         _, reply = @replies.find { |pattern, _| pattern.match?(text) }
         (reply || @default).gsub('{input}') { text }
       end
 
-      # `facts` (a String) is added to the system prompt for one request:
-      # what the character should know right now, e.g. looked up for the
-      # question at hand.
+      # Returns the messages that open every request: the system prompt (left
+      # out when empty) followed by the example turns. +facts+ (a String) is
+      # added to the system prompt for this one request: what the character
+      # should know right now, such as something looked up for the question
+      # at hand.
       def messages(facts = nil)
         system = [@system, facts.to_s.strip].reject(&:empty?).join("\n\n")
         [({ role: 'system', content: system } unless system.empty?), *@examples].compact
@@ -96,10 +122,20 @@ module BBS
       end
     end
 
-    # A streaming client for an OpenAI-compatible /v1/chat/completions.
+    # A streaming client for an OpenAI-compatible
+    # <tt>/v1/chat/completions</tt> endpoint.
     class Client
+      # The base URL of the server, as a String; empty when no model is set
+      # up.
       attr_reader :url
 
+      # Creates a client for the server at +url+ (its path is replaced by
+      # <tt>/v1/chat/completions</tt>).
+      #
+      # [model]        sent as the request's +model+ field when given
+      # [api_key]      sent as a Bearer token when given
+      # [open_timeout] seconds to wait for the connection
+      # [read_timeout] seconds to wait for each read of the reply
       def initialize(url:, model: nil, api_key: nil, open_timeout: 2, read_timeout: 30)
         @url          = url.to_s
         @model        = model
@@ -108,9 +144,15 @@ module BBS
         @read_timeout = read_timeout
       end
 
+      # Returns whether a URL is set, so the client can be asked at all.
       def enabled? = !@url.empty?
 
-      # Yields each piece of the reply's text as it arrives.
+      # Posts a streaming chat request with +messages+ (an Array of
+      # <tt>{ role:, content: }</tt> Hashes) and +options+ merged into the
+      # request body, and yields each piece of the reply's text as it
+      # arrives. Raises RuntimeError (<tt>"HTTP 503"</tt> and the like) for a non-2xx
+      # answer, and the Net::HTTP, socket, timeout and JSON errors as they
+      # come.
       def stream(messages, **options)
         uri  = URI.join(@url, '/v1/chat/completions')
         body = { messages: messages, stream: true, **options }
@@ -137,7 +179,8 @@ module BBS
         request
       end
 
-      # Server-sent events: one `data: {json}` line per chunk, `[DONE]` at the end.
+      # Yields each parsed JSON event of a server-sent event stream: one
+      # <tt>data: {json}</tt> line per chunk, <tt>[DONE]</tt> at the end.
       def each_event(response)
         buffer = +''
         response.read_body do |chunk|
@@ -156,12 +199,18 @@ module BBS
 
     # A persona talking through a client, with a short memory per caller.
     class Chat
-      # What a plain-text terminal cannot show: markdown marks and emoji.
+      # The default reply filter: what a plain-text terminal cannot show,
+      # Markdown marks and emoji.
       PLAIN_TEXT = /[*#`\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/
 
-      # history: how many past messages (user and assistant) to send along;
-      # key: where in the caller's context hash the history is kept;
-      # filter: characters removed from the reply, nil to keep everything.
+      # Creates a chat for +persona+ (a Persona) answering through +client+
+      # (a Client).
+      #
+      # [history] how many past messages (user and assistant) to send along
+      # [key]     where in the caller's context Hash the history is kept
+      # [filter]  a Regexp of characters removed from the reply, +nil+ to
+      #           keep everything
+      # [options] request fields that override the persona's +options+
       def initialize(persona:, client:, history: 6, key: :ai_history, filter: PLAIN_TEXT, options: {})
         @persona = persona
         @client  = client
@@ -171,15 +220,23 @@ module BBS
         @options = persona.options.merge(options)
       end
 
-      # Returns the reply. With a block, the reply is also yielded piece by
-      # piece as it arrives, so the terminal can type it out live. The canned
-      # reply is yielded whole.
+      # Returns the reply to the caller's +text+. A deflect rule of the
+      # persona answers first; otherwise the model is asked (when the client
+      # is enabled) with the persona's messages, the caller's history from
+      # +ctx+ and +text+; when that gives nothing, the fallback answers. With
+      # a block, the reply is also yielded piece by piece as it arrives, so
+      # the terminal can type it out live; a canned reply is yielded whole.
       #
-      # facts:    added to the system prompt for this request only (not kept
-      #           in the history), see Persona#messages;
-      # fallback: the reply when the model is missing or fails, instead of
-      #           the persona's canned one — e.g. the looked-up facts as they
-      #           are.
+      # A model reply is added to the history in +ctx+ (a Hash; anything else
+      # keeps no history), which is cut to the last +history+ messages. A
+      # model error is reported on stderr, and a reply cut short by it is
+      # kept as it is.
+      #
+      # [facts]    added to the system prompt for this request only (not kept
+      #            in the history), see Persona#messages
+      # [fallback] the reply when the model is missing or fails, instead of
+      #            the persona's canned one, such as the looked-up facts as
+      #            they are
       def reply(text, ctx = {}, facts: nil, fallback: nil, &on_text)
         text  = text.to_s.dup.force_encoding(Encoding::UTF_8).scrub('').strip
         if (canned = @persona.deflect(text))
@@ -230,6 +287,12 @@ module BBS
     # Words are held back until they are whole, and whitespace is written only
     # before the next word, so a reply never ends on a dangling blank line.
     class Typewriter
+      # Creates a typewriter on +io+ (a FakeOS console) and prints +prefix+.
+      #
+      # [prefix] printed once; wrapped lines are indented by its length
+      # [style]  the FakeOS style the text is printed in
+      # [width]  the line width, by default one less than the terminal's;
+      #          at least 20 columns are left for the text
       def initialize(io, prefix: '', style: :text, width: nil)
         @io      = io
         @style   = style
@@ -241,6 +304,8 @@ module BBS
         @io.print prefix, style: @style, newline: 0
       end
 
+      # Adds +piece+ of the streamed text, printing every word it completes
+      # and keeping the unfinished one back.
       def write(piece)
         @pending << piece
         while (m = @pending.match(/\s+/))
@@ -250,7 +315,7 @@ module BBS
         end
       end
 
-      # Writes the last word and `newlines` line breaks.
+      # Writes the last word and +newlines+ line breaks.
       def finish(newlines: 2)
         word(@pending)
         @pending = +''
