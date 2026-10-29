@@ -65,8 +65,8 @@ Four building blocks sit beside them:
 | `BBS::FakeOS` | A character-mode OS simulator: boot script + command shell | A simulated machine the caller types into |
 | `BBS::Door` | Hands the line from an Application to a program and back | Games, simulated machines, anything full-line inside a menu-driven BBS |
 | `BBS::AI` | A persona-driven chat with a small model, streamed to the terminal | A character the caller can talk to, e.g. in a FakeOS `on_unknown` |
-| `BBS::Petscii` | A Commodore 64 on the line: PETSCII out, the C64's keys in (`session.petscii!`) | A C64 face of a board, on the same Flows and doors |
-| `BBS::Terminal` | The first question of a two-faced board: modern (ANSI/xterm) or C64 (PETSCII) | One port for both faces (`Terminal.flow`) |
+| `BBS::Petscii` | A Commodore 64 on the line: PETSCII out, the C64's keys in (`session.petscii!`) | A PETSCII face of a board, on the same Flows and doors |
+| `BBS::Terminal` | The first question of a two-faced board: modern (ANSI/xterm) or PETSCII (a C64) | One port for both faces (`Terminal.flow`) |
 
 The server boots a Telnet TCP listener, hands each connection a `Session`,
 which runs the configured `Flow`. Inside that flow you can hand off to a
@@ -1377,7 +1377,7 @@ report at all (a C64 behind a WiFi modem speaks plain TCP) most likely a C64.
 
 ### Two faces on one port (`BBS::Terminal`)
 
-A board with a modern face and a C64 face asks the caller first, with the
+A board with a modern face and a PETSCII face (a C64) asks the caller first, with the
 guess above as the default:
 
 ```
@@ -1393,7 +1393,7 @@ YOUR TERMINAL [1]:
 BBS.configure do |config|
   config.mouse            = true
   config.mouse_on_connect = false   # the mouse's escape sequence is garbage on a C64
-  config.flow = BBS::Terminal.flow(title: 'TTG Wiki', modern: modern_flow, c64: c64_flow)
+  config.flow = BBS::Terminal.flow(title: 'TTG Wiki', modern: modern_flow, petscii: petscii_flow)
 end
 ```
 
@@ -1403,7 +1403,7 @@ capitals, which both machines print alike. A key (`1`/`M`, `2`/`C`/`P`) only
 picks and RETURN takes it, so the RETURN of a line-mode telnet does not reach
 the first screen; no answer in 60 s takes the pick or the guess.
 `BBS::Terminal.choose(session, title:)` is the question alone: `:modern`,
-`:c64`, or nil when the line drops.
+`:petscii`, or nil when the line drops.
 
 ### `Session#readkey` return values
 
