@@ -118,14 +118,15 @@ module BBS
     }.freeze
 
     # Translates a +byte+ the C64 sent into a key the way BBS::Telnet#readkey
-    # returns keys: a Symbol (+:enter+, +:backspace+, the arrows, +:home+,
+    # returns keys: a Symbol (+:enter+, +:backspace+ for DEL and for the ASCII
+    # backspace and delete some terminal programs send, the arrows, +:home+,
     # +:escape+ for RUN/STOP and the left arrow key, +:f1+ ... +:f8+), a
     # one-character String with the letter case swapped back to ASCII, or
     # +nil+ for a byte that is not a key.
     def self.key(byte)
       case byte
       when 0x0d        then :enter
-      when 0x14        then :backspace
+      when 0x14, 0x08, 0x7f then :backspace
       when 0x11        then :down
       when 0x91        then :up
       when 0x1d        then :right
