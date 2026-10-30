@@ -8,6 +8,16 @@ module BBS
   # While a #message is set, the bar shows it in place of the hints: the
   # Application sets the hint of the highlighted menu entry there.
   class Statusbar < Widget
+    # A function key label, <tt>F1</tt> ... <tt>F12</tt>; the group is the
+    # number.
+    FKEY_LABEL = /\AF(\d+)\z/i
+    # An Alt key label, <tt>Alt-X</tt>; the group is the letter.
+    ALT_LABEL  = /\AAlt-(.)\z/i
+    # The Escape key label.
+    ESC_LABEL  = /\AEsc\z/i
+    # The Tab key label.
+    TAB_LABEL  = /\ATab\z/i
+
     # One hint: the key as shown (+F1+, <tt>Alt-x</tt>, +Esc+, +Tab+ or a
     # literal key), its label, the block run when it is activated, and
     # whether it is hidden.
@@ -109,11 +119,11 @@ module BBS
       @hints.find do |hint|
         label = hint.key.to_s
         case label
-        when /\AF(\d+)\z/i  then key == :"f#{::Regexp.last_match(1)}"
-        when /\AAlt-(.)\z/i then key == :"alt_#{::Regexp.last_match(1).downcase}"
-        when /\AEsc\z/i     then key == :escape
-        when /\ATab\z/i     then key == :tab
-        else                     key_str.casecmp?(label)
+        when FKEY_LABEL then key == :"f#{::Regexp.last_match(1)}"
+        when ALT_LABEL  then key == :"alt_#{::Regexp.last_match(1).downcase}"
+        when ESC_LABEL  then key == :escape
+        when TAB_LABEL  then key == :tab
+        else                 key_str.casecmp?(label)
         end
       end
     end

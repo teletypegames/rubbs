@@ -12,13 +12,13 @@ module BBS
     #
     # [color]   ANSI escape sequence for the box and text; default bright green
     # [padding] spaces between the text and the box sides
-    def self.render(text, color: "\e[1;32m", padding: 2)
+    def self.render(text, color: Ansi::BRIGHT_GREEN, padding: 2)
       inner = "#{' ' * padding}#{text}#{' ' * padding}"
       bar   = '═' * inner.length
-      rst   = "\e[0m"
-      "\r\n  #{color}╔#{bar}╗#{rst}\r\n" \
-      "  #{color}║#{inner}║#{rst}\r\n"   \
-      "  #{color}╚#{bar}╝#{rst}\r\n\r\n"
+      rst   = Ansi::RESET
+      "#{Ansi::CRLF}  #{color}╔#{bar}╗#{rst}#{Ansi::CRLF}" \
+      "  #{color}║#{inner}║#{rst}#{Ansi::CRLF}"   \
+      "  #{color}╚#{bar}╝#{rst}#{Ansi::CRLF * 2}"
     end
 
     # Returns +text+ as large FIGlet-style letters drawn by Artii, each line
@@ -27,11 +27,11 @@ module BBS
     #
     # [color] ANSI escape sequence for the letters; default bright green
     # [font]  the Artii font name; default <tt>'slant'</tt>
-    def self.render_big(text, color: "\e[1;32m", font: 'slant')
-      rst  = "\e[0m"
+    def self.render_big(text, color: Ansi::BRIGHT_GREEN, font: 'slant')
+      rst  = Ansi::RESET
       art  = Artii::Base.new(font: font).asciify(text)
       lines = art.split("\n").map { |l| "  #{color}#{l}#{rst}" }
-      "\r\n#{lines.join("\r\n")}\r\n\r\n"
+      "#{Ansi::CRLF}#{lines.join(Ansi::CRLF)}#{Ansi::CRLF * 2}"
     end
   end
 end

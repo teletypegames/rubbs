@@ -40,7 +40,7 @@ module BBS
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       nil
     ensure
-      @session.write("\e[?25h\e[2J\e[H")
+      @session.write("#{Ansi::SHOW_CURSOR}#{Ansi::CLEAR}")
     end
 
     # The +self+ of every TUI block: holds the page state in instance
@@ -54,8 +54,8 @@ module BBS
 
       # Named background colours, as SGR sequences.
       BACKGROUND_COLORS = {
-        black:  "\e[40m", red:    "\e[41m", green: "\e[42m",
-        yellow: "\e[43m", blue:   "\e[44m", cyan:  "\e[46m",
+        black:  Ansi::BG_BLACK, red:    "\e[41m", green: "\e[42m",
+        yellow: "\e[43m",       blue:   "\e[44m", cyan:  "\e[46m",
         white:  "\e[47m",
       }.freeze
 
@@ -105,8 +105,8 @@ module BBS
         delta = @next_frame.diff(@committed_frame)
 
         if first_render || resized || !delta.empty?
-          prefix = (first_render || resized) ? "\e[2J\e[H" : ""
-          @session.write("\e[?25l#{prefix}#{delta}\e[?25h")
+          prefix = (first_render || resized) ? Ansi::CLEAR : ""
+          @session.write("#{Ansi::HIDE_CURSOR}#{prefix}#{delta}#{Ansi::SHOW_CURSOR}")
           @committed_frame = @next_frame
         end
       end
@@ -286,9 +286,9 @@ module BBS
       # word-wrapped into an Array of lines at most +width+ characters wide.
       def wordwrap(text, width)
         words = text.to_s
-                    .gsub(/\[([^\]]+)\]\([^)]+\)/, '\1')
-                    .gsub(/[#*_`~>|\\]/, '')
-                    .gsub(/\r?\n+/, ' ')
+                    .gsub(Patterns::MARKDOWN_LINK, '\1')
+                    .gsub(Patterns::MARKDOWN_MARK, '')
+                    .gsub(Patterns::LINE_BREAKS, ' ')
                     .strip
                     .split
         lines       = []

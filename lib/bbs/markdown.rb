@@ -15,6 +15,39 @@ module BBS
   # and numbered lists, horizontal rules, GFM tables, and inline links, code,
   # bold and italic. The methods are module functions.
   module Markdown
+    # A line break in the source: LF or CRLF.
+    LINE_BREAK = /\r?\n/
+    # A heading: one to six <tt>#</tt>, the text, optional closing marks.
+    HEADING = /\A([#]{1,6})\s+(.+?)\s*#*\s*\z/
+    # A horizontal rule: three or more of the same <tt>-</tt>, <tt>*</tt>
+    # or <tt>_</tt>.
+    RULE = /\A\s*([-*_])\1{2,}\s*\z/
+    # A block quote line; the first group is the quoted text.
+    QUOTE = /\A\s*>\s?(.*)/
+    # A bullet list item: indent, a <tt>-</tt>, <tt>*</tt> or <tt>+</tt>
+    # mark, and the text.
+    BULLET_ITEM = /\A(\s*)[-*+]\s+(.+)/
+    # A numbered list item: indent, the number, and the text.
+    NUMBERED_ITEM = /\A(\s*)(\d+)\.\s+(.+)/
+    # An indented line that may continue a list item.
+    CONTINUATION = /\A\s+\S/
+    # The start of a bullet or numbered list item.
+    ITEM_START = /\A\s*([-*+]|\d+\.)\s+/
+    # A link <tt>[text](url)</tt>; the groups are the text and the url.
+    LINK = /\[([^\]]+)\]\(([^)]+)\)/
+    # Inline code between backticks.
+    CODE_SPAN = /`([^`]+)`/
+    # Bold text between double asterisks.
+    BOLD = /\*\*([^*]+)\*\*/
+    # Italic text between single asterisks, not inside a word.
+    ITALIC_STAR = /(?<![A-Za-z0-9*])\*([^*\s][^*]*?[^*\s]|\S)\*(?![A-Za-z0-9*])/
+    # Italic text between underscores, not inside a word.
+    ITALIC_UNDERSCORE = /(?<![A-Za-z0-9_])_([^_\s][^_]*?[^_\s]|\S)_(?![A-Za-z0-9_])/
+    # A backslash escape of a Markdown punctuation character.
+    ESCAPED = /\\([\\`*_{}\[\]()#+\-.!>])/
+    # A cell of a table delimiter row: dashes with optional colons.
+    DELIMITER_CELL = /\A:?-{1,}:?\z/
+
     module_function
 
     # Renders the Markdown +text+ as terminal lines.
@@ -47,12 +80,12 @@ module BBS
 
       flush_paragraph = lambda do
         next if paragraph.empty?
-        joined = paragraph.join(' ').gsub(/\s+/, ' ').strip
+        joined = paragraph.join(' ').gsub(Patterns::WHITESPACE, ' ').strip
         FrameBuffer.wrap_ansi(inline(joined, styles, base), width).each { |l| result << l }
         paragraph.clear
       end
 
-      lines = text.to_s.split(/\r?\n/)
+      lines = text.to_s.split(LINE_BREAK)
       i     = 0
       while i < lines.size
         line     = lines[i]
@@ -71,7 +104,7 @@ module BBS
           flush_paragraph.call
           result << ''
 
-        elsif (m = line.match(/\A([#]{1,6})\s+(.+?)\s*#*\s*\z/))
+        elsif (m = line.match(HEADING))
           level   = m[1].length
           heading = m[2].strip
           flush_paragraph.call
@@ -94,11 +127,11 @@ module BBS
           render_table(header, aligns, rows, width, styles, base).each { |l| result << l }
           consumed = j - i
 
-        elsif line.match?(/\A\s*([-*_])\1{2,}\s*\z/)
+        elsif line.match?(RULE)
           flush_paragraph.call
           result << "#{styles[:rule]}#{'─' * width}#{base}"
 
-        elsif (m = line.match(/\A\s*>\s?(.*)/))
+        elsif (m = line.match(QUOTE))
           content = m[1]
           flush_paragraph.call
           inner_w = [width - 2, 1].max
@@ -106,7 +139,7 @@ module BBS
             result << "#{styles[:quote]}│ #{base}#{l}"
           end
 
-        elsif (m = line.match(/\A(\s*)[-*+]\s+(.+)/))
+        elsif (m = line.match(BULLET_ITEM))
           indent = m[1].length
           body, consumed = item_body(m[2], lines, i)
           flush_paragraph.call
@@ -122,7 +155,7 @@ module BBS
                       end
           end
 
-        elsif (m = line.match(/\A(\s*)(\d+)\.\s+(.+)/))
+        elsif (m = line.match(NUMBERED_ITEM))
           indent = m[1].length
           num    = m[2]
           body, consumed = item_body(m[3], lines, i)
@@ -154,7 +187,7 @@ module BBS
     def item_body(first, lines, index)
       body = [first.strip]
       j    = index + 1
-      while j < lines.size && lines[j].match?(/\A\s+\S/) && !lines[j].match?(/\A\s*([-*+]|\d+\.)\s+/)
+      while j < lines.size && lines[j].match?(CONTINUATION) && !lines[j].match?(ITEM_START)
         body << lines[j].strip
         j += 1
       end
@@ -167,16 +200,16 @@ module BBS
     # +styles+ entry followed by +base_sgr+. Backslash escapes are removed.
     def inline(text, styles, base_sgr)
       s = text.to_s
-      s = s.gsub(/\[([^\]]+)\]\(([^)]+)\)/) { "#{styles[:link]}#{::Regexp.last_match(1)}#{base_sgr}" }
-      s = s.gsub(/`([^`]+)`/) { "#{styles[:code]}#{::Regexp.last_match(1)}#{base_sgr}" }
-      s = s.gsub(/\*\*([^*]+)\*\*/) { "#{styles[:bold]}#{::Regexp.last_match(1)}#{base_sgr}" }
-      s = s.gsub(/(?<![A-Za-z0-9*])\*([^*\s][^*]*?[^*\s]|\S)\*(?![A-Za-z0-9*])/) do
+      s = s.gsub(LINK) { "#{styles[:link]}#{::Regexp.last_match(1)}#{base_sgr}" }
+      s = s.gsub(CODE_SPAN) { "#{styles[:code]}#{::Regexp.last_match(1)}#{base_sgr}" }
+      s = s.gsub(BOLD) { "#{styles[:bold]}#{::Regexp.last_match(1)}#{base_sgr}" }
+      s = s.gsub(ITALIC_STAR) do
         "#{styles[:italic]}#{::Regexp.last_match(1)}#{base_sgr}"
       end
-      s = s.gsub(/(?<![A-Za-z0-9_])_([^_\s][^_]*?[^_\s]|\S)_(?![A-Za-z0-9_])/) do
+      s = s.gsub(ITALIC_UNDERSCORE) do
         "#{styles[:italic]}#{::Regexp.last_match(1)}#{base_sgr}"
       end
-      s.gsub(/\\([\\`*_{}\[\]()#+\-.!>])/) { ::Regexp.last_match(1) }
+      s.gsub(ESCAPED) { ::Regexp.last_match(1) }
     end
 
     # ── GFM tables ───────────────────────────────────────────────────────────
@@ -194,7 +227,7 @@ module BBS
     def separator_row?(line)
       return false unless line.include?('-')
       cells = split_row(line)
-      !cells.empty? && cells.all? { |c| c.match?(/\A:?-{1,}:?\z/) }
+      !cells.empty? && cells.all? { |c| c.match?(DELIMITER_CELL) }
     end
 
     # Returns the per-column alignment (+:left+, +:center+ or +:right+)

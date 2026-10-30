@@ -80,6 +80,93 @@ module BBS
     # Height of the C64 screen in lines.
     ROWS = 25
 
+    # Key code: RETURN.
+    KEY_RETURN     = 0x0d
+    # Key code: RUN/STOP, an escape key.
+    KEY_RUN_STOP   = 0x03
+    # Key code: the left arrow key (top left), an escape key.
+    KEY_LEFT_ARROW = 0x5f
+    # Key code: F1.
+    KEY_F1 = 0x85
+    # Key code: F2 (Shift-F1).
+    KEY_F2 = 0x89
+    # Key code: F3.
+    KEY_F3 = 0x86
+    # Key code: F4 (Shift-F3).
+    KEY_F4 = 0x8a
+    # Key code: F5.
+    KEY_F5 = 0x87
+    # Key code: F6 (Shift-F5).
+    KEY_F6 = 0x8b
+    # Key code: F7.
+    KEY_F7 = 0x88
+    # Key code: F8 (Shift-F7).
+    KEY_F8 = 0x8c
+    # Key code: the pound sign.
+    KEY_POUND      = 0x5c
+    # Key code: the up arrow key.
+    KEY_UP_ARROW   = 0x5e
+    # Key code: Shift-SPACE.
+    SHIFT_SPACE    = 0xa0
+
+    # Codes that are the same in PETSCII and ASCII: space, digits,
+    # punctuation and <tt>@</tt>.
+    SAME_AS_ASCII = 0x20..0x40
+    # The left bracket, the same in PETSCII and ASCII.
+    LEFT_BRACKET  = 0x5b
+    # The right bracket, the same in PETSCII and ASCII.
+    RIGHT_BRACKET = 0x5d
+    # The codes of A-Z in ASCII, and of the unshifted (lowercase) letters in
+    # the C64's lowercase character set.
+    ASCII_UPPER = 0x41..0x5a
+    # The codes of a-z in ASCII, and of shifted (capital) letters some C64
+    # terminal programs send.
+    ASCII_LOWER = 0x61..0x7a
+    # The codes of the shifted (capital) letters the C64 keyboard sends.
+    SHIFTED_LETTERS = 0xc1..0xda
+    # The distance between a letter's lowercase and uppercase ASCII codes.
+    CASE_OFFSET  = 0x20
+    # The distance between ASCII A-Z and the C64's shifted letters.
+    SHIFT_OFFSET = 0x80
+    # The C1 control range, never printed as a character.
+    C1_CONTROLS = 0x80..0x9f
+
+    # SGR parameter: reset.
+    SGR_RESET = 0
+    # SGR parameter: bold.
+    SGR_BOLD = 1
+    # SGR parameter: dim.
+    SGR_DIM = 2
+    # SGR parameter: reverse video.
+    SGR_REVERSE = 7
+    # SGR parameter: neither bold nor dim.
+    SGR_NORMAL = 22
+    # SGR parameter: reverse video off.
+    SGR_REVERSE_OFF = 27
+    # SGR parameters of the normal foreground colours.
+    SGR_FG = 30..37
+    # SGR parameter: default foreground colour.
+    SGR_FG_DEFAULT = 39
+    # SGR parameters of the bright foreground colours.
+    SGR_FG_BRIGHT = 90..97
+    # SGR parameters that start an extended colour, foreground and
+    # background.
+    SGR_EXTENDED = [38, 48].freeze
+    # The extended colour kind of a 256-colour index (one more parameter);
+    # any other kind is RGB (three more).
+    SGR_INDEXED = 5
+    # The ANSI colour index of white, the default text colour.
+    ANSI_WHITE = 7
+
+    # The columns a closing quote needs: the quote, a cursor left and a space.
+    QUOTE_ROOM = 3
+    # A character the C64 shows as it is in one cell: printable ASCII and £.
+    PLAIN_CELL = /\A[ -~£]\z/
+    # A combining mark, dropped with the accent of a decomposed letter.
+    COMBINING_MARK = /\p{Mn}/
+    # The final byte of an escape sequence the Encoder acts on.
+    ESCAPE_FINAL = /[A-Za-z~@`]/
+
     # The control bytes that go to the C64 as they are.
     CONTROLS = [0x05, 0x07, 0x0e, 0x11, 0x12, 0x13, 0x14, 0x1c, 0x1d, 0x1e, 0x1f,
                 0x81, 0x8e, *0x90..0x9f].freeze
@@ -125,29 +212,29 @@ module BBS
     # +nil+ for a byte that is not a key.
     def self.key(byte)
       case byte
-      when 0x0d        then :enter
-      when 0x14, 0x08, 0x7f then :backspace
-      when 0x11        then :down
-      when 0x91        then :up
-      when 0x1d        then :right
-      when 0x9d        then :left
-      when 0x13        then :home
-      when 0x03, 0x5f  then :escape # RUN/STOP and ←, the C64's escape keys
-      when 0x85        then :f1
-      when 0x89        then :f2
-      when 0x86        then :f3
-      when 0x8a        then :f4
-      when 0x87        then :f5
-      when 0x8b        then :f6
-      when 0x88        then :f7
-      when 0x8c        then :f8
-      when 0x41..0x5a  then (byte + 0x20).chr
-      when 0xc1..0xda  then (byte - 0x80).chr
-      when 0x61..0x7a  then (byte - 0x20).chr
-      when 0x20..0x40, 0x5b, 0x5d then byte.chr
-      when 0x5c        then '£'
-      when 0x5e        then '^'
-      when 0xa0        then ' '
+      when KEY_RETURN      then :enter
+      when DEL.ord, Ascii::BS, Ascii::DEL then :backspace
+      when DOWN.ord        then :down
+      when UP.ord          then :up
+      when RIGHT.ord       then :right
+      when LEFT.ord        then :left
+      when HOME.ord        then :home
+      when KEY_RUN_STOP, KEY_LEFT_ARROW then :escape
+      when KEY_F1          then :f1
+      when KEY_F2          then :f2
+      when KEY_F3          then :f3
+      when KEY_F4          then :f4
+      when KEY_F5          then :f5
+      when KEY_F6          then :f6
+      when KEY_F7          then :f7
+      when KEY_F8          then :f8
+      when ASCII_UPPER     then (byte + CASE_OFFSET).chr
+      when SHIFTED_LETTERS then (byte - SHIFT_OFFSET).chr
+      when ASCII_LOWER     then (byte - CASE_OFFSET).chr
+      when SAME_AS_ASCII, LEFT_BRACKET, RIGHT_BRACKET then byte.chr
+      when KEY_POUND       then '£'
+      when KEY_UP_ARROW    then '^'
+      when SHIFT_SPACE     then ' '
       end
     end
 
@@ -159,12 +246,12 @@ module BBS
     # a digit, a sign, a glyph of GLYPHS or an accented letter, which
     # loses its accent), <tt>'?'</tt> when it would take more cells or none.
     def self.cell(char)
-      return char if char.match?(/\A[ -~£]\z/)
+      return char if char.match?(PLAIN_CELL)
 
       glyph = GLYPHS[char]
       return char if glyph && glyph.length == 1
 
-      base = char.unicode_normalize(:nfkd).gsub(/\p{Mn}/, '')
+      base = char.unicode_normalize(:nfkd).gsub(COMBINING_MARK, '')
       base.length == 1 && base.ascii_only? ? char : '?'
     end
 
@@ -216,21 +303,21 @@ module BBS
 
         o = ch.ord
         case o
-        when 0x1b then @esc = +''
-        when 0x0d then newline(out); @lone_cr = true
-        when 0x0a then newline(out)
-        when 0x08 then out << bytes(Petscii::LEFT); move(-1)
-        when 0x09 then text('  ', out)
-        when 0x0c then clear(out)
-        when 0x93 then clear(out)
-        when 0x13 then out << o.chr; @col = 0; @wrapped = false
-        when 0x12 then out << o.chr; @rvs = true
-        when 0x92 then out << o.chr; @rvs = false
+        when Ascii::ESC then @esc = +''
+        when Ascii::CR  then newline(out); @lone_cr = true
+        when Ascii::LF  then newline(out)
+        when Ascii::BS  then out << bytes(Petscii::LEFT); move(-1)
+        when Ascii::TAB then text('  ', out)
+        when Ascii::FF  then clear(out)
+        when Petscii::CLEAR.ord   then clear(out)
+        when Petscii::HOME.ord    then out << o.chr; @col = 0; @wrapped = false
+        when Petscii::RVS_ON.ord  then out << o.chr; @rvs = true
+        when Petscii::RVS_OFF.ord then out << o.chr; @rvs = false
         else
           if Petscii::CONTROLS.include?(o)
             out << o.chr
             @color = ch if Petscii::COLORS.include?(ch)
-          elsif o >= 0x20 && o != 0x7f && !(0x80..0x9f).cover?(o)
+          elsif o >= Ascii::SPACE && o != Ascii::DEL && !Petscii::C1_CONTROLS.cover?(o)
             text(ch, out)
           end
         end
@@ -239,7 +326,7 @@ module BBS
       # RETURN on the C64 also ends reverse mode.
       def newline(out)
         unless @wrapped
-          out << "\r"
+          out << Ansi::CR
           @rvs = false
         end
         @col     = 0
@@ -279,26 +366,26 @@ module BBS
       # space covers it. Too near the right edge the second " would wrap the
       # line, so there the quote mode stays until the RETURN.
       def quote_off(out)
-        return if @col > Petscii::COLS - 3
+        return if @col > Petscii::COLS - Petscii::QUOTE_ROOM
 
         out << bytes("\"#{Petscii::LEFT} #{Petscii::LEFT}")
       end
 
       def glyph(ch)
         o = ch.ord
-        return (o + 0x80).chr(Encoding::UTF_8) if o.between?(0x41, 0x5a)
-        return (o - 0x20).chr if o.between?(0x61, 0x7a)
-        return ch if o.between?(0x20, 0x40) || o == 0x5b || o == 0x5d
+        return (o + Petscii::SHIFT_OFFSET).chr(Encoding::UTF_8) if Petscii::ASCII_UPPER.cover?(o)
+        return (o - Petscii::CASE_OFFSET).chr if Petscii::ASCII_LOWER.cover?(o)
+        return ch if Petscii::SAME_AS_ASCII.cover?(o) || o == Petscii::LEFT_BRACKET || o == Petscii::RIGHT_BRACKET
 
         case ch
         when '█' then @rvs ? "#{Petscii::RVS_OFF} #{Petscii::RVS_ON}" : "#{Petscii::RVS_ON} #{Petscii::RVS_OFF}"
-        when '▀' then "#{Petscii::RVS_ON}\u00a2#{Petscii::RVS_OFF}"
-        when '▐' then "#{Petscii::RVS_ON}\u00a1#{Petscii::RVS_OFF}"
+        when '▀' then "#{Petscii::RVS_ON}#{Petscii::GLYPHS['▄']}#{Petscii::RVS_OFF}"
+        when '▐' then "#{Petscii::RVS_ON}#{Petscii::GLYPHS['▌']}#{Petscii::RVS_OFF}"
         else
           mapped = Petscii::GLYPHS[ch]
           return mapped if mapped
 
-          base = ch.unicode_normalize(:nfkd).gsub(/\p{Mn}/, '')
+          base = ch.unicode_normalize(:nfkd).gsub(Petscii::COMBINING_MARK, '')
           base.ascii_only? && !base.empty? && base != ch ? base.each_char.map { |c| glyph(c) }.join : '?'
         end
       end
@@ -322,8 +409,8 @@ module BBS
         end
 
         @esc << ch
-        return @esc = nil if @esc.length > 32
-        return unless ch.match?(/[A-Za-z~@`]/)
+        return @esc = nil if @esc.length > Ansi::MAX_CSI_LENGTH
+        return unless ch.match?(Petscii::ESCAPE_FINAL)
 
         params = @esc[1...-1]
         @esc   = nil
@@ -348,7 +435,7 @@ module BBS
         when 'C' then out << bytes(Petscii::RIGHT * n); move(n)
         when 'D' then out << bytes(Petscii::LEFT * n); move(-n)
         when 'G'
-          out << bytes("\r#{Petscii::UP}#{Petscii::RIGHT * (n - 1)}") unless @wrapped && n == 1
+          out << bytes("#{Ansi::CR}#{Petscii::UP}#{Petscii::RIGHT * (n - 1)}") unless @wrapped && n == 1
           @col = 0
           move(n - 1)
         end
@@ -360,16 +447,16 @@ module BBS
         while i < codes.size
           c = codes[i]
           case c
-          when 0 then @bold = false; @dim = false; @fg = nil; rvs = false
-          when 1 then @bold = true
-          when 2 then @dim = true
-          when 22 then @bold = false; @dim = false
-          when 7 then rvs = true
-          when 27 then rvs = false
-          when 30..37 then @fg = [c - 30, false]
-          when 90..97 then @fg = [c - 90, true]
-          when 39 then @fg = nil
-          when 38, 48 then i += codes[i + 1] == 5 ? 2 : 4
+          when Petscii::SGR_RESET       then @bold = false; @dim = false; @fg = nil; rvs = false
+          when Petscii::SGR_BOLD        then @bold = true
+          when Petscii::SGR_DIM         then @dim = true
+          when Petscii::SGR_NORMAL      then @bold = false; @dim = false
+          when Petscii::SGR_REVERSE     then rvs = true
+          when Petscii::SGR_REVERSE_OFF then rvs = false
+          when Petscii::SGR_FG          then @fg = [c - Petscii::SGR_FG.first, false]
+          when Petscii::SGR_FG_BRIGHT   then @fg = [c - Petscii::SGR_FG_BRIGHT.first, true]
+          when Petscii::SGR_FG_DEFAULT  then @fg = nil
+          when *Petscii::SGR_EXTENDED   then i += codes[i + 1] == Petscii::SGR_INDEXED ? 2 : 4
           end
           i += 1
         end
@@ -386,9 +473,9 @@ module BBS
 
       def current_color
         return Petscii::DEFAULT if @fg.nil? && !@bold && !@dim
-        return Petscii::GREY if @dim && (@fg.nil? || @fg.first == 7)
+        return Petscii::GREY if @dim && (@fg.nil? || @fg.first == Petscii::ANSI_WHITE)
 
-        index, bright = @fg || [7, false]
+        index, bright = @fg || [Petscii::ANSI_WHITE, false]
         (bright || @bold ? Petscii::ANSI_BRIGHT : Petscii::ANSI_DARK)[index]
       end
     end

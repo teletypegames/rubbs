@@ -34,6 +34,10 @@ module BBS
     SAVE_KEYS = %i[f1 ctrl_s].freeze
     # The keys that ask whether to save or quit.
     MENU_KEYS = %i[escape interrupt ctrl_q f7].freeze
+    # SGR: reverse video on, for the title bar, the hint row and the count.
+    REVERSE     = "\e[7m"
+    # SGR: reverse video off.
+    REVERSE_OFF = "\e[27m"
 
     # Creates an editor for +session+.
     #
@@ -153,7 +157,7 @@ module BBS
       @shown  = Array.new(@height)
       @status = nil
       out = @screen.clear
-      out << "\e[7m#{fit(" #{@title}", @cols - 1)}\e[27m"
+      out << "#{REVERSE}#{fit(" #{@title}", @cols - 1)}#{REVERSE_OFF}"
       @screen.wrote(@cols - 1)
       out << bottom(hints)
       @session.write(out)
@@ -178,7 +182,7 @@ module BBS
 
     # The bottom row in reverse, written over with +text+.
     def bottom(text)
-      out = @screen.move(@rows - 1, 1) << "\e[7m#{fit(" #{text}", @cols - 1)}\e[27m"
+      out = @screen.move(@rows - 1, 1) << "#{REVERSE}#{fit(" #{text}", @cols - 1)}#{REVERSE_OFF}"
       @screen.wrote(@cols - 1)
       out
     end
@@ -187,7 +191,7 @@ module BBS
       rows = layout
       row  = current_row(rows)
       @top = [row - (@height / 2), 0].max if row < @top || row >= @top + @height
-      out = +"\e[?25l"
+      out = +Ansi::HIDE_CURSOR
       @height.times do |i|
         line, start, stop = rows[@top + i]
         text = line.nil? ? '' : @buffer.lines[line][start, [stop - start, @width].min]
@@ -200,7 +204,7 @@ module BBS
       end
       out << status
       out << @screen.move(2 + row - @top, 1 + @buffer.pos - rows[row][1])
-      out << "\e[?25h"
+      out << Ansi::SHOW_CURSOR
       @session.write(out)
     end
 
@@ -215,7 +219,7 @@ module BBS
       @status = count
       out = @screen.move(1, @cols - 1 - count.length)
       @screen.wrote(count.length + 1)
-      "#{out}\e[7m #{count}\e[27m"
+      "#{out}#{REVERSE} #{count}#{REVERSE_OFF}"
     end
 
     def fit(text, width) = text[0, width].ljust(width)

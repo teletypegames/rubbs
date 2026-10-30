@@ -41,8 +41,8 @@ module BBS
     def self.choose(session, title:)
       default = guess(session)
       prompt  = "YOUR TERMINAL [#{FACES[default][:digit]}]: "
-      session.write "\r\n\r\n#{title.upcase}\r\n\r\n" \
-                    "#{FACES.values.map { |f| "#{f[:digit]} - #{f[:label]}\r\n" }.join}\r\n#{prompt}"
+      session.write "#{Ansi::CRLF * 2}#{title.upcase}#{Ansi::CRLF * 2}" \
+                    "#{FACES.values.map { |f| "#{f[:digit]} - #{f[:label]}#{Ansi::CRLF}" }.join}#{Ansi::CRLF}#{prompt}"
       picked = nil
       loop do
         key = session.readkey(timeout: WAIT)
@@ -53,11 +53,11 @@ module BBS
         choice = :none if choice.nil? && %i[backspace ctrl_t].include?(key)
         next if choice.nil? || (choice == :none && picked.nil?) || choice == picked
 
-        session.write "\r\n#{prompt}" unless picked.nil?
+        session.write "#{Ansi::CRLF}#{prompt}" unless picked.nil?
         picked = choice == :none ? nil : choice
         session.write FACES[picked][:digit] if picked
       end
-      session.write picked ? "\r\n" : "#{FACES[default][:digit]}\r\n"
+      session.write picked ? Ansi::CRLF : "#{FACES[default][:digit]}#{Ansi::CRLF}"
       picked || default
     end
 

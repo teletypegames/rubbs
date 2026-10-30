@@ -20,7 +20,14 @@ module BBS
 
     # Matches one CSI escape sequence (<tt>ESC [</tt> parameters and a final
     # letter or <tt>~</tt>), used to strip styling when measuring text.
-    ANSI_ESC_RE = /\e\[[\d;]*[A-Za-z~]/.freeze
+    ANSI_ESC_RE = Ansi::CSI_RE
+    # SGR reset with no parameter, the short form of Ansi::RESET.
+    SHORT_RESET = "\e[m"
+    # One token of word wrapping: a CSI sequence, a word, or a run of
+    # whitespace.
+    WRAP_TOKEN_RE = /(\e\[[\d;]*[A-Za-z~]|[^\s\e]+|\s+)/
+    # A token that is whitespace only.
+    BLANK_RE = /\A\s+\z/
 
     # Returns +value+ as a String a regexp can read: invalid bytes become
     # <tt>?</tt>.
@@ -46,9 +53,9 @@ module BBS
       s       = self.text(text)
       len     = s.length
       while i < len
-        if s[i] == "\e" && i + 1 < len && s[i + 1] == '['
+        if s[i] == Ansi::ESC && i + 1 < len && s[i + 1] == Ansi::CSI_BYTE
           j = i + 2
-          j += 1 while j < len && !s[j].match?(/[A-Za-z~]/)
+          j += 1 while j < len && !s[j].match?(Ansi::CSI_FINAL)
           break if j >= len
           out << s[i..j]
           i = j + 1
@@ -86,16 +93,16 @@ module BBS
         cur << active_sgr if active_sgr
       end
 
-      s.scan(/(\e\[[\d;]*[A-Za-z~]|[^\s\e]+|\s+)/) do |(tok)|
-        if tok.start_with?("\e")
-          active_sgr = (tok == "\e[0m" || tok == "\e[m") ? nil : tok
+      s.scan(WRAP_TOKEN_RE) do |(tok)|
+        if tok.start_with?(Ansi::ESC)
+          active_sgr = (tok == Ansi::RESET || tok == SHORT_RESET) ? nil : tok
           cur << tok
           next
         end
 
         tok_visible = tok.gsub(ANSI_ESC_RE, '').length
 
-        if tok.match?(/\A\s+\z/)
+        if tok.match?(BLANK_RE)
           if cur_visible == 0
             cur << tok
             cur_visible += tok_visible
@@ -172,9 +179,9 @@ module BBS
       while i < len
         ch = s[i]
 
-        if ch == "\e" && i + 1 < len && s[i + 1] == '['
+        if ch == Ansi::ESC && i + 1 < len && s[i + 1] == Ansi::CSI_BYTE
           j = i + 2
-          j += 1 while j < len && !s[j].match?(/[A-Za-z]/)
+          j += 1 while j < len && !s[j].match?(Ansi::CSI_LETTER)
 
           if j < len
             term  = s[j]
@@ -200,7 +207,7 @@ module BBS
           else
             i += 1
           end
-        elsif ch.ord >= 32
+        elsif ch.ord >= Ascii::SPACE
           @cells[@cy][@cx] = Cell.new(ch, cur_sgr) if visible?
           @cx += 1
           i += 1
@@ -293,7 +300,7 @@ module BBS
     # two columns down its right side and one row under it, offset by one
     # row and two columns, in style +sgr+ (black background by default).
     def shadow(x:, y:, width:, height:, sgr: nil)
-      sgr ||= "\e[40m"
+      sgr ||= Ansi::BG_BLACK
       # right edge
       height.times do |r|
         move(x + width, y + 1 + r)
@@ -322,13 +329,13 @@ module BBS
           next if nc == oc
 
           unless r == exp_r && c == exp_c
-            out << "\e[#{r + 1};#{c + 1}H"
+            out << "#{Ansi::CSI}#{r + 1};#{c + 1}H"
           end
 
           # Each style starts from a reset, so no attribute of the cell
           # painted before it carries over.
           if nc.sgr != cur_sgr
-            out << "\e[0m" << nc.sgr.to_s
+            out << Ansi::RESET << nc.sgr.to_s
             cur_sgr = nc.sgr
           end
 
@@ -338,7 +345,7 @@ module BBS
         end
       end
 
-      out << "\e[0m" if cur_sgr != :_none && cur_sgr
+      out << Ansi::RESET if cur_sgr != :_none && cur_sgr
       out
     end
 

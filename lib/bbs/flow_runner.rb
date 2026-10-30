@@ -17,20 +17,29 @@ module BBS
     # Symbol => SGR String. An unknown name falls back to +:muted+ (or
     # +:success+ for banners).
     STYLES = {
-      success: "\e[1;32m",
-      muted:   "\e[0;37m",
-      error:   "\e[1;31m",
-      info:    "\e[0;33m",
-      prompt:  "\e[1;37m",
-      confirm: "\e[1;36m",
-      cyan:    "\e[0;36m",
-      magenta: "\e[0;35m",
-      blue:    "\e[0;34m",
-      yellow:  "\e[0;33m",
-      white:   "\e[1;37m",
-      green:   "\e[1;32m",
-      red:     "\e[1;31m",
+      success: Ansi::BRIGHT_GREEN,
+      muted:   Ansi::GREY,
+      error:   Ansi::BRIGHT_RED,
+      info:    Ansi::YELLOW,
+      prompt:  Ansi::WHITE,
+      confirm: Ansi::BRIGHT_CYAN,
+      cyan:    Ansi::CYAN,
+      magenta: Ansi::MAGENTA,
+      blue:    Ansi::BLUE,
+      yellow:  Ansi::YELLOW,
+      white:   Ansi::WHITE,
+      green:   Ansi::BRIGHT_GREEN,
+      red:     Ansi::BRIGHT_RED,
     }.freeze
+
+    # Moves the cursor up a line and erases that line: takes back the
+    # loading message of a +fetch+ step.
+    ERASE_LINE_ABOVE = "\e[1A\e[2K"
+    # An answer to a +pick+ step: digits only.
+    NUMBER = /\A\d+\z/
+    # An address the +:email+ validator accepts: something, an @, and a
+    # domain with a dot.
+    EMAIL = /\A[^@\s]+@[^@\s]+\.[^@\s]+\z/
 
     # The caller's session ID and the BBS::Session the flow runs on.
     attr_reader :session_id, :session
@@ -129,7 +138,7 @@ module BBS
 
     def run_say(step)
       color = STYLES.fetch(step[:style], STYLES[:muted])
-      write "\r\n  #{color}#{step[:text]}\e[0m\r\n\r\n"
+      write "#{Ansi::CRLF}  #{color}#{step[:text]}#{Ansi::RESET}#{Ansi::CRLF * 2}"
     end
 
     def run_set(step)
@@ -140,7 +149,7 @@ module BBS
     # On a C64 the answer is typed in a BBS::Field, which edits with the
     # cursor keys; a cancelled field is an empty answer.
     def run_ask(step)
-      prompt = "  #{STYLES[:prompt]}#{step[:prompt]}\e[0m: "
+      prompt = "  #{STYLES[:prompt]}#{step[:prompt]}#{Ansi::RESET}: "
       value  = if @session.respond_to?(:petscii?) && @session.petscii?
                  field(prompt)
                else
@@ -152,7 +161,7 @@ module BBS
       value = apply_transform(value, step[:transform])
 
       if step[:validate] && !valid?(value, step[:validate])
-        write "\r\n  #{STYLES[:error]}#{validation_message(step[:validate])}\e[0m\r\n\r\n"
+        write "#{Ansi::CRLF}  #{STYLES[:error]}#{validation_message(step[:validate])}#{Ansi::RESET}#{Ansi::CRLF * 2}"
         return :halt
       end
 
@@ -167,53 +176,53 @@ module BBS
     end
 
     def run_pause(step)
-      write "\r\n  #{STYLES[:info]}#{step[:message]}\e[0m\r\n"
+      write "#{Ansi::CRLF}  #{STYLES[:info]}#{step[:message]}#{Ansi::RESET}#{Ansi::CRLF}"
       sleep step[:seconds]
       nil
     end
 
     def run_gate(step)
       return nil if step[:check].call(@ctx)
-      write "  #{STYLES[:error]}#{step[:denied]}\e[0m\r\n\r\n"
+      write "  #{STYLES[:error]}#{step[:denied]}#{Ansi::RESET}#{Ansi::CRLF * 2}"
       :halt
     end
 
     def run_confirm_halt(step)
-      write "\r\n  #{STYLES[:confirm]}#{step[:message]}\e[0m [yes/no]: "
+      write "#{Ansi::CRLF}  #{STYLES[:confirm]}#{step[:message]}#{Ansi::RESET} [yes/no]: "
       answer = readline&.strip&.downcase
       return :halt if answer.nil?
       return nil   if %w[yes y].include?(answer)
-      write "\r\n  #{STYLES[:muted]}#{step[:denied]}\e[0m\r\n\r\n" if step[:denied]
+      write "#{Ansi::CRLF}  #{STYLES[:muted]}#{step[:denied]}#{Ansi::RESET}#{Ansi::CRLF * 2}" if step[:denied]
       :halt
     end
 
     def run_confirm_block(step)
-      write "\r\n  #{STYLES[:prompt]}#{step[:message]}\e[0m [yes/no]: "
+      write "#{Ansi::CRLF}  #{STYLES[:prompt]}#{step[:message]}#{Ansi::RESET} [yes/no]: "
       answer = readline&.strip&.downcase
       return :halt if answer.nil?
 
       if %w[yes y].include?(answer)
         execute(step[:sub_steps])
       else
-        write "\r\n  #{STYLES[:muted]}#{step[:denied]}\e[0m\r\n\r\n" if step[:denied]
+        write "#{Ansi::CRLF}  #{STYLES[:muted]}#{step[:denied]}#{Ansi::RESET}#{Ansi::CRLF * 2}" if step[:denied]
         nil
       end
     end
 
     def run_menu(step)
       loop do
-        write "\r\n"
+        write Ansi::CRLF
         step[:options].each_with_index do |opt, i|
-          write "  #{STYLES[:muted]}#{i + 1}.  #{opt[:label]}\e[0m\r\n"
+          write "  #{STYLES[:muted]}#{i + 1}.  #{opt[:label]}#{Ansi::RESET}#{Ansi::CRLF}"
         end
-        write "\r\n  #{STYLES[:prompt]}#{step[:prompt]}\e[0m "
+        write "#{Ansi::CRLF}  #{STYLES[:prompt]}#{step[:prompt]}#{Ansi::RESET} "
 
         input = readline&.strip
         return :halt if input.nil?
 
         index = input.to_i - 1
         unless (0...step[:options].length).include?(index)
-          write "\r\n  #{STYLES[:error]}Enter a number between 1 and #{step[:options].length}.\e[0m\r\n"
+          write "#{Ansi::CRLF}  #{STYLES[:error]}Enter a number between 1 and #{step[:options].length}.#{Ansi::RESET}#{Ansi::CRLF}"
           next
         end
 
@@ -233,76 +242,76 @@ module BBS
       :halt
     rescue => e
       warn "BBS call error: #{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}"
-      write "\r\n  \e[1;31mError: #{e.message}\e[0m\r\n\r\n"
+      write "#{Ansi::CRLF}  #{Ansi::BRIGHT_RED}Error: #{e.message}#{Ansi::RESET}#{Ansi::CRLF * 2}"
       nil
     end
 
     def run_line(step)
       color = style_color(step[:color])
-      write "  #{color}#{'─' * 66}\e[0m\r\n"
+      write "  #{color}#{'─' * 66}#{Ansi::RESET}#{Ansi::CRLF}"
     end
 
     def run_section(step)
       color = style_color(step[:color])
       title = step[:title]
       pad   = [70 - title.length - 6, 2].max
-      write "\r\n  #{color}┌─ \e[1;37m#{title} #{color}#{'─' * pad}┐\e[0m\r\n\r\n"
+      write "#{Ansi::CRLF}  #{color}┌─ #{Ansi::WHITE}#{title} #{color}#{'─' * pad}┐#{Ansi::RESET}#{Ansi::CRLF * 2}"
     end
 
     def run_text(step)
       color   = style_color(step[:style])
       content = step[:block] ? step[:block].call(@ctx) : step[:text]
-      write "  #{color}#{content}\e[0m\r\n" if content
+      write "  #{color}#{content}#{Ansi::RESET}#{Ansi::CRLF}" if content
     end
 
     def run_rows(step)
       items = step[:block].call(@ctx)
       items = Array(items)
       if items.empty?
-        write "  #{STYLES[:muted]}#{step[:empty]}\e[0m\r\n"
+        write "  #{STYLES[:muted]}#{step[:empty]}#{Ansi::RESET}#{Ansi::CRLF}"
       else
-        items.each { |row| write "  #{row}\r\n" }
+        items.each { |row| write "  #{row}#{Ansi::CRLF}" }
       end
       nil
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       :halt
     rescue => e
       warn "BBS rows error: #{e.class}: #{e.message}"
-      write "\r\n  #{STYLES[:error]}Error loading content.\e[0m\r\n"
+      write "#{Ansi::CRLF}  #{STYLES[:error]}Error loading content.#{Ansi::RESET}#{Ansi::CRLF}"
       nil
     end
 
     def run_table(step)
       pairs = step[:block].call(@ctx)
       pairs.each do |label, value|
-        write "  #{STYLES[:muted]}#{label.to_s.ljust(16)}#{STYLES[:prompt]}#{value}\e[0m\r\n"
+        write "  #{STYLES[:muted]}#{label.to_s.ljust(16)}#{STYLES[:prompt]}#{value}#{Ansi::RESET}#{Ansi::CRLF}"
       end
       nil
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       :halt
     rescue => e
       warn "BBS table error: #{e.class}: #{e.message}"
-      write "\r\n  #{STYLES[:error]}Error loading content.\e[0m\r\n"
+      write "#{Ansi::CRLF}  #{STYLES[:error]}Error loading content.#{Ansi::RESET}#{Ansi::CRLF}"
       nil
     end
 
     def run_wait_enter(step)
-      write "\r\n  #{STYLES[:muted]}#{step[:prompt]}\e[0m"
+      write "#{Ansi::CRLF}  #{STYLES[:muted]}#{step[:prompt]}#{Ansi::RESET}"
       return :halt if readline.nil?
       nil
     end
 
     def run_fetch(step)
-      write "\r\n  #{STYLES[:muted]}#{step[:loading]}\e[0m\r\n"
+      write "#{Ansi::CRLF}  #{STYLES[:muted]}#{step[:loading]}#{Ansi::RESET}#{Ansi::CRLF}"
       result = step[:block].call(@ctx)
-      write "\e[1A\e[2K"
+      write ERASE_LINE_ABOVE
       @ctx[step[:name]] = result
       nil
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       :halt
     rescue => e
       warn "BBS fetch error: #{e.class}: #{e.message}"
-      write "\r\n  #{STYLES[:error]}Error loading content.\e[0m\r\n"
+      write "#{Ansi::CRLF}  #{STYLES[:error]}Error loading content.#{Ansi::RESET}#{Ansi::CRLF}"
       nil
     end
 
@@ -310,34 +319,34 @@ module BBS
       items = Array(@ctx[step[:from]]).first(25)
 
       if items.empty?
-        write "\r\n  #{STYLES[:error]}#{step[:empty]}\e[0m\r\n"
-        write "\r\n  #{STYLES[:muted]}Press ENTER to continue...\e[0m"
+        write "#{Ansi::CRLF}  #{STYLES[:error]}#{step[:empty]}#{Ansi::RESET}#{Ansi::CRLF}"
+        write "#{Ansi::CRLF}  #{STYLES[:muted]}Press ENTER to continue...#{Ansi::RESET}"
         return :halt if readline.nil?
         return nil
       end
 
-      write "\r\n"
+      write Ansi::CRLF
       items.each_with_index do |item, i|
-        write "  #{step[:item].call(item, i + 1)}\r\n"
+        write "  #{step[:item].call(item, i + 1)}#{Ansi::CRLF}"
         if step[:hint]
           hint = step[:hint].call(item, i + 1).to_s.strip
-          write "     #{STYLES[:muted]}#{hint}\e[0m\r\n" unless hint.empty?
+          write "     #{STYLES[:muted]}#{hint}#{Ansi::RESET}#{Ansi::CRLF}" unless hint.empty?
         end
       end
 
-      write "\r\n  #{STYLES[:muted]}#{step[:prompt]}\e[0m "
+      write "#{Ansi::CRLF}  #{STYLES[:muted]}#{step[:prompt]}#{Ansi::RESET} "
       input = readline&.strip
       return :halt if input.nil?
       return nil   if input.empty?
 
-      picked = input.match?(/\A\d+\z/) && input.to_i.between?(1, items.size) ? items[input.to_i - 1] : nil
+      picked = input.match?(NUMBER) && input.to_i.between?(1, items.size) ? items[input.to_i - 1] : nil
       unless picked
-        write "\r\n  #{STYLES[:error]}Invalid selection.\e[0m\r\n"
+        write "#{Ansi::CRLF}  #{STYLES[:error]}Invalid selection.#{Ansi::RESET}#{Ansi::CRLF}"
         return nil
       end
 
       @ctx[:picked] = picked
-      write "\r\n"
+      write Ansi::CRLF
       execute(step[:sub_steps])
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       :halt
@@ -361,9 +370,9 @@ module BBS
         end
       end
       lines << line unless line.empty?
-      write "\r\n"
-      lines.each { |l| write "#{prefix}#{l}\r\n" }
-      write "\r\n"
+      write Ansi::CRLF
+      lines.each { |l| write "#{prefix}#{l}#{Ansi::CRLF}" }
+      write Ansi::CRLF
       nil
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       :halt
@@ -380,7 +389,7 @@ module BBS
       :halt
     rescue => e
       warn "BBS output error: #{e.class}: #{e.message}"
-      write "\r\n  #{STYLES[:error]}Error rendering content.\e[0m\r\n"
+      write "#{Ansi::CRLF}  #{STYLES[:error]}Error rendering content.#{Ansi::RESET}#{Ansi::CRLF}"
       nil
     end
 
@@ -408,9 +417,9 @@ module BBS
     # ── helpers ────────────────────────────────────────────────────────────────
 
     def strip_md(text)
-      text.gsub(/\[([^\]]+)\]\([^)]+\)/, '\1')
-          .gsub(/[#*_`~>|\\]/, '')
-          .gsub(/\r?\n+/, ' ')
+      text.gsub(Patterns::MARKDOWN_LINK, '\1')
+          .gsub(Patterns::MARKDOWN_MARK, '')
+          .gsub(Patterns::LINE_BREAKS, ' ')
           .strip
     end
 
@@ -429,7 +438,7 @@ module BBS
 
     def valid?(value, validator)
       case validator
-      when :email     then value.match?(/\A[^@\s]+@[^@\s]+\.[^@\s]+\z/)
+      when :email     then value.match?(EMAIL)
       when :non_empty then !value.empty?
       when Proc, Method then validator.call(value) ? true : false
       else true

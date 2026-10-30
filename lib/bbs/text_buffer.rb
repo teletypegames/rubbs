@@ -12,6 +12,11 @@ module BBS
   #   buffer.edit('!')        # => true
   #   buffer.text             # => "Hello!"
   class TextBuffer
+    # The control characters of a new text that become a space: tab and CR.
+    SPACED_CONTROLS = "\t\r"
+    # One printable character, the only kind #edit inserts.
+    PRINTABLE_CHAR = /\A[[:print:]]\z/
+
     # The lines of the text, without line ends (Array of String).
     attr_reader :lines
     # The cursor's line, an index into #lines.
@@ -30,7 +35,7 @@ module BBS
     def initialize(text = '', max: nil, single_line: false)
       @max    = max
       @single = single_line
-      text    = text.to_s.gsub("\r\n", "\n").tr("\t\r", '  ')
+      text    = text.to_s.gsub(Ansi::CRLF, "\n").tr(SPACED_CONTROLS, '  ')
       text    = text.tr("\n", ' ') if @single
       @lines  = text.split("\n", -1).map(&:dup)
       @lines  = [+''] if @lines.empty?
@@ -85,7 +90,7 @@ module BBS
     def full? = !@max.nil? && length >= @max
 
     def insert(char)
-      return if full? || !char.match?(/\A[[:print:]]\z/)
+      return if full? || !char.match?(PRINTABLE_CHAR)
 
       @lines[@line].insert(@pos, char)
       @pos += 1

@@ -55,14 +55,14 @@ module BBS
       end
       raise IOError, 'the caller hung up' if hung_up
 
-      session.write "\e[0m\r\n\r\n  #{@name} hung up. Press a key to return.\r\n"
+      session.write "#{Ansi::RESET}#{Ansi::CRLF * 2}  #{@name} hung up. Press a key to return.#{Ansi::CRLF}"
       session.readkey(timeout: BACK_WAIT)
     end
 
     private
 
     def connect(session)
-      session.write "\r\n  Connecting to #{@name}…\r\n"
+      session.write "#{Ansi::CRLF}  Connecting to #{@name}…#{Ansi::CRLF}"
       socket = Socket.tcp(@host, @port, connect_timeout: CONNECT_TIMEOUT)
       error  = socket.getsockopt(Socket::SOL_SOCKET, Socket::SO_ERROR).int
       raise SystemCallError.new("connect to #{@host}:#{@port}", error) unless error.zero?
@@ -70,7 +70,7 @@ module BBS
       socket
     rescue SystemCallError, SocketError, IOError => e
       warn "BBS gateway #{@name} (#{@host}:#{@port}): #{e.class}: #{e.message}"
-      session.write "\r\n  #{@name} does not answer. Try again later. Press a key.\r\n"
+      session.write "#{Ansi::CRLF}  #{@name} does not answer. Try again later. Press a key.#{Ansi::CRLF}"
       session.readkey(timeout: BACK_WAIT)
       nil
     end
@@ -103,6 +103,12 @@ module BBS
       CHUNK = 4096
       # Telnet TERMINAL-TYPE option code.
       TTYPE = 24
+      # TERMINAL-TYPE subnegotiation: the other side asks for the type.
+      TTYPE_SEND = 1
+      # TERMINAL-TYPE subnegotiation: the type follows.
+      TTYPE_IS   = 0
+      # The low byte of a 16-bit NAWS value.
+      BYTE_MASK  = 0xff
 
       # Creates a link between the caller's +session+ and the +remote+
       # socket of the other board. +terminal+ is the terminal type reported
@@ -237,15 +243,15 @@ module BBS
       end
 
       def subnegotiation(sub)
-        return unless sub[0] == TTYPE && sub[1] == 1 && !@petscii
+        return unless sub[0] == TTYPE && sub[1] == TTYPE_SEND && !@petscii
 
-        send_remote([IAC, SB, TTYPE, 0, *@terminal.bytes, IAC, SE])
+        send_remote([IAC, SB, TTYPE, TTYPE_IS, *@terminal.bytes, IAC, SE])
       end
 
       # The caller's new window size: the board keeps it for after the
       # crossing, and the other board hears it when it asked for NAWS.
       def resize(sub)
-        return unless sub[0] == NAWS_OPT && sub.size >= 5
+        return unless sub[0] == NAWS_OPT && sub.size >= 1 + Telnet::NAWS_SIZE
 
         cols = (sub[1] << 8) | sub[2]
         rows = (sub[3] << 8) | sub[4]
@@ -254,7 +260,7 @@ module BBS
       end
 
       def naws(cols, rows)
-        size = [cols >> 8, cols & 255, rows >> 8, rows & 255].flat_map { |b| b == IAC ? [IAC, IAC] : [b] }
+        size = [cols >> 8, cols & BYTE_MASK, rows >> 8, rows & BYTE_MASK].flat_map { |b| b == IAC ? [IAC, IAC] : [b] }
         send_remote([IAC, SB, NAWS_OPT, *size, IAC, SE])
       end
     end

@@ -46,12 +46,12 @@ module BBS
     # +bright+, +accent+, +error+, +dim+, +prompt+, and +base+, which every
     # reset returns to.
     DEFAULT_COLORS = {
-      text:   "\e[0;37m", # light grey on black — the classic console look
-      bright: "\e[1;37m",
-      accent: "\e[1;32m",
-      error:  "\e[1;31m",
-      dim:    "\e[1;30m",
-      prompt: "\e[0;37m",
+      text:   Ansi::GREY, # light grey on black — the classic console look
+      bright: Ansi::WHITE,
+      accent: Ansi::BRIGHT_GREEN,
+      error:  Ansi::BRIGHT_RED,
+      dim:    Ansi::DARK_GREY,
+      prompt: Ansi::GREY,
       base:   '', # what every reset returns to: a background here colours the whole screen
     }.freeze
 
@@ -162,14 +162,14 @@ module BBS
       # Writes +text+ (or a blank line) in the colour role +style+, followed
       # by CRLF.
       def puts(text = '', style: :text)
-        @session.write("#{color(style)}#{text}#{reset}\r\n")
+        @session.write("#{color(style)}#{text}#{reset}#{Ansi::CRLF}")
       end
 
       # Writes +text+ in +style+ followed by +newline+ CRLFs, then sleeps
       # +delay+ seconds. Handy for boot messages:
       # <tt>print 'POST OK', delay: 0.3</tt>.
       def print(text = '', delay: 0, style: :text, newline: 1)
-        @session.write("#{color(style)}#{text}#{reset}#{"\r\n" * newline}")
+        @session.write("#{color(style)}#{text}#{reset}#{Ansi::CRLF * newline}")
         sleep_for(delay)
       end
 
@@ -182,14 +182,14 @@ module BBS
           @session.write(ch)
           sleep_for(delay)
         end
-        @session.write("#{reset}#{"\r\n" * newline}")
+        @session.write("#{reset}#{Ansi::CRLF * newline}")
       end
 
       # Writes +count+ CRLFs.
-      def newline(count = 1) = @session.write("\r\n" * count)
+      def newline(count = 1) = @session.write(Ansi::CRLF * count)
 
       # Resets the colours and clears the screen, cursor to the top left.
-      def cls = @session.write("#{reset}\e[2J\e[H")
+      def cls = @session.write("#{reset}#{Ansi::CLEAR}")
 
       # Sleeps for +seconds+ (nothing for zero or +nil+).
       def pause(seconds) = sleep_for(seconds)
@@ -213,10 +213,10 @@ module BBS
         counted = 0
         while counted < kilobytes
           counted = [counted + step, kilobytes].min
-          @session.write("\r#{color(:text)}#{label}#{counted}K #{reset}")
+          @session.write("#{Ansi::CR}#{color(:text)}#{label}#{counted}K #{reset}")
           sleep_for(delay)
         end
-        @session.write("#{color(:text)}#{label}#{kilobytes}K OK#{reset}\r\n")
+        @session.write("#{color(:text)}#{label}#{kilobytes}K OK#{reset}#{Ansi::CRLF}")
       end
 
       # The terminal width in columns; 80 when the terminal did not report it.
@@ -241,7 +241,7 @@ module BBS
 
       def dispatch(input)
         return if input.empty?
-        word, rest = input.split(/\s+/, 2)
+        word, rest = input.split(Patterns::WHITESPACE, 2)
         entry = @definition.commands[word.downcase]
         if entry
           entry[:block].call(rest.to_s, self)
@@ -263,7 +263,7 @@ module BBS
       end
 
       def color(role) = @colors.fetch(role) { @colors[:text] }
-      def reset = "\e[0m#{@colors[:base]}"
+      def reset = "#{Ansi::RESET}#{@colors[:base]}"
       def sleep_for(seconds) = (sleep(seconds) if seconds&.positive?)
     end
 

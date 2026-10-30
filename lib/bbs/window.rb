@@ -47,6 +47,11 @@ module BBS
     # (+:size+) from the keyboard.
     KBD_TITLES   = { move: ' Move: arrows · Shift+arrows or Tab: size · Enter: done ',
                      size: ' Size: arrows · Tab: move · Enter: done ' }.freeze
+    # A Shift, Ctrl, Alt or Ctrl-Shift modified movement key; the group is
+    # the key without the modifier.
+    MODIFIED_MOVE_KEY = /\A(?:shift|ctrl|alt|ctrl_shift)_((?:page_)?(?:up|down)|left|right|home|end)\z/
+    # An Alt-modified key name, <tt>alt_x</tt>; the group is the letter.
+    ALT_KEY = /\Aalt_(.)\z/
 
     # The window's settings, as given to ::new: +title+ (shown in the top
     # border), +modal+ (keeps the front, always a double frame), +shadow+
@@ -259,7 +264,7 @@ module BBS
       result = focus_manager.handle_focus_key(event) ? :handled : nil
       result ||= focus_manager.dispatch(event)
       # A modified key nothing takes (Shift-Down in a list) acts as the key.
-      if result.nil? && event.key? && (plain = event.key.to_s[/\A(?:shift|ctrl|alt|ctrl_shift)_((?:page_)?(?:up|down)|left|right|home|end)\z/, 1])
+      if result.nil? && event.key? && (plain = event.key.to_s[MODIFIED_MOVE_KEY, 1])
         result = focus_manager.dispatch(Event.key(plain.to_sym))
       end
       return result if result
@@ -348,7 +353,7 @@ module BBS
     # Returns the enabled Widgets::Button in the window whose hotkey matches
     # +key+ (a single character or an +alt_+ letter Symbol), or +nil+.
     def hotkey_button(key)
-      letter = key.is_a?(String) && key.length == 1 ? key.downcase : key.to_s[/\Aalt_(.)\z/, 1]
+      letter = key.is_a?(String) && key.length == 1 ? key.downcase : key.to_s[ALT_KEY, 1]
       return nil unless letter
 
       focusable_descendants.find { |w| w.is_a?(Widgets::Button) && w.enabled && w.hotkey == letter }

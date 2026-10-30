@@ -77,7 +77,65 @@ module BBS
     SUBPACKET = 1024
     # The abort sequence: eight Ctrl-X followed by eight backspaces, which
     # makes the receiver drop the transfer and erases the echo.
-    ABORT     = ("\x18" * 8 + "\b" * 8).b
+    ABORT     = (ZDLE.chr * 8 + Ascii::BS.chr * 8).b
+
+    # The command that starts the receiver on a Unix shell: +rz+ and CR.
+    RZ_COMMAND   = "rz#{Ansi::CR}".b.freeze
+    # What starts a hex header: two ZPAD, ZDLE and ZHEX.
+    HEX_HEADER   = [ZPAD, ZPAD, ZDLE, ZHEX].pack('C*').freeze
+    # What starts a binary header, before ZBIN or ZBIN32: ZPAD and ZDLE.
+    BIN_HEADER   = [ZPAD, ZDLE].pack('C*').freeze
+    # "Over and out", the sender's last word after ZFIN.
+    OVER_AND_OUT = 'OO'.b.freeze
+    # The Unix file mode sent in the ZFILE header, in octal.
+    FILE_MODE    = '100644'
+    # The telnet IAC byte, doubled in the data on a telnet line.
+    TELNET_IAC   = Telnet::IAC.chr.b.freeze
+
+    # The CRC-16/XMODEM polynomial.
+    CRC16_POLY = 0x1021
+    # The top bit of a CRC-16, shifted out before the polynomial is added.
+    CRC16_TOP  = 0x8000
+    # The bits of a CRC-16.
+    CRC16_MASK = 0xffff
+    # The bytes of a CRC-16 after a header or subpacket.
+    CRC16_SIZE = 2
+    # The bytes of a CRC-32 after a header or subpacket.
+    CRC32_SIZE = 4
+    # The C0 control bytes, sent escaped.
+    ESCAPED_C0 = 0x00..0x1f
+    # The C1 control bytes, sent escaped.
+    ESCAPED_C1 = 0x80..0x9f
+    # XORed into an escaped byte after ZDLE.
+    ZDLE_XOR   = 0x40
+    # ZRUB0: ZDLE and this byte stand for ZRUB0_VALUE.
+    ZRUB0      = 0x6c
+    # The byte ZRUB0 stands for: DEL.
+    ZRUB0_VALUE = 0x7f
+    # ZRUB1: ZDLE and this byte stand for ZRUB1_VALUE.
+    ZRUB1      = 0x6d
+    # The byte ZRUB1 stands for.
+    ZRUB1_VALUE = 0xff
+    # The bytes of a header before its CRC: the type and four data bytes.
+    HEADER_SIZE = 5
+    # The hex digits of a hex header after ZHEX: type, data and CRC-16.
+    HEX_DIGITS  = 14
+    # A hex header's digits.
+    HEX_HEADER_RE = /\A\h{14}\z/
+
+    # The keys the caller cancels the start of a transfer with: Esc and
+    # Ctrl-C.
+    CANCEL_KEYS  = [Ascii::ESC, Ascii::ETX].freeze
+    # The ZDLE (CAN) bytes in a row that cancel the transfer.
+    CANCEL_COUNT = 5
+    # Times a ZFILE header is sent before the file is given up.
+    FILE_TRIES   = 5
+    # Seconds to wait for the receiver's answer, by default.
+    WAIT         = 30
+    # Seconds to wait for one answer to ZRQINIT or ZFILE.
+    ANSWER_WAIT  = 10
+    # Seconds to wait for the receiver's ZFIN.
+    FIN_WAIT     = 5
 
     # A parsed ZMODEM header: +type+ is the header type (ZRINIT, ZRPOS, ...),
     # +bytes+ the four data bytes. #position reads them as a little-endian
@@ -108,7 +166,7 @@ module BBS
     # +:cancelled+ when the caller or the terminal gave up, +:timeout+ when
     # no receiver answered within +wait+ seconds, +:hangup+ when the line
     # dropped.
-    def send_files(session, files, wait: 30, telnet: true)
+    def send_files(session, files, wait: WAIT, telnet: true)
       Sender.new(session, telnet: telnet).run(files, wait: wait)
     end
 
@@ -117,7 +175,7 @@ module BBS
     def crc16(bytes, crc = 0)
       bytes.each_byte do |b|
         crc ^= b << 8
-        8.times { crc = crc.anybits?(0x8000) ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff }
+        8.times { crc = crc.anybits?(CRC16_TOP) ? ((crc << 1) ^ CRC16_POLY) & CRC16_MASK : (crc << 1) & CRC16_MASK }
       end
       crc
     end
@@ -128,7 +186,7 @@ module BBS
       out = +''.b
       bytes.each_byte do |b|
         case b
-        when 0x00..0x1f, 0x80..0x9f then out << ZDLE << (b ^ 0x40)
+        when ESCAPED_C0, ESCAPED_C1 then out << ZDLE << (b ^ ZDLE_XOR)
         else out << b
         end
       end
@@ -155,7 +213,7 @@ module BBS
       # Returns +:ok+, +:cancelled+, +:timeout+ or +:hangup+.
       def run(files, wait:)
         files = files.map { |name, data, mtime| [File.basename(name.to_s), data.to_s.b, mtime || Time.now] }
-        emit("rz\r".b)
+        emit(RZ_COMMAND)
         handshake(wait)
         files.each_with_index { |file, i| send_file(*file, files[i..]) }
         finish
@@ -176,7 +234,7 @@ module BBS
         deadline = monotonic + wait
         loop do
           hex_header(ZRQINIT, [0, 0, 0, 0])
-          header = read_header(timeout: [10, deadline - monotonic].min, interruptible: true)
+          header = read_header(timeout: [ANSWER_WAIT, deadline - monotonic].min, interruptible: true)
           if header&.type == ZRINIT
             @crc32 = header.flags.to_i.anybits?(CANFC32)
             @window = header.bytes[0] | (header.bytes[1] << 8)
@@ -187,11 +245,12 @@ module BBS
       end
 
       def send_file(name, data, mtime, rest)
-        info = "#{name}\0#{data.bytesize} #{mtime.to_i.to_s(8)} 100644 0 #{rest.size} #{rest.sum { |f| f[1].bytesize }}\0".b
-        5.times do
+        info = "#{name}#{Ascii::NUL_CHAR}#{data.bytesize} #{mtime.to_i.to_s(8)} #{FILE_MODE} 0 #{rest.size} " \
+               "#{rest.sum { |f| f[1].bytesize }}#{Ascii::NUL_CHAR}".b
+        FILE_TRIES.times do
           bin_header(ZFILE, [0, 0, 0, ZCBIN])
           subpacket(info, ZCRCW)
-          header = expect(ZRPOS, ZSKIP, ZCRC, ZNAK, timeout: 10, ignore_timeout: true)
+          header = expect(ZRPOS, ZSKIP, ZCRC, ZNAK, timeout: ANSWER_WAIT, ignore_timeout: true)
           case header&.type
           when ZSKIP then return
           when ZRPOS then return stream(data, header.position)
@@ -243,8 +302,8 @@ module BBS
 
       def finish
         hex_header(ZFIN, [0, 0, 0, 0])
-        read_header(timeout: 5)
-        emit('OO'.b)
+        read_header(timeout: FIN_WAIT)
+        emit(OVER_AND_OUT)
       end
 
       def position_bytes(pos) = [pos].pack('V').bytes
@@ -254,12 +313,12 @@ module BBS
         crc = Zmodem.crc16(frame)
         hex = (frame + [crc].pack('n')).unpack1('H*')
         tail = [ZFIN, ZACK].include?(type) ? '' : XON.chr
-        emit("**\x18B#{hex}\r\n#{tail}".b)
+        emit("#{HEX_HEADER}#{hex}#{Ansi::CRLF}#{tail}".b)
       end
 
       def bin_header(type, bytes)
         frame = [type, *bytes].pack('C*')
-        out = +"*\x18".b
+        out = +BIN_HEADER
         if @crc32
           out << ZBIN32 << Zmodem.escape(frame + [Zlib.crc32(frame)].pack('V'))
         else
@@ -279,7 +338,7 @@ module BBS
         emit(out)
       end
 
-      def expect(*types, timeout: 30, ignore_timeout: false)
+      def expect(*types, timeout: WAIT, ignore_timeout: false)
         deadline = monotonic + timeout
         loop do
           header = read_header(timeout: deadline - monotonic)
@@ -311,7 +370,7 @@ module BBS
           byte = @session.read_raw_byte(left)
           raise Hangup if byte.nil?
           return nil if byte == :timeout
-          raise Cancelled if interruptible && [0x1b, 0x03].include?(byte)
+          raise Cancelled if interruptible && CANCEL_KEYS.include?(byte)
 
           push(byte)
         end
@@ -319,7 +378,7 @@ module BBS
 
       def push(byte)
         @cans = byte == ZDLE ? @cans + 1 : 0
-        raise Cancelled if @cans >= 5
+        raise Cancelled if @cans >= CANCEL_COUNT
 
         @pending << byte
       end
@@ -350,48 +409,54 @@ module BBS
 
         case buf[i + 1]
         when ZHEX   then parse_hex(buf, i + 2)
-        when ZBIN   then parse_bin(buf, i + 2, 2)
-        when ZBIN32 then parse_bin(buf, i + 2, 4)
+        when ZBIN   then parse_bin(buf, i + 2, CRC16_SIZE)
+        when ZBIN32 then parse_bin(buf, i + 2, CRC32_SIZE)
         else [nil, i + 1]
         end
       end
 
       def parse_hex(buf, from)
-        return [nil, nil] if buf.size < from + 14
+        return [nil, nil] if buf.size < from + HEX_DIGITS
 
-        text = buf[from, 14].pack('C*')
-        return [nil, from] unless text.match?(/\A\h{14}\z/)
+        text = buf[from, HEX_DIGITS].pack('C*')
+        return [nil, from] unless text.match?(HEX_HEADER_RE)
 
         bytes = [text].pack('H*').bytes
-        return [nil, from + 14] unless Zmodem.crc16(bytes[0, 5].pack('C*')) == (bytes[5] << 8 | bytes[6])
+        crc   = bytes[HEADER_SIZE] << 8 | bytes[HEADER_SIZE + 1]
+        return [nil, from + HEX_DIGITS] unless Zmodem.crc16(bytes[0, HEADER_SIZE].pack('C*')) == crc
 
-        [Header.new(bytes[0], bytes[1, 4]), from + 14]
+        [Header.new(bytes[0], bytes[1, 4]), from + HEX_DIGITS]
       end
 
       def parse_bin(buf, from, crc_size)
         bytes = []
         i = from
-        while bytes.size < 5 + crc_size
+        while bytes.size < HEADER_SIZE + crc_size
           return [nil, nil] if i >= buf.size
 
           if buf[i] == ZDLE
             return [nil, nil] if i + 1 >= buf.size
 
             c = buf[i + 1]
-            bytes << (c == 0x6c ? 0x7f : c == 0x6d ? 0xff : c ^ 0x40)
+            bytes << (c == ZRUB0 ? ZRUB0_VALUE : c == ZRUB1 ? ZRUB1_VALUE : c ^ ZDLE_XOR)
             i += 2
           else
             bytes << buf[i]
             i += 1
           end
         end
-        frame = bytes[0, 5].pack('C*')
-        ok = crc_size == 4 ? Zlib.crc32(frame) == bytes[5, 4].pack('C*').unpack1('V') : Zmodem.crc16(frame) == (bytes[5] << 8 | bytes[6])
+        frame = bytes[0, HEADER_SIZE].pack('C*')
+        crc   = bytes[HEADER_SIZE, crc_size]
+        ok = if crc_size == CRC32_SIZE
+               Zlib.crc32(frame) == crc.pack('C*').unpack1('V')
+             else
+               Zmodem.crc16(frame) == (crc[0] << 8 | crc[1])
+             end
         ok ? [Header.new(bytes[0], bytes[1, 4]), i] : [nil, i]
       end
 
       def emit(bytes)
-        @session.write(@telnet ? bytes.b.gsub("\xFF".b, "\xFF\xFF".b) : bytes)
+        @session.write(@telnet ? bytes.b.gsub(TELNET_IAC, TELNET_IAC * 2) : bytes)
       end
 
       def monotonic = Process.clock_gettime(Process::CLOCK_MONOTONIC)

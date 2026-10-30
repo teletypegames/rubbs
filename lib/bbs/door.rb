@@ -57,7 +57,7 @@ module BBS
     # afterwards when <tt>BBS.config.mouse</tt> is set.
     def run(session, context = {})
       session.disable_mouse
-      session.write("\e[0m\e[2J\e[H")
+      session.write("#{Ansi::RESET}#{Ansi::CLEAR}")
       case @program
       when FakeOS::Definition
         FakeOS::Runner.new(session, @program, context: context).run
@@ -79,7 +79,7 @@ module BBS
 
     def run_flow(session, context)
       FlowRunner.new(session, context[:session_id], @program, context: context.dup).run
-      session.write("\e[0m\r\n  \e[0;37mPress ENTER to return to the BBS...\e[0m")
+      session.write("#{Ansi::RESET}#{Ansi::CRLF}  #{Ansi::GREY}Press ENTER to return to the BBS...#{Ansi::RESET}")
       session.readline
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       nil

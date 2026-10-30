@@ -34,6 +34,30 @@ module BBS
     #
     # See AnsiArt.random(dir) for picking a random file from a directory.
     class AnsiArt < Widget
+      # The SAUCE record's size: the last bytes of an art file.
+      SAUCE_SIZE   = 128
+      # The bytes a SAUCE record starts with.
+      SAUCE_ID     = 'SAUCE00'
+      # Offset and length of the title field in a SAUCE record.
+      SAUCE_TITLE  = [7, 35].freeze
+      # Offset and length of the author field in a SAUCE record.
+      SAUCE_AUTHOR = [42, 20].freeze
+      # Offset and length of the group field in a SAUCE record.
+      SAUCE_GROUP  = [62, 20].freeze
+      # Offset and length of the date field (CCYYMMDD) in a SAUCE record.
+      SAUCE_DATE   = [82, 8].freeze
+      # A SAUCE date: eight digits, CCYYMMDD.
+      SAUCE_DATE_RE = /\A\d{8}\z/
+      # The SUB byte (Ctrl-Z) that ends the art and starts the SAUCE metadata.
+      END_OF_ART   = "\x1A".b.freeze
+      # A line end in an art file: CR, LF or CRLF.
+      LINE_END     = /\r\n?/
+      # An escape sequence that takes no screen cell when measuring a line:
+      # CSI with digit, semicolon or <tt>?</tt> parameters and a final letter.
+      ESCAPE_RE    = /\e\[[\d;?]*[A-Za-z]/
+      # SGR of the status line of AnsiArt.view: black on grey.
+      STATUS_STYLE = "\e[0;30;47m"
+
       # The art lines (Strings with ANSI escapes), the widest line's visible
       # width, the number of lines, the horizontal and vertical alignment,
       # and whether the widget takes its parent's bounds. The widths are
@@ -157,13 +181,13 @@ module BBS
         left   = [(cols - width) / 2, 0].max
         shown  = lines[top, view_h] || []
         offset = [(view_h - lines.size) / 2, 0].max
-        out = +"\e[?25l\e[0m\e[2J"
+        out = +"#{Ansi::HIDE_CURSOR}#{Ansi::RESET}#{Ansi::CLEAR_SCREEN}"
         shown.each_with_index do |line, i|
-          out << "\e[#{offset + i + 1};#{left + 1}H" << FrameBuffer.clip_ansi(line, cols - left) << "\e[0m"
+          out << "#{Ansi::CSI}#{offset + i + 1};#{left + 1}H" << FrameBuffer.clip_ansi(line, cols - left) << Ansi::RESET
         end
         more   = lines.size > view_h ? "  #{top + 1}-#{top + shown.size}/#{lines.size}  ↑↓ PgUp PgDn" : ''
         status = " #{title}#{more}  · any other key returns "
-        out << "\e[#{rows};1H\e[0;30;47m" << FrameBuffer.clip_ansi(status, cols).ljust(cols) << "\e[0m\e[?25h"
+        out << "#{Ansi::CSI}#{rows};1H#{STATUS_STYLE}" << FrameBuffer.clip_ansi(status, cols).ljust(cols) << "#{Ansi::RESET}#{Ansi::SHOW_CURSOR}"
       end
 
       # ── File loading ────────────────────────────────────────────────────────
@@ -186,18 +210,19 @@ module BBS
       # when the file has none. Read from the last 128 bytes, CP437.
       def self.sauce(path)
         File.open(path, 'rb') do |f|
-          return nil if f.size < 128
-          f.seek(-128, IO::SEEK_END)
-          record = f.read(128)
-          return nil unless record.start_with?('SAUCE00')
+          return nil if f.size < SAUCE_SIZE
+          f.seek(-SAUCE_SIZE, IO::SEEK_END)
+          record = f.read(SAUCE_SIZE)
+          return nil unless record.start_with?(SAUCE_ID)
 
           field = ->(from, length) do
             record.byteslice(from, length).force_encoding('IBM437')
-                  .encode('UTF-8', invalid: :replace, undef: :replace).delete("\0").strip
+                  .encode('UTF-8', invalid: :replace, undef: :replace).delete(Ascii::NUL_CHAR).strip
           end
-          date = field.call(82, 8)
-          Sauce.new(title: field.call(7, 35), author: field.call(42, 20), group: field.call(62, 20),
-                    date: date =~ /\A\d{8}\z/ ? "#{date[0, 4]}-#{date[4, 2]}-#{date[6, 2]}" : '')
+          date = field.call(*SAUCE_DATE)
+          Sauce.new(title: field.call(*SAUCE_TITLE), author: field.call(*SAUCE_AUTHOR),
+                    group: field.call(*SAUCE_GROUP),
+                    date: date =~ SAUCE_DATE_RE ? "#{date[0, 4]}-#{date[4, 2]}-#{date[6, 2]}" : '')
         end
       rescue SystemCallError
         nil
@@ -206,7 +231,7 @@ module BBS
       # Returns +bytes+ cut before the first \x1A (SUB) byte, or unchanged
       # when there is none.
       def self.strip_sauce(bytes)
-        sub = bytes.index("\x1A".b)
+        sub = bytes.index(END_OF_ART)
         sub ? bytes.byteslice(0, sub) : bytes
       end
 
@@ -230,12 +255,12 @@ module BBS
       # Splits +text+ into an Array of lines at CR, LF or CRLF, keeping
       # trailing empty lines.
       def self.split_lines(text)
-        text.gsub(/\r\n?/, "\n").split("\n", -1)
+        text.gsub(LINE_END, "\n").split("\n", -1)
       end
 
       # Strip ANSI escapes and count visible characters.
       def visible_length(line)
-        line.gsub(/\e\[[\d;?]*[A-Za-z]/, '').length
+        line.gsub(ESCAPE_RE, '').length
       end
 
       # Clip the visible portion of a line that may contain ANSI escapes.
@@ -246,9 +271,9 @@ module BBS
         s       = line
         while i < s.length
           ch = s[i]
-          if ch == "\e" && s[i + 1] == '['
+          if ch == Ansi::ESC && s[i + 1] == Ansi::CSI_BYTE
             j = i + 2
-            j += 1 while j < s.length && !s[j].match?(/[A-Za-z]/)
+            j += 1 while j < s.length && !s[j].match?(Ansi::CSI_LETTER)
             out << s[i..j] if j < s.length
             i = j + 1
           else
@@ -263,11 +288,10 @@ module BBS
 
       # Default art used when no file is configured / available.
       def self.built_in_fallback
-        sgr = ->(code) { "\e[#{code}m" }
-        y  = sgr.call('1;33')
-        d  = sgr.call('0;33')
-        c  = sgr.call('1;36')
-        r  = sgr.call('0')
+        y  = Ansi::BRIGHT_YELLOW
+        d  = Ansi::YELLOW
+        c  = Ansi::BRIGHT_CYAN
+        r  = Ansi::RESET
         [
           '',
           "#{y}     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄#{r}",

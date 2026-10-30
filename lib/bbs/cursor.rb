@@ -44,19 +44,19 @@ module BBS
     def clear
       @row = 1
       @col = 1
-      @petscii ? +"\e[0m\e[2J" : +"\e[0m\e[2J\e[H"
+      @petscii ? +"#{Ansi::RESET}#{Ansi::CLEAR_SCREEN}" : +"#{Ansi::RESET}#{Ansi::CLEAR}"
     end
 
     # Returns the bytes that move the cursor to +row+, +col+.
     def move(row, col)
       out = +''
       if row > @row && @petscii
-        out << ("\r\n" * (row - @row))
+        out << (Ansi::CRLF * (row - @row))
         @col = 1
       elsif row != @row
-        out << (row > @row ? "\e[#{row - @row}B" : "\e[#{@row - row}A")
+        out << (row > @row ? "#{Ansi::CSI}#{row - @row}B" : "#{Ansi::CSI}#{@row - row}A")
       end
-      out << (col > @col ? "\e[#{col - @col}C" : "\e[#{@col - col}D") unless col == @col
+      out << (col > @col ? "#{Ansi::CSI}#{col - @col}C" : "#{Ansi::CSI}#{@col - col}D") unless col == @col
       @row = row
       @col = col
       out

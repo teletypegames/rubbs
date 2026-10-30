@@ -205,7 +205,7 @@ module BBS
     # when it returns. Returns what the block returns.
     def with_line
       @session.disable_mouse
-      @session.write("\e[0m\e[2J\e[H")
+      @session.write("#{Ansi::RESET}#{Ansi::CLEAR}")
       yield @session
     ensure
       @session.enable_mouse if BBS.config.mouse
@@ -299,7 +299,7 @@ module BBS
       @line_lost = true
       nil
     ensure
-      @session.write("\e[?25h\e[2J\e[H")
+      @session.write("#{Ansi::SHOW_CURSOR}#{Ansi::CLEAR}")
       @running = false
     end
 
@@ -456,8 +456,8 @@ module BBS
 
       delta = @next.diff(@committed)
       if first || resized || !delta.empty?
-        prefix = (first || resized) ? "\e[2J\e[H" : ''
-        @session.write("\e[?25l#{prefix}#{delta}\e[?25h")
+        prefix = (first || resized) ? Ansi::CLEAR : ''
+        @session.write("#{Ansi::HIDE_CURSOR}#{prefix}#{delta}#{Ansi::SHOW_CURSOR}")
         @committed = @next
       end
     end

@@ -23,7 +23,7 @@ module BBS
       raise 'No screens_dir: set BBS.config.screens_dir or the flow\'s screens_dir' unless dir
       path = File.join(dir, "#{name}.erb")
       ctx  = Context.new(vars)
-      ERB.new(File.read(path), trim_mode: '-').result(ctx.ctx_binding).gsub("\n", "\r\n")
+      ERB.new(File.read(path), trim_mode: '-').result(ctx.ctx_binding).gsub("\n", Ansi::CRLF)
     end
 
     # The object an ERB screen is evaluated in. Its methods are the helpers a
@@ -59,23 +59,23 @@ module BBS
       end
 
       # Escape sequence that clears the screen and homes the cursor.
-      def clr       = "\e[2J\e[H"
+      def clr       = Ansi::CLEAR
       # Escape sequence that resets all colours and attributes.
-      def reset     = "\e[0m"
+      def reset     = Ansi::RESET
       # Escape sequence for bright green text.
-      def green     = "\e[1;32m"
+      def green     = Ansi::BRIGHT_GREEN
       # Escape sequence for bright yellow text.
-      def yellow    = "\e[1;33m"
+      def yellow    = Ansi::BRIGHT_YELLOW
       # Escape sequence for bright cyan text.
-      def cyan      = "\e[1;36m"
+      def cyan      = Ansi::BRIGHT_CYAN
       # Escape sequence for bright white text.
-      def white     = "\e[1;37m"
+      def white     = Ansi::WHITE
       # Escape sequence for light gray text.
-      def gray      = "\e[0;37m"
+      def gray      = Ansi::GREY
       # Escape sequence for bright red text.
-      def red       = "\e[1;31m"
+      def red       = Ansi::BRIGHT_RED
       # Escape sequence for normal (dim) green text.
-      def dim_green = "\e[0;32m"
+      def dim_green = Ansi::GREEN
     end
   end
 end

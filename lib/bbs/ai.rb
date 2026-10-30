@@ -125,6 +125,9 @@ module BBS
     # A streaming client for an OpenAI-compatible
     # <tt>/v1/chat/completions</tt> endpoint.
     class Client
+      # One complete line at the start of the stream buffer, with its LF.
+      STREAM_LINE = /\A[^\n]*\n/
+
       # The base URL of the server, as a String; empty when no model is set
       # up.
       attr_reader :url
@@ -185,7 +188,7 @@ module BBS
         buffer = +''
         response.read_body do |chunk|
           buffer << chunk
-          while (line = buffer.slice!(/\A[^\n]*\n/))
+          while (line = buffer.slice!(STREAM_LINE))
             next if line.start_with?(':')
 
             data = line.strip.delete_prefix('data:').strip
@@ -308,7 +311,7 @@ module BBS
       # and keeping the unfinished one back.
       def write(piece)
         @pending << piece
-        while (m = @pending.match(/\s+/))
+        while (m = @pending.match(Patterns::WHITESPACE))
           word(m.pre_match)
           @gap = "#{@gap}#{m[0]}"
           @pending = m.post_match
@@ -328,7 +331,7 @@ module BBS
         return if text.empty?
 
         if @col.positive? && (@gap&.include?("\n") || @col + 1 + text.size > @width)
-          out("\r\n#{@indent}")
+          out("#{Ansi::CRLF}#{@indent}")
           @col = 0
         elsif @col.positive? && @gap
           out(' ')

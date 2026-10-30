@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative 'bbs/ansi'
+require_relative 'bbs/ascii'
+require_relative 'bbs/patterns'
 require_relative 'bbs/color'
 require_relative 'bbs/config'
 require_relative 'bbs/petscii'

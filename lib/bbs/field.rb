@@ -26,6 +26,8 @@ module BBS
   class Field
     # The keys that cancel the input.
     CANCEL_KEYS = %i[escape interrupt].freeze
+    # A line end in a prompt: CRLF, CR or LF.
+    LINE_END = /\r\n|\r|\n/
 
     # Writes +prompt+ and runs a field after it as wide as the rest of the
     # screen: +cols+ less the last line of +prompt+ and the last column.
@@ -39,7 +41,7 @@ module BBS
     #   name = BBS::Field.ask(session, " name> ", max: 20)
     def self.ask(session, prompt, text: '', max: nil, mask: nil, cols: session.term_cols)
       session.write(prompt)
-      last  = prompt.to_s.split(/\r\n|\r|\n/, -1).last.to_s
+      last  = prompt.to_s.split(LINE_END, -1).last.to_s
       width = cols - 1 - FrameBuffer.visible_width(last)
       new(session, text: text, width: width, max: max, mask: mask).run
     end
@@ -84,7 +86,7 @@ module BBS
     private
 
     def finish(result)
-      @session.write("\r\n")
+      @session.write(Ansi::CRLF)
       result
     end
 
