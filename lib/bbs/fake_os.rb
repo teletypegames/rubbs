@@ -220,9 +220,9 @@ module BBS
       end
 
       # The terminal width in columns; 80 when the terminal did not report it.
-      def cols = (@session.term_cols || 80)
+      def cols = (@session.term_cols || Telnet::DEFAULT_COLS)
       # The terminal height in rows; 24 when the terminal did not report it.
-      def rows = (@session.term_rows || 24)
+      def rows = (@session.term_rows || Telnet::DEFAULT_ROWS)
 
       # Stops the shell loop after the current command (used by an
       # +exit+/+quit+ command).

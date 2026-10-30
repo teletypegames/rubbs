@@ -42,6 +42,10 @@ module BBS
     MOUSE_ON  = "\e[?1002h\e[?1006h"
     # Turns every xterm mouse reporting mode #enable_mouse may leave on off.
     MOUSE_OFF = "\e[?1006l\e[?1002l\e[?1000l"
+    # The terminal width assumed while the caller has not reported one.
+    DEFAULT_COLS = 80
+    # The terminal height assumed while the caller has not reported one.
+    DEFAULT_ROWS = 24
     # The narrowest terminal accepted from a NAWS report, in columns.
     MIN_COLS = 20
     # The shortest terminal accepted from a NAWS report, in rows.

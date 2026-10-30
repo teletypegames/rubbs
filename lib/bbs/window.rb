@@ -47,6 +47,38 @@ module BBS
     # (+:size+) from the keyboard.
     KBD_TITLES   = { move: ' Move: arrows · Shift+arrows or Tab: size · Enter: done ',
                      size: ' Size: arrows · Tab: move · Enter: done ' }.freeze
+    # Width of a title bar gadget: <tt>[■]</tt>, <tt>[↑]</tt>.
+    GADGET_WIDTH      = 3
+    # Column of the close gadget, from the window's left edge.
+    CLOSE_X           = 2
+    # Column of the zoom gadget, counted back from the right edge.
+    ZOOM_FROM_RIGHT   = 5
+    # Column of the window number before the zoom gadget, counted back
+    # from it.
+    NUMBER_BEFORE_ZOOM = 3
+    # Column of the window number without a zoom gadget, counted back from
+    # the right edge.
+    NUMBER_FROM_RIGHT = 4
+    # Where the title starts when there is a close gadget.
+    TITLE_INDENT      = 4
+    # The narrowest window that shows the close gadget.
+    CLOSE_MIN_WIDTH   = 6
+    # The narrowest window that shows the zoom gadget.
+    ZOOM_MIN_WIDTH    = 14
+    # The narrowest window that shows its number.
+    NUMBER_MIN_WIDTH  = 20
+    # The narrowest window that shows the size corner.
+    CORNER_MIN_WIDTH  = 6
+    # Columns of the title bar a title gives up to the gadgets when there
+    # is a zoom gadget.
+    TITLE_ROOM_ZOOM   = 14
+    # Columns of the title bar a title gives up without a zoom gadget.
+    TITLE_ROOM        = 4
+    # Further columns a title gives up to the window number.
+    NUMBER_ROOM       = 4
+    # Columns of the bottom right corner that start a size drag.
+    CORNER_HIT        = 2
+
     # A Shift, Ctrl, Alt or Ctrl-Shift modified movement key; the group is
     # the key without the modifier.
     MODIFIED_MOVE_KEY = /\A(?:shift|ctrl|alt|ctrl_shift)_((?:page_)?(?:up|down)|left|right|home|end)\z/
@@ -173,11 +205,11 @@ module BBS
         frame.shadow(x: bounds.x, y: bounds.y, width: bounds.width,
                      height: bounds.height, sgr: style(:window_shadow))
       end
-      show_close  = @on_close != false && bounds.width >= 6
-      show_zoom   = zoomable? && bounds.width >= 14
-      show_number = @number && bounds.width >= 20
+      show_close  = @on_close != false && bounds.width >= CLOSE_MIN_WIDTH
+      show_zoom   = zoomable? && bounds.width >= ZOOM_MIN_WIDTH
+      show_number = @number && bounds.width >= NUMBER_MIN_WIDTH
       title       = @title
-      room        = (show_zoom ? 14 : 4) + (show_number ? 4 : 0)
+      room        = (show_zoom ? TITLE_ROOM_ZOOM : TITLE_ROOM) + (show_number ? NUMBER_ROOM : 0)
       title       = title.to_s[0, [bounds.width - room, 0].max] if show_zoom || show_number
       title = KBD_TITLES[@kbd_mode] if @kbd_mode
       frame.box(
@@ -185,22 +217,22 @@ module BBS
         sgr: @kbd_mode || @drag ? style(:window_title_focused) : style(:window_border),
         fill_sgr: style(:window_bg), style: focused || @modal ? :double : :single, title: title,
         title_sgr: focused ? style(:window_title_focused) : style(:window_title),
-        title_indent: show_close ? 4 : 0
+        title_indent: show_close ? TITLE_INDENT : 0
       )
       # Close gadget — Turbo Vision style "[■]"
       if show_close
-        frame.move(bounds.x + 2, bounds.y)
+        frame.move(bounds.x + CLOSE_X, bounds.y)
         frame.write('[■]', sgr: style(:window_title))
       end
       if show_number
-        frame.move(show_zoom ? zoom_x - 3 : bounds.x + bounds.width - 4, bounds.y)
+        frame.move(show_zoom ? zoom_x - NUMBER_BEFORE_ZOOM : bounds.x + bounds.width - NUMBER_FROM_RIGHT, bounds.y)
         frame.write(@number.to_s, sgr: focused ? style(:window_title_focused) : style(:window_title))
       end
       if show_zoom
         frame.move(zoom_x, bounds.y)
         frame.write(@maximized ? '[↕]' : '[↑]', sgr: style(:window_title))
       end
-      if sizable? && bounds.width >= 6
+      if sizable? && bounds.width >= CORNER_MIN_WIDTH
         frame.move(bounds.x + bounds.width - 1, bounds.y + bounds.height - 1)
         frame.write('┘', sgr: style(:window_title))
       end
@@ -212,7 +244,7 @@ module BBS
     def hit_test(x, y)
       # close gadget area
       if @on_close != false && y == bounds.y &&
-         x >= bounds.x + 2 && x <= bounds.x + 4
+         x >= bounds.x + CLOSE_X && x <= bounds.x + CLOSE_X + GADGET_WIDTH - 1
         return self
       end
       super
@@ -239,7 +271,8 @@ module BBS
       end
 
       if event.mouse? && event.mouse.kind == :press && event.mouse.button == :left
-        if @on_close != false && event.y == bounds.y && event.x >= bounds.x + 2 && event.x <= bounds.x + 4
+        if @on_close != false && event.y == bounds.y && event.x >= bounds.x + CLOSE_X &&
+           event.x <= bounds.x + CLOSE_X + GADGET_WIDTH - 1
           return close
         end
         return toggle_maximize if zoomable? && title_click?(event)
@@ -286,12 +319,12 @@ module BBS
     def close = :close_window
 
     # Returns the column where the zoom gadget is drawn.
-    def zoom_x = bounds.x + bounds.width - 5
+    def zoom_x = bounds.x + bounds.width - ZOOM_FROM_RIGHT
 
     # The zoom gadget, or a second click on the title bar soon after a first.
     def title_click?(event)
       return false unless event.y == bounds.y && event.x.between?(bounds.x, bounds.x + bounds.width - 1)
-      return true if event.x.between?(zoom_x, zoom_x + 2)
+      return true if event.x.between?(zoom_x, zoom_x + GADGET_WIDTH - 1)
 
       now    = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       double = @title_clicked_at && now - @title_clicked_at < DOUBLE_CLICK
@@ -301,7 +334,7 @@ module BBS
 
     # Returns whether the mouse +event+ is on the bottom right size corner.
     def corner?(event)
-      event.y == bounds.y + bounds.height - 1 && event.x >= bounds.x + bounds.width - 2 &&
+      event.y == bounds.y + bounds.height - 1 && event.x >= bounds.x + bounds.width - CORNER_HIT &&
         event.x <= bounds.x + bounds.width - 1
     end
 

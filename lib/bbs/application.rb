@@ -37,6 +37,24 @@ module BBS
   #
   #   APP.run(session: session, session_id: sid, context: ctx)
   class Application
+    # The window numbers handed out, shown in the frame and picked with
+    # Alt-1 ... Alt-9.
+    WINDOW_NUMBERS = 1..9
+    # The sort key of a window without a number: after every numbered one.
+    UNNUMBERED = 10
+    # Rows the menubar and the statusbar each take.
+    BAR_HEIGHT = 1
+    # The fewest rows the desktop between the bars is given.
+    MIN_DESKTOP_ROWS = 3
+    # Seconds between two #tick! calls while no key comes.
+    TICK_SECONDS = 1.0
+    # Seconds the idle disconnect message stays before the line is dropped.
+    IDLE_MESSAGE_WAIT = 0.5
+    # Lines of the backtrace logged with a handler's error.
+    BACKTRACE_LINES = 3
+    # Columns the "Please wait" box of #with_loading takes beside its text.
+    LOADING_CHROME = 8
+
     # [session]      the BBS::Session the application draws on and reads from
     # [session_id]   the session's id
     # [context]      the caller's context Hash, shared with the flow and doors
@@ -99,9 +117,9 @@ module BBS
     end
 
     # The terminal width in columns (80 when the session does not know it).
-    def cols = @session.term_cols || 80
+    def cols = @session.term_cols || Telnet::DEFAULT_COLS
     # The terminal height in rows (24 when the session does not know it).
-    def rows = @session.term_rows || 24
+    def rows = @session.term_rows || Telnet::DEFAULT_ROWS
 
     # Sets the BBS::Menubar shown on the top row (or +nil+ for none) and
     # gives it the application's theme.
@@ -168,7 +186,7 @@ module BBS
     def switchable_windows
       return [] if @windows.any?(&:modal)
 
-      @windows.reject(&:modal).sort_by { |w| w.number || 10 }
+      @windows.reject(&:modal).sort_by { |w| w.number || UNNUMBERED }
     end
 
     # Brings the next (+step+ 1, F6) or previous (+step+ -1, Shift-F6)
@@ -232,9 +250,9 @@ module BBS
     # The screen between the menubar and the statusbar, as [x, y, w, h]:
     # where a maximized window goes.
     def desktop_rect
-      top    = @menubar ? 1 : 0
-      bottom = @statusbar ? 1 : 0
-      [1, 1 + top, cols, [rows - top - bottom, 3].max]
+      top    = @menubar ? BAR_HEIGHT : 0
+      bottom = @statusbar ? BAR_HEIGHT : 0
+      [1, 1 + top, cols, [rows - top - bottom, MIN_DESKTOP_ROWS].max]
     end
 
     # Main event loop. Uses a short read timeout to fire periodic ticks for
@@ -253,7 +271,7 @@ module BBS
     def run
       @running     = true
       idle_max     = idle_limit
-      tick_seconds = 1.0
+      tick_seconds = TICK_SECONDS
       idle_elapsed = 0.0
       while @running
         do_render
@@ -275,7 +293,7 @@ module BBS
             BBS::Dialogs.message(self, "Disconnected after #{idle_max.to_i}s idle.",
                                  title: ' Idle ')
             do_render
-            sleep 0.5
+            sleep IDLE_MESSAGE_WAIT
             @line_lost = true
             break
           end
@@ -290,7 +308,7 @@ module BBS
           raise
         rescue StandardError => e
           # One handler's fault must not end the caller's whole session.
-          warn "BBS event error: #{e.class}: #{e.message}\n#{e.backtrace.first(3).join("\n")}"
+          warn "BBS event error: #{e.class}: #{e.message}\n#{e.backtrace.first(BACKTRACE_LINES).join("\n")}"
           nil
         end
         break if result == :halt
@@ -322,7 +340,7 @@ module BBS
     # Shows a "Please wait" message with +text+, runs the block in a thread
     # and waits for it, then closes the message. Returns the block's value.
     def with_loading(text = 'Working...', &block)
-      win = Dialogs.message(self, text, title: ' Please wait ', width: text.length + 8)
+      win = Dialogs.message(self, text, title: ' Please wait ', width: text.length + LOADING_CHROME)
       do_render
       Thread.new do
         begin
@@ -415,7 +433,7 @@ module BBS
 
     def free_number
       taken = @windows.filter_map(&:number)
-      (1..9).find { |n| !taken.include?(n) }
+      WINDOW_NUMBERS.find { |n| !taken.include?(n) }
     end
 
     def dispatch_to_root(event)
@@ -428,11 +446,11 @@ module BBS
       c = cols
       r = rows
 
-      menubar_h   = @menubar   ? 1 : 0
-      statusbar_h = @statusbar ? 1 : 0
+      menubar_h   = @menubar   ? BAR_HEIGHT : 0
+      statusbar_h = @statusbar ? BAR_HEIGHT : 0
 
-      @menubar&.layout(1, 1, c, 1)
-      @statusbar&.layout(1, r, c, 1)
+      @menubar&.layout(1, 1, c, BAR_HEIGHT)
+      @statusbar&.layout(1, r, c, BAR_HEIGHT)
       @root.layout(1, 1 + menubar_h, c, r - menubar_h - statusbar_h)
     end
 
