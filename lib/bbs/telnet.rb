@@ -21,6 +21,9 @@ module BBS
     # Telnet SE: end of a subnegotiation.
     SE   = 240
 
+    # Telnet option BINARY (8-bit data, no CR NUL handling), asked for by
+    # the file transfers.
+    BINARY_OPT = 0
     # Telnet option ECHO (the server echoes what the caller types).
     ECHO_OPT = 1
     # Telnet option SUPPRESS-GO-AHEAD (character-at-a-time mode).
@@ -368,6 +371,12 @@ module BBS
     rescue StandardError
       nil
     end
+
+    # Writes the bytes of +data+ to the caller as they are, not encoded to
+    # PETSCII even on a PETSCII line: for binary protocols (BBS::Zmodem,
+    # BBS::Xmodem) and telnet commands. Errors are swallowed: returns +nil+
+    # when the write fails.
+    def write_raw(data) = send_raw(data)
 
     private
 

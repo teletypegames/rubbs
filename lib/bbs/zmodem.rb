@@ -456,7 +456,7 @@ module BBS
       end
 
       def emit(bytes)
-        @session.write(@telnet ? bytes.b.gsub(TELNET_IAC, TELNET_IAC * 2) : bytes)
+        @session.write_raw(@telnet ? bytes.b.gsub(TELNET_IAC, TELNET_IAC * 2) : bytes)
       end
 
       def monotonic = Process.clock_gettime(Process::CLOCK_MONOTONIC)

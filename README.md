@@ -40,7 +40,7 @@ Connect with `telnet localhost 2323`.
 15. [Banner, ASCII art & ERB screens](#15-banner-ascii-art--erb-screens)
 16. [Persistence (`BBS::Store`)](#16-persistence-bbsstore)
 17. [AI characters (`BBS::AI`)](#17-ai-characters-bbsai)
-18. [Doors (`BBS::Door`)](#18-doors-bbsdoor) — telnet gateways (`BBS::Gateway`) and file downloads (`BBS::Zmodem`)
+18. [Doors (`BBS::Door`)](#18-doors-bbsdoor) — telnet gateways (`BBS::Gateway`) and file downloads (`BBS::Zmodem`, `BBS::Xmodem`)
 19. [Telnet, sessions & input model](#19-telnet-sessions--input-model)
 20. [Source layout](#20-source-layout)
 
@@ -1318,6 +1318,34 @@ end
   meanwhile, and five CANs from the terminal cancel at any time.
 - Data goes with CRC-32 when the receiver offers it, else CRC-16, in
   1 KB subpackets; a ZRPOS restarts from that position.
+- The bytes go out with `session.write_raw`, past the PETSCII encoder.
+
+### File downloads for a Commodore 64 (`BBS::Xmodem`)
+
+The sending side of XMODEM, XMODEM-CRC and XMODEM-1K: the transfer the
+terminals of a C64 know (CCGMS, Novaterm, UltimateTerm), and SyncTERM, Qodem
+or `rx` too. XMODEM sends no file name, so tell the caller to name the file
+and start the download in the terminal:
+
+```ruby
+result = app.with_line do |session|
+  session.write("  Start an XMODEM download of ARIADNE.PRG now; Esc gives up.\r\n")
+  BBS::Xmodem.send_file(session, bytes, one_k: true)
+end
+# => :ok, :cancelled, :timeout (no receiver started) or :hangup
+```
+
+- The receiver picks the check: a `C` gets CRC-16, a NAK the checksum. With
+  `one_k: true` the blocks are 1024 bytes when the receiver asked for a CRC,
+  else always 128.
+- The last block is padded with SUB (0x1a), so the saved file can be up to a
+  block longer. A C64 program loads all the same.
+- It works on a PETSCII line: the bytes go out with `session.write_raw`, 0xFF
+  as a doubled telnet IAC, and the line is asked into telnet BINARY mode for
+  the transfer and back out after it (`telnet: false` for a plain pipe).
+- It waits `wait:` seconds (60) for the receiver; Esc or Ctrl-C (RUN/STOP)
+  gives up meanwhile, and two CANs from the terminal cancel at any time. A
+  block goes again on a NAK or 20 s of silence, at most 10 times.
 
 ---
 
@@ -1336,6 +1364,7 @@ session.readline(mask: '*') # same, echoing the mask instead of each character
 session.naws_reported?   # true once the client sent its window size (NAWS)
 session.readkey(timeout: 1.0)
 session.write(bytes)
+session.write_raw(bytes)  # as they are, not PETSCII-encoded (file transfers)
 session.enable_mouse / disable_mouse
 session.settle(timeout: 1.5) # wait for the telnet answers (NAWS), drop typeahead
 session.petscii!         # from here on the line speaks PETSCII to a C64
@@ -1354,7 +1383,7 @@ Mouse uses xterm 1000/1006 SGR mode; X10 reports are read too.
 and ends on CR, LF, CR LF or CR NUL. `readkey` returns one `:enter` for
 CR LF / CR NUL, a lone Esc after 0.15 s, and a UTF-8 character (`'á'`) as a
 one-character String. `read_raw_byte(timeout)` is for binary protocols
-(ZMODEM): one byte as an Integer, telnet commands taken out.
+(ZMODEM, XMODEM): one byte as an Integer, telnet commands taken out.
 
 ### PETSCII: a Commodore 64 on the line (`BBS::Petscii`)
 
@@ -1534,6 +1563,7 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `bbs/door.rb` | Doors: hand the line to a program and take it back. |
 | `bbs/gateway.rb` | Telnet gateway doors: the line handed on to another board. |
 | `bbs/zmodem.rb` | ZMODEM send: file downloads to the caller's terminal. |
+| `bbs/xmodem.rb` | XMODEM / XMODEM-CRC / XMODEM-1K send: file downloads for a Commodore 64. |
 | `bbs/ai.rb` | AI characters: persona file, OpenAI-compatible streaming client, chat with memory and fallback, typewriter output. |
 | `bbs/banner.rb`, `bbs/renderer.rb` | FIGlet + ERB. |
 | `bbs/color.rb` | Simple ANSI colour helper. |
