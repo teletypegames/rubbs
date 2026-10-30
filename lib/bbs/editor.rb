@@ -8,9 +8,10 @@ module BBS
   #
   # The editor owns the screen while it runs: a reversed title bar on the
   # first row, the text below it, and a row of key hints near the bottom. It
-  # moves the cursor only relative to where it left it, so a C64 gets no
-  # HOME (0x13), and it never writes into the last column or the last row,
-  # which on a C64 would link or scroll lines.
+  # moves the cursor only relative to where it left it, and on a C64 down
+  # with RETURN, so the line carries no HOME (0x13, XOFF) and no cursor down
+  # (0x11, XON); it never writes into the last column or the last row, which
+  # on a C64 would link or scroll lines.
   #
   # Keys:
   #
@@ -266,10 +267,18 @@ module BBS
       "#{out}\e[7m #{count}\e[27m"
     end
 
+    # The cursor from where it is to +row+, +col+. A C64 goes down with
+    # RETURN, never with cursor down: that is 0x11, XON, which a terminal on
+    # software flow control takes out of the line.
     def move(row, col)
       r, c = @at
       out = +''
-      out << (row > r ? "\e[#{row - r}B" : "\e[#{r - row}A") unless row == r
+      if row > r && @petscii
+        out << ("\r\n" * (row - r))
+        c = 1
+      elsif row != r
+        out << (row > r ? "\e[#{row - r}B" : "\e[#{r - row}A")
+      end
       out << (col > c ? "\e[#{col - c}C" : "\e[#{c - col}D") unless col == c
       @at = [row, col]
       out
