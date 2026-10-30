@@ -248,6 +248,7 @@ module BBS
       def text(ch, out)
         glyph(ch).each_char do |g|
           out << g.ord.chr
+          quote_off(out) if g == '"'
           next if Petscii::CONTROLS.include?(g.ord)
 
           @col += 1
@@ -257,6 +258,17 @@ module BBS
           @col     = 0
           @wrapped = true
         end
+      end
+
+      # A " puts the C64 screen editor in quote mode, where colour and cursor
+      # codes show as reversed symbols instead of working until the next "
+      # or RETURN. A second " ends it; the cursor goes back onto it and a
+      # space covers it. Too near the right edge the second " would wrap the
+      # line, so there the quote mode stays until the RETURN.
+      def quote_off(out)
+        return if @col > Petscii::COLS - 3
+
+        out << bytes("\"#{Petscii::LEFT} #{Petscii::LEFT}")
       end
 
       def glyph(ch)

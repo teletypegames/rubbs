@@ -1361,12 +1361,16 @@ and `CLEAR`), and no mouse. From then on everything written goes through a
 - CR LF is one RETURN, and a lone CR goes back to the start of the line; the
   Encoder counts columns, so a line of exactly 40 characters, which the C64
   wraps by itself, gets no empty line after it;
+- a `"` is followed by a second one, a cursor left, a space and another cursor
+  left, so the C64 leaves the quote mode it entered and the colour and cursor
+  codes after it keep working (except in the last two columns);
 - PETSCII control codes can be written directly as the C0/C1 code points of a
   UTF-8 string: `"#{BBS::Petscii::YELLOW}READY."`. `LOCK_CASE` is ASCII's
   backspace, so send it raw.
 
 `readkey` and `readline` read the C64's keys: letters in either case, RETURN
-`:enter`, INST/DEL `:backspace`, the cursor keys, HOME, F1–F8, and RUN/STOP or
+`:enter`, INST/DEL `:backspace` (and ASCII backspace and delete, which some
+terminal programs send for it), the cursor keys, HOME, F1–F8, and RUN/STOP or
 `←` as `:escape`; `readline` echoes in PETSCII. A Flow, a FakeOS or a door that
 draws for 40 columns runs on a C64 unchanged; one drawn for 80 wraps.
 
@@ -1374,6 +1378,26 @@ draws for 40 columns runs on a C64 unchanged; one drawn for 80 wraps.
 drops whatever arrives meanwhile, so a board can guess the terminal before it
 asks: a reported window wider than 40 columns is a modern terminal, 40 or no
 report at all (a C64 behind a WiFi modem speaks plain TCP) most likely a C64.
+
+### A full-screen text editor (`BBS::Editor`)
+
+For text longer than a line, on either face: the cursor keys move anywhere in
+the text, typing inserts at the cursor, DEL deletes before it, and the lines
+wrap at word boundaries as they are typed. It takes the whole screen (a title
+bar, the text, a row of key hints) and moves the cursor only relative to where
+it left it, so a C64 gets no HOME and nothing is written into its last column
+or row.
+
+```ruby
+body  = BBS::Editor.new(session, text: post.body, title: 'BODY').run
+title = BBS::Editor.new(session, text: post.title, title: 'TITLE', single_line: true, max: 80).run
+```
+
+`run` returns the text (lines joined by LF) on F1 or Ctrl-S, RETURN too with
+`single_line: true`, and `nil` on F7, RUN/STOP, `←`, Esc or Ctrl-Q; it raises
+IOError when the caller hangs up. With `max:` the title bar counts the
+characters. HOME and END go to the ends of the screen row, PgUp and PgDn a
+screenful.
 
 ### Two faces on one port (`BBS::Terminal`)
 
