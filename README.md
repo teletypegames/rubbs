@@ -1334,7 +1334,11 @@ session.petscii?
 ```
 
 Telnet options negotiated on connect: `SGA` (suppress go-ahead), `ECHO`
-(server-side echo), `NAWS` (terminal size, clamped to 20–500 × 8–200).
+(server-side echo), `NAWS` (terminal size, clamped to 20–500 × 8–200). A line
+end goes before them: the UltimateTerm of the C64 Ultimate takes a line that
+starts with a telnet command for ASCII with ANSI and translates every byte
+from ASCII to PETSCII (CLR becomes nothing, letters swap case both ways), and
+stays on PETSCII after any other first byte.
 Mouse uses xterm 1000/1006 SGR mode; X10 reports are read too.
 
 `readline` returns UTF-8 (invalid bytes dropped), takes at most 1024 bytes,
@@ -1379,27 +1383,37 @@ drops whatever arrives meanwhile, so a board can guess the terminal before it
 asks: a reported window wider than 40 columns is a modern terminal, 40 or no
 report at all (a C64 behind a WiFi modem speaks plain TCP) most likely a C64.
 
-### A full-screen text editor (`BBS::Editor`)
+### Input fields and the full-screen editor (`BBS::Field`, `BBS::Editor`)
 
-For text longer than a line, on either face: the cursor keys move anywhere in
-the text, typing inserts at the cursor, DEL deletes before it, and the lines
-wrap at word boundaries as they are typed. It takes the whole screen (a title
-bar, the text, a row of key hints) and moves the cursor only relative to where
-it left it, so a C64 gets no HOME and nothing is written into its last column
-or row.
+Two inputs that edit text rather than take it typed again, on either face:
+`BBS::Field` for a line (a name, a password, a title) and `BBS::Editor` for
+text longer than that. Both keep the text and the cursor in a
+`BBS::TextBuffer`, so the editing keys do the same in both: the cursor keys
+move, typing inserts at the cursor, DEL (backspace) deletes before it, Delete
+under it. Both draw through a `BBS::Cursor`, which moves only relative to
+where it left the cursor and on a C64 goes down with RETURN, never with HOME
+or cursor down, and neither writes into a C64's last column or row.
 
 ```ruby
+session.write ' title> '
+title = BBS::Field.new(session, text: post.title, width: 31, max: 80).run
+pass  = BBS::Field.new(session, width: 20, mask: '*').run
 body  = BBS::Editor.new(session, text: post.body, title: 'BODY').run
-title = BBS::Editor.new(session, text: post.title, title: 'TITLE', single_line: true, max: 80).run
 ```
 
-`run` returns the text (lines joined by LF) on F1 or Ctrl-S, RETURN too with
-`single_line: true`. RUN/STOP, `←`, Esc, F7 or Ctrl-Q ask on the bottom row:
-`S` saves, `Q` returns `nil`, any other key goes back to the text; these are
-plain keys, as a terminal program may keep the function keys to itself (the
-Ultimate Term's F1 is its help). It raises IOError when the caller hangs up. With `max:` the title bar counts the
-characters. HOME and END go to the ends of the screen row, PgUp and PgDn a
-screenful.
+A field takes `width:` columns from the cursor, scrolls sideways when the text
+is longer, and returns the text on RETURN or `nil` on RUN/STOP, `←` or Esc;
+either way it writes a line end. HOME and END go to the ends of the text.
+
+The editor takes the whole screen (a title bar, the text wrapping at word
+boundaries, a row of key hints). RUN/STOP, `←` or Esc ask on the bottom row:
+`S` saves and `run` returns the text (lines joined by LF), `Q` returns `nil`,
+any other key goes back to the text. F1 or Ctrl-S save at once where the
+terminal program lets the key through (the Ultimate Term keeps F1 for its
+help). With `single_line: true` it edits one paragraph and RETURN saves; with
+`max:` the title bar counts the characters. HOME and END go to the ends of the
+screen row, PgUp and PgDn a screenful. Both raise IOError when the caller
+hangs up.
 
 ### Two faces on one port (`BBS::Terminal`)
 

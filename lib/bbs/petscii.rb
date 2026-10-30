@@ -155,6 +155,19 @@ module BBS
     # code points (such as the constants of this module).
     def self.bytes(codes) = codes.each_char.map { |c| c.ord.chr }.join.b
 
+    # Returns +char+ when an Encoder shows it in one screen cell (a letter,
+    # a digit, a sign, a glyph of GLYPHS or an accented letter, which
+    # loses its accent), <tt>'?'</tt> when it would take more cells or none.
+    def self.cell(char)
+      return char if char.match?(/\A[ -~£]\z/)
+
+      glyph = GLYPHS[char]
+      return char if glyph && glyph.length == 1
+
+      base = char.unicode_normalize(:nfkd).gsub(/\p{Mn}/, '')
+      base.length == 1 && base.ascii_only? ? char : '?'
+    end
+
     # Turns what a BBS writes into PETSCII. It keeps the cursor's column, so
     # a line of exactly 40 characters, which the C64 wraps by itself, is not
     # followed by an empty one, and it keeps the state of an escape sequence

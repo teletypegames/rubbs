@@ -52,9 +52,16 @@ module BBS
     # sends the opening negotiation: the server will echo and suppress
     # go-ahead, and asks the client to suppress go-ahead and report its
     # window size (NAWS).
+    #
+    # A line end goes first: the UltimateTerm of the C64 Ultimate takes a
+    # line whose first byte is a telnet command (IAC) for ASCII with ANSI and
+    # translates every byte from ASCII to PETSCII, which turns CLR into
+    # nothing and swaps the case of letters both ways; any other first byte
+    # leaves it on PETSCII, printing the bytes as they come.
     def negotiate
       @term_cols = 80
       @term_rows = 24
+      send_raw "\r\n"
       send_raw [IAC, WILL, SGA_OPT].pack('C*')
       send_raw [IAC, WILL, ECHO_OPT].pack('C*')
       send_raw [IAC, DO,   SGA_OPT].pack('C*')
