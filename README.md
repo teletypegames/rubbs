@@ -1394,8 +1394,10 @@ title = BBS::Editor.new(session, text: post.title, title: 'TITLE', single_line: 
 ```
 
 `run` returns the text (lines joined by LF) on F1 or Ctrl-S, RETURN too with
-`single_line: true`, and `nil` on F7, RUN/STOP, `←`, Esc or Ctrl-Q; it raises
-IOError when the caller hangs up. With `max:` the title bar counts the
+`single_line: true`. RUN/STOP, `←`, Esc, F7 or Ctrl-Q ask on the bottom row:
+`S` saves, `Q` returns `nil`, any other key goes back to the text; these are
+plain keys, as a terminal program may keep the function keys to itself (the
+Ultimate Term's F1 is its help). It raises IOError when the caller hangs up. With `max:` the title bar counts the
 characters. HOME and END go to the ends of the screen row, PgUp and PgDn a
 screenful.
 

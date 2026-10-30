@@ -22,15 +22,18 @@ module BBS
   # [DEL, backspace]     deletes the character before the cursor
   # [Delete]             deletes the character under the cursor
   # [F1, Ctrl-S]         saves
-  # [F7, RUN/STOP, ←, Esc] quits without saving
+  # [RUN/STOP, ←, Esc, F7] asks on the bottom row: S saves, Q quits without
+  #                      saving, any other key goes back to the text; a
+  #                      terminal program may keep the function keys to
+  #                      itself, these are plain keys
   #
   #   text = BBS::Editor.new(session, text: post.body, title: 'BODY').run
   #   post.body = text if text
   class Editor
     # The keys that save the text.
     SAVE_KEYS = %i[f1 ctrl_s].freeze
-    # The keys that leave without saving.
-    QUIT_KEYS = %i[f7 escape ctrl_q interrupt].freeze
+    # The keys that ask whether to save or quit.
+    MENU_KEYS = %i[f7 escape ctrl_q interrupt].freeze
 
     # Creates an editor for +session+.
     #
@@ -74,7 +77,12 @@ module BBS
         raise IOError, 'the caller hung up' if key.nil?
 
         return @lines.join("\n") if SAVE_KEYS.include?(key) || (@single && key == :enter)
-        return nil if QUIT_KEYS.include?(key)
+        if MENU_KEYS.include?(key)
+          case menu
+          when :save then return @lines.join("\n")
+          when :quit then return nil
+          end
+        end
 
         handle(key)
         paint
@@ -219,17 +227,37 @@ module BBS
       out << "\e[H" unless @petscii
       out << "\e[7m#{fit(" #{@title}", @cols - 1)}\e[27m"
       @at = [1, @cols]
-      out << move(@rows - 1, 1) << "\e[7m#{fit(" #{hints}", @cols - 1)}\e[27m"
-      @at = [@rows - 1, @cols]
+      out << bottom(hints)
       @status = nil
       @session.write(out)
       paint
     end
 
+    # Asks on the bottom row whether to save or quit: +:save+, +:quit+, or
+    # +nil+ to go back to the text.
+    def menu
+      enter = @petscii ? 'RETURN' : 'Enter'
+      @session.write(bottom("S save  Q quit  #{enter} back"))
+      key = @session.readkey
+      raise IOError, 'the caller hung up' if key.nil?
+
+      @session.write(bottom(hints))
+      { 's' => :save, 'q' => :quit }[key.to_s.downcase]
+    end
+
+    # The bottom row in reverse, written over with +text+.
+    def bottom(text)
+      out = move(@rows - 1, 1) << "\e[7m#{fit(" #{text}", @cols - 1)}\e[27m"
+      @at = [@rows - 1, @cols]
+      out
+    end
+
     def hints
-      save = @single ? (@petscii ? 'RETURN/F1 save' : 'Enter/F1 save') : (@petscii ? 'F1 save' : 'F1/^S save')
-      quit = @petscii ? 'F7/STOP quit' : 'Esc/F7 quit'
-      "#{save}  #{quit}"
+      menu = @petscii ? 'STOP/←' : 'Esc'
+      return "RETURN save  #{menu} quit" if @single && @petscii
+      return "Enter save  #{menu} quit" if @single
+
+      "#{menu}: save or quit"
     end
 
     def paint
