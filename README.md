@@ -432,7 +432,7 @@ end
 | `on_idle { ... }` | Runs in the Application context when the caller reaches the idle limit. Return `:keep` to keep them on (a "still there?" dialog that got an answer); anything else drops the line. |
 | `on_door { \|door, context\| ... }` | Runs just before `Builder#run` hands the line to a door (who is where, a log line). |
 | `window(:name, type: :info\|:form\|:master_detail\|:stream) { \|w\| ... }` | Register a declarative window spec (see [§9](#9-pre-built-window-types-bbswindows)). |
-| `door(:name, program, label: nil)` | Declare a door the caller can step into (see [§18](#18-doors-bbsdoor)). Inside `menu`, `doors` adds one item per declared door. |
+| `door(:name, program, label: nil, hint: nil)` | Declare a door the caller can step into (see [§18](#18-doors-bbsdoor)). Inside `menu`, `doors` adds one item per declared door, with its `hint` on the statusbar. |
 
 ### Application instance API
 
@@ -580,7 +580,8 @@ Encoding:
 `author`, `group` and `date` (`YYYY-MM-DD`), or `nil` when the file has none.
 
 Options: `align: :left|:center|:right`, `valign: :top|:middle|:bottom`,
-`fill_parent: true` (default — re-bounds to parent each render).
+`fill_parent: true` (default — re-bounds to parent each render). The art is
+placed as one block, by its widest line, so its lines keep their columns.
 
 ---
 
@@ -617,6 +618,7 @@ app.open_window(win)
 | `close_key` | `:escape` | Key that triggers `close`. |
 | `maximizable` | `false` | Give the window a zoom gadget, if it can lay itself out at any size (see below). |
 | `movable` | `true` | Let the caller move the window and, when it is `resizable?`, size it (see below). |
+| `accent` | `nil` | Set after `new`: a Hash of frame style roles drawn in other colours than the theme's (`window.accent = { window_border: "\e[0;38;5;78;48;5;16m" }`). Only the frame; the widgets inside keep the theme. |
 
 Methods:
 
@@ -870,6 +872,7 @@ DSL inside the block:
 | Attr / method | Applies to | Notes |
 |---|---|---|
 | `title`, `width`, `height`, `padding` | all | Scalar or `{ |ctx| ... }` block. |
+| `accent` | all | A Hash of frame style roles (`window_border`, `window_title`, `window_title_focused`) in other colours than the theme's: the window's frame wears them, its widgets keep the theme. Mark which part of the board a window belongs to. |
 | `body` | info | Array of body items. |
 | `scroll`, `close_button`, `close_label` | info, master_detail, stream | |
 | `button(**opts) { |win, ctx| ... }` | info | Custom buttons list. |
@@ -938,6 +941,10 @@ end
   letter while the menu is open).
 - `shortcut:` is informational — it's drawn on the right of the menu item.
   Bind the actual shortcut via a `status_hint` or a custom key handler.
+- `hint:` is a line about the item: while the item is highlighted, the
+  statusbar shows it in place of its hints (`item '&News', hint: 'The latest
+  releases' do … end`). A door's `hint:` (see `door`) does the same for its
+  item in `doors`.
 - F10 opens the first menu; ESC closes.
 - Block `&block` runs in the Application's context (call `open_window`,
   `cols`, etc.). Returning `:halt` ends the session.
@@ -953,8 +960,10 @@ status_hint('F1',  'Help')   { announce 'No help yet' }
 status_hint('Alt-X', 'Quit') { :halt }
 ```
 
-Renders left-aligned hints. Optional `statusbar.right_text = '...'` for a
-right-aligned indicator (set after build via `app.statusbar.right_text=`, in
+Renders left-aligned hints. While `statusbar.message` is set, the bar shows
+that line instead, across its whole width; the Application sets it to the hint
+of the highlighted menu item (`Menubar#selected_hint`) on every render.
+Optional `statusbar.right_text = '...'` for a right-aligned indicator (set after build via `app.statusbar.right_text=`, in
 `init` and again in `on_tick` for a clock).
 Mouse-click on a hint fires its handler. Key matching is forgiving:
 `F10` → `:f10`, `Alt-X` → `:alt_x`, `Esc` → `:escape`, `Tab` → `:tab`, anything

@@ -29,7 +29,8 @@ module BBS
     #               placement
     # [fill_parent] take the parent's bounds on every render (default true)
     #
-    # Lines wider or more than the bounds are clipped.
+    # The art is placed as one block, by its widest line, so the lines keep
+    # their columns. Lines wider or more than the bounds are clipped.
     #
     # See AnsiArt.random(dir) for picking a random file from a directory.
     class AnsiArt < Widget
@@ -96,13 +97,13 @@ module BBS
                    else              [(bounds.height - visible_h) / 2, 0].max
                    end
 
+        block_width = [@lines.map { |l| visible_length(l) }.max || 0, bounds.width].min
         @lines.first(visible_h).each_with_index do |line, i|
-          line_width = visible_length(line)
-          clipped, clipped_width = clip_line(line, bounds.width)
+          clipped, = clip_line(line, bounds.width)
           x_offset = case @align
                      when :left   then 0
-                     when :right  then [bounds.width - clipped_width, 0].max
-                     else              [(bounds.width - clipped_width) / 2, 0].max
+                     when :right  then [bounds.width - block_width, 0].max
+                     else              [(bounds.width - block_width) / 2, 0].max
                      end
           frame.move(bounds.x + x_offset, bounds.y + y_offset + i)
           frame.write_ansi(clipped, base_sgr: style(:text))

@@ -38,10 +38,12 @@ module BBS
     # <tt>&</tt> before the hotkey letter), +shortcut+ (text shown at the
     # right edge, for display only), +enabled+ (+true+, +false+ or a callable
     # asked each time), +on_select+ (the block called with the item when it
-    # is chosen) and +separator+ (a dividing line rather than an entry).
+    # is chosen), +separator+ (a dividing line rather than an entry) and
+    # +hint+ (a line about the entry that the Application shows on the
+    # statusbar while the entry is highlighted, or +nil+).
     # +hotkey+ returns the lower-case hotkey letter or +nil+, +display+ the
     # text shown, #enabled? whether the item can be chosen.
-    MenuItem = Struct.new(:label, :shortcut, :enabled, :on_select, :separator,
+    MenuItem = Struct.new(:label, :shortcut, :enabled, :on_select, :separator, :hint,
                           keyword_init: true) do
       def hotkey
         return nil if separator
@@ -97,6 +99,9 @@ module BBS
     def open_index      = @open_index
     # Returns the highlighted MenuItem of the open menu, or +nil+.
     def selected_item   = opened_menu&.items&.[](@item_index)
+    # Returns the hint of the highlighted item while a menu is open, or
+    # +nil+ (no menu open, or the item has no hint).
+    def selected_hint   = open? ? selected_item&.hint : nil
 
     # Drops down the menu at +index+ (clamped to the existing menus) and
     # highlights its first enabled item. Does nothing when there are no
@@ -395,11 +400,13 @@ module BBS
       #            bind a key
       # [enabled]  +true+, +false+, or a callable asked each time the menu is
       #            drawn or used
+      # [hint]     a line about the entry, shown on the statusbar while it is
+      #            highlighted
       #
       # The block is called with the MenuItem when the entry is chosen;
       # returning +:halt+ from it ends the application.
-      def item(label, shortcut: nil, enabled: true, &block)
-        @items << MenuItem.new(label: label, shortcut: shortcut,
+      def item(label, shortcut: nil, enabled: true, hint: nil, &block)
+        @items << MenuItem.new(label: label, shortcut: shortcut, hint: hint,
                                enabled: enabled, on_select: block, separator: false)
       end
 

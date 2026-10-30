@@ -5,6 +5,8 @@ require_relative 'widget'
 module BBS
   # A status bar at the bottom of the screen. Render a list of hotkey hints
   # like "F1=Help F2=Save Esc=Cancel". Optionally a right-aligned status text.
+  # While a #message is set, the bar shows it in place of the hints: the
+  # Application sets the hint of the highlighted menu entry there.
   class Statusbar < Widget
     # One hint: the key as shown (+F1+, <tt>Alt-x</tt>, +Esc+, +Tab+ or a
     # literal key), its label, the block run when it is activated, and
@@ -14,6 +16,9 @@ module BBS
     # The Array of Hint objects, and the text shown at the right end (or
     # +nil+).
     attr_accessor :hints, :right_text
+    # A line shown in place of the hints while it is set (+nil+ shows the
+    # hints).
+    attr_accessor :message
 
     # Creates a status bar with +hints+ (an Array of Hint) and an optional
     # +right_text+. Other keywords go to Widget.new.
@@ -21,6 +26,7 @@ module BBS
       super(**kw)
       @hints      = hints
       @right_text = right_text
+      @message    = nil
     end
 
     # Adds a hint for +key+ with +label+; the block runs when the key is
@@ -33,8 +39,9 @@ module BBS
     # Returns the hints that are not hidden.
     def shown = @hints.reject(&:hidden)
 
-    # Draws the bar across its bounds in +frame+: the shown hints from the
-    # left, as many as fit, and the right text when there is room for it.
+    # Draws the bar across its bounds in +frame+: the #message across the
+    # whole bar, or else the shown hints from the left, as many as fit, and
+    # the right text when there is room for it.
     def render(frame)
       sgr = style(:statusbar)
       key_sgr = style(:statusbar_key)
@@ -42,6 +49,12 @@ module BBS
       frame.write(' ' * bounds.width, sgr: sgr)
 
       cx = bounds.x + 1
+      if @message
+        frame.move(cx, bounds.y)
+        frame.write('▸ ', sgr: key_sgr)
+        frame.write(FrameBuffer.clip_ansi(@message.to_s, [bounds.width - 4, 0].max), sgr: sgr)
+        return
+      end
       shown.each do |hint|
         text_key = hint.key.to_s
         text_lbl = " #{hint.label} "

@@ -22,6 +22,9 @@ module BBS
   class Door
     # The door's name as a Symbol, its menu label, and the program it runs.
     attr_reader :name, :label, :program
+    # A line about the door, shown on the statusbar while its menu entry is
+    # highlighted, or +nil+.
+    attr_reader :hint
 
     # Creates a door.
     #
@@ -29,15 +32,17 @@ module BBS
     # [program] a BBS::FakeOS::Definition, a BBS::Flow, or an object that
     #           responds to <tt>call(session, context)</tt>
     # [label]   the text shown in menus; defaults to +name+ in capitals
+    # [hint]    a line about the door for the statusbar, or +nil+
     #
     # Raises ArgumentError when +program+ is none of the three.
-    def initialize(name, program, label: nil)
+    def initialize(name, program, label: nil, hint: nil)
       raise ArgumentError, "Door #{name.inspect}: not a FakeOS definition or a callable" unless
         program.is_a?(FakeOS::Definition) || program.is_a?(Flow) || program.respond_to?(:call)
 
       @name    = name.to_sym
       @program = program
       @label   = label || name.to_s.upcase
+      @hint    = hint
     end
 
     # Hands the line to the program on a clean screen without mouse

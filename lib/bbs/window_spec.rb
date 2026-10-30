@@ -40,7 +40,7 @@ module BBS
     SCALAR_ATTRS = %i[
       title width height padding hint placeholder list_width buffer_size
       scroll close_button close_label empty_message submit_label cancel_label
-      maximizable
+      maximizable accent
     ].freeze
 
     # The attributes usually given as blocks: content (+body+, +items+,
@@ -110,6 +110,7 @@ module BBS
       ctx = build_ctx(app, extras)
       window = send("open_#{@type}", app, ctx)
       window.maximizable = resolve(:maximizable, ctx) ? true : false if window.respond_to?(:maximizable=)
+      window.accent = resolve(:accent, ctx) if window.respond_to?(:accent=)
       window
     end
 

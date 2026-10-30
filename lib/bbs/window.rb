@@ -56,6 +56,13 @@ module BBS
     # (may be moved and sized). +number+ is the number shown on the frame for
     # Alt-1 ... Alt-9, assigned by the Application to non-modal windows.
     attr_accessor :title, :modal, :shadow, :on_close, :close_key, :maximizable, :movable, :number
+    # Style roles of the window's own frame drawn in other colours than the
+    # theme's, as a Hash of role => SGR (+:window_border+, +:window_title+,
+    # +:window_title_focused+), or +nil+. The widgets inside keep the theme:
+    # an accent marks which part of the board a window belongs to.
+    #
+    #   window.accent = { window_border: "\e[0;38;5;79;48;5;16m" }
+    attr_accessor :accent
     # The Application the window is shown in; set by the Application when it
     # opens the window. Moving, sizing and zooming need it.
     attr_writer :app
@@ -81,6 +88,10 @@ module BBS
       @focus_mgr   = nil
       @number      = nil
     end
+
+    # Returns the SGR for the style role +key+: the #accent's when it has
+    # one, else the theme's (see BBS::Widget#style).
+    def style(key) = @accent&.[](key) || super
 
     # True while the window is being moved or sized: the keys are its own.
     def busy? = !@kbd_mode.nil? || !@drag.nil?

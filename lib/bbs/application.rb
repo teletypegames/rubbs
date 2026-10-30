@@ -451,6 +451,7 @@ module BBS
       @root.render(@next)
       @windows.each { |w| w.render(@next) }
       @menubar&.render(@next)
+      @statusbar.message = @menubar&.selected_hint if @statusbar
       @statusbar&.render(@next)
 
       delta = @next.diff(@committed)
@@ -495,10 +496,11 @@ module BBS
 
       # Declares a door: +program+ is a BBS::FakeOS definition, a BBS::Flow
       # or a callable <tt>call(session, context)</tt>; +label+ is its menu
-      # item (default: the upcased name). Returns the BBS::Door. Raises
+      # item (default: the upcased name), +hint+ a line about it for the
+      # statusbar while its menu item is highlighted. Returns the BBS::Door. Raises
       # ArgumentError when +program+ is none of these.
-      def door(name, program, label: nil)
-        @doors[name.to_sym] = Door.new(name, program, label: label)
+      def door(name, program, label: nil, hint: nil)
+        @doors[name.to_sym] = Door.new(name, program, label: label, hint: hint)
       end
 
       # Merges +hash+ into the services handed to window callbacks and returns
@@ -667,20 +669,21 @@ module BBS
       end
 
       # Adds an item titled +label+, with an optional +shortcut+ text shown
-      # beside it. The block runs on the application, with the item as its
-      # argument, when the item is chosen.
+      # beside it and an optional +hint+, a line the statusbar shows while
+      # the item is highlighted. The block runs on the application, with the
+      # item as its argument, when the item is chosen.
       #
       # +enabled+ is true, false, or a lambda the application answers each
       # time the menu is drawn or used:
       #
       #   item('&Save', enabled: -> { current_doc }) { save }
-      def item(label, shortcut: nil, enabled: true, &block)
+      def item(label, shortcut: nil, enabled: true, hint: nil, &block)
         if enabled.is_a?(Proc)
           check   = enabled
           enabled = -> { @app.instance_exec(&check) }
         end
         @items << Menubar::MenuItem.new(
-          label: label, shortcut: shortcut, enabled: enabled, separator: false,
+          label: label, shortcut: shortcut, enabled: enabled, separator: false, hint: hint,
           on_select: block ? ->(item) { @app.instance_exec(item, &block) } : nil
         )
       end
@@ -691,10 +694,11 @@ module BBS
                                         separator: true, on_select: nil)
       end
 
-      # One item per declared door, in declaration order.
+      # One item per declared door, in declaration order, each with the
+      # door's hint.
       def doors
         @app.doors.each_value do |door|
-          item(door.label) { open_door(door.name) }
+          item(door.label, hint: door.hint) { open_door(door.name) }
         end
       end
     end
