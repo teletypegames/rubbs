@@ -1404,6 +1404,9 @@ body  = BBS::Editor.new(session, text: post.body, title: 'BODY').run
 A field takes `width:` columns from the cursor, scrolls sideways when the text
 is longer, and returns the text on RETURN or `nil` on RUN/STOP, `←` or Esc;
 either way it writes a line end. HOME and END go to the ends of the text.
+`BBS::Field.ask(session, prompt, text:, max:, mask:)` writes the prompt and
+makes the field as wide as the rest of the prompt's last line. A Flow's `ask`
+step types its answer in such a field on a C64.
 
 The editor takes the whole screen (a title bar, the text wrapping at word
 boundaries, a row of key hints). RUN/STOP, `←` or Esc ask on the bottom row:

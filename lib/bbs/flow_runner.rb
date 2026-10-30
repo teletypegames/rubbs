@@ -63,6 +63,12 @@ module BBS
 
     private
 
+    def field(prompt)
+      Field.ask(@session, prompt).to_s.strip
+    rescue IOError
+      nil
+    end
+
     def execute(steps)
       steps.each do |step|
         result = dispatch(step)
@@ -131,9 +137,16 @@ module BBS
       nil
     end
 
+    # On a C64 the answer is typed in a BBS::Field, which edits with the
+    # cursor keys; a cancelled field is an empty answer.
     def run_ask(step)
-      write "  #{STYLES[:prompt]}#{step[:prompt]}\e[0m: "
-      value = readline&.strip
+      prompt = "  #{STYLES[:prompt]}#{step[:prompt]}\e[0m: "
+      value  = if @session.respond_to?(:petscii?) && @session.petscii?
+                 field(prompt)
+               else
+                 write prompt
+                 readline&.strip
+               end
       return :halt if value.nil?
 
       value = apply_transform(value, step[:transform])

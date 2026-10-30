@@ -27,6 +27,23 @@ module BBS
     # The keys that cancel the input.
     CANCEL_KEYS = %i[escape interrupt].freeze
 
+    # Writes +prompt+ and runs a field after it as wide as the rest of the
+    # screen: +cols+ less the last line of +prompt+ and the last column.
+    # Returns what #run returns: the text, or +nil+ when cancelled.
+    #
+    # [text] the text to start from
+    # [max]  the most characters the text may hold, or +nil+
+    # [mask] shown in place of every character, or +nil+
+    # [cols] the screen width; default the session's
+    #
+    #   name = BBS::Field.ask(session, " name> ", max: 20)
+    def self.ask(session, prompt, text: '', max: nil, mask: nil, cols: session.term_cols)
+      session.write(prompt)
+      last  = prompt.to_s.split(/\r\n|\r|\n/, -1).last.to_s
+      width = cols - 1 - FrameBuffer.visible_width(last)
+      new(session, text: text, width: width, max: max, mask: mask).run
+    end
+
     # Creates a field for +session+.
     #
     # [text]  the text to start from, the cursor at its end
