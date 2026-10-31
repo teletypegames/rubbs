@@ -1290,6 +1290,10 @@ door :feedia, FEEDIA, label: '&Feedia'
   the rest), reports the caller's window size and passes later size changes
   on. Everything else goes through untouched both ways, mouse reports and
   PETSCII included.
+- BINARY is not refused but passed on: when the other board asks for it (a
+  `BBS::Xmodem` transfer) or leaves it, the gateway agrees and asks the
+  caller's terminal the same, so ZMODEM and XMODEM downloads work through a
+  gateway as they do on a direct call.
 - A PETSCII line reports no window size, so a two-faced board on the other end
   (`BBS::Terminal`) takes the caller for a Commodore 64.
 - When the other board hangs up, the caller is asked for a key and comes back;

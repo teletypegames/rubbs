@@ -98,6 +98,10 @@ module BBS
       SGA_OPT  = Telnet::SGA_OPT
       # Telnet NAWS (window size) option code.
       NAWS_OPT = Telnet::NAWS_OPT
+      # Telnet BINARY option code, passed on to the caller (see #binary).
+      BINARY_OPT = Telnet::BINARY_OPT
+      # The answer to each telnet command that agrees with it.
+      AGREE = { WILL => DO, WONT => DONT, DO => WILL, DONT => WONT }.freeze
 
       # Bytes read from either side at a time.
       CHUNK = 4096
@@ -121,6 +125,7 @@ module BBS
         @petscii  = session.petscii?
         @naws     = false
         @answered = {}
+        @binary   = { WILL => false, DO => false }
         @mu       = Mutex.new
         @hung_up  = false
       end
@@ -225,7 +230,9 @@ module BBS
       end
 
       # Each option is answered once: a board that asks again gets no loop.
+      # BINARY goes on to the caller instead (#binary).
       def answer(cmd, opt)
+        return binary(cmd) if opt == BINARY_OPT
         return if [WONT, DONT].include?(cmd) || @answered[[cmd, opt]]
 
         @answered[[cmd, opt]] = true
@@ -240,6 +247,20 @@ module BBS
         else
           send_remote([IAC, WONT, opt])
         end
+      end
+
+      # A file transfer of the other board (BBS::Xmodem) asks for telnet
+      # BINARY mode and leaves it after: the gateway agrees, and asks the
+      # caller's terminal the same, so its CR bytes stay bytes. Only a change
+      # of the mode is answered and passed on.
+      def binary(cmd)
+        side = [WILL, WONT].include?(cmd) ? WILL : DO
+        on   = [WILL, DO].include?(cmd)
+        return if @binary[side] == on
+
+        @binary[side] = on
+        send_remote([IAC, AGREE.fetch(cmd), BINARY_OPT])
+        @client.write([IAC, cmd, BINARY_OPT].pack('C*'))
       end
 
       def subnegotiation(sub)
