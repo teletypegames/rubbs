@@ -1460,6 +1460,42 @@ help). With `single_line: true` it edits one paragraph and RETURN saves; with
 screen row, PgUp and PgDn a screenful. Both raise IOError when the caller
 hangs up.
 
+### A cursor menu for a line-by-line board (`BBS::Selector`)
+
+A menu drawn at the cursor, for a board that talks line by line rather than
+in windows, on a C64 as well as on a modern terminal. The items stand one
+under the other (or side by side on one row with `across: true`), the lit one
+a reversed bar: the cursor keys move it, RETURN takes it, and an item's own key
+takes it at once, so callers who know the menu by its letters type as before.
+Like `BBS::Field` it draws downwards from where the cursor is through a
+`BBS::Cursor`, never with HOME, and leaves the cursor on the line under it.
+
+```ruby
+S = BBS::Selector
+items = [S.heading('── latest ──'),
+         S.item('Hello world', key: '1', value: post, about: post.summary),
+         S.heading('── menu ──'),
+         S.item('latest posts', key: 'l', value: :latest, about: 'every post, newest first'),
+         S.item('log off',      key: 'q', value: :quit)]
+choice = S.new(session, items, width: 38, hint: 'crsr: choose  return: open').run
+case choice
+when :latest then latest
+when :quit, nil then return          # nil: RUN/STOP, ← or Esc (back:)
+else show(choice)
+end
+
+post = S.list(session, posts, width: 38, height: 18, &:title)   # numbered
+```
+
+A heading labels the rows under it and is never lit. An item's `about` shows
+on a row under the menu while it is lit; `hint` goes on a status row, with the
+page (`2/3`) and the number being typed. `S.list` numbers the items: the
+digits typed light the item of that number and RETURN takes it. With more
+items than `height:` the menu turns into pages: the cursor runs on from one to
+the next, left and right (`+` and `-`) turn them. `exits: { 'x' => :value }`
+adds keys that return a value without an item. It raises IOError when the
+caller hangs up.
+
 ### Two faces on one port (`BBS::Terminal`)
 
 A board with a modern face and a PETSCII face (a C64) asks the caller first, with the

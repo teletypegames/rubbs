@@ -31,6 +31,10 @@ module BBS
     SHOW_CURSOR = "\e[?25h"
     # SGR: black background.
     BG_BLACK = "\e[40m"
+    # SGR: reverse video on (RVS ON on a C64).
+    REVERSE = "\e[7m"
+    # SGR: reverse video off (RVS OFF on a C64).
+    REVERSE_OFF = "\e[27m"
 
     # SGR: dark grey (bold black) text.
     DARK_GREY = "\e[1;30m"
