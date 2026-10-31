@@ -280,23 +280,22 @@ module BBS
     end
 
     # The items on one row, each a key letter and its label, the lit one a
-    # bar.
+    # bar; the items that do not fit are left off.
     def across_row
       out  = +''
       used = 0
       @items.each_with_index do |item, i|
         word = item.key ? "#{item.key.to_s.upcase} #{plain(item.label)}" : plain(item.label)
-        cell = " #{word} "
-        break if used + cell.length + 1 > @width
+        break if used + word.length + 2 > @width
 
         out << if i == @index
-                 " #{@colors[:bar]}#{Ansi::REVERSE}#{cell}#{Ansi::REVERSE_OFF}#{@colors[:text]}"
+                 "#{@colors[:bar]}#{Ansi::REVERSE} #{word} #{Ansi::REVERSE_OFF}#{@colors[:text]}"
                elsif item.key
-                 " #{@colors[:key]} #{item.key.to_s.upcase}#{@colors[:text]} #{plain(item.label)} "
+                 " #{@colors[:key]}#{item.key.to_s.upcase}#{@colors[:text]} #{plain(item.label)} "
                else
-                 " #{@colors[:text]}#{cell}"
+                 " #{@colors[:text]}#{word} "
                end
-        used += cell.length + 1
+        used += word.length + 2
       end
       "#{@colors[:text]}#{out}#{' ' * (@width - used)}"
     end
