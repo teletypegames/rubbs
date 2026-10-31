@@ -2,12 +2,13 @@
 
 module BBS
   # A menu at the cursor for a line-by-line board, on a Commodore 64 and a
-  # modern terminal alike: the items one under the other (or side by side
-  # on one row), the chosen one lit as a reversed bar that the cursor keys
-  # move. RETURN takes the lit item; an item's own key (a letter or a digit)
-  # takes it at once, so a caller who knows the menu types as before. With
-  # +numbers+ the items are numbered instead, and the digits typed light the
-  # item of that number. More items than +height+ turn into pages.
+  # modern terminal alike: the items one under the other (in one column or
+  # several, or side by side on one row), the chosen one lit as a reversed
+  # bar that the cursor keys move. RETURN takes the lit item; an item's own
+  # key (a letter or a digit) takes it at once, so a caller who knows the
+  # menu types as before. With +numbers+ the items are numbered instead, and
+  # the digits typed light the item of that number. More items than a page
+  # holds turn into pages.
   #
   # Like BBS::Field it draws from where the cursor is (at the start of a
   # line) downwards and moves with a BBS::Cursor, so a C64 never gets HOME;
@@ -19,9 +20,12 @@ module BBS
   #
   # Keys:
   #
-  # [cursor up, down]      the item before, after (across the pages)
-  # [cursor left, right]   the item before, after on one row; otherwise the
-  #                        page before, after (+ and - too)
+  # [cursor up, down]      the item before, after (down a column, then on
+  #                        to the next one and across the pages)
+  # [cursor left, right]   on one row the item before, after; in columns
+  #                        the item beside it; otherwise the page before,
+  #                        after
+  # [+, -, PgUp, PgDn]     the page before, after
   # [HOME, END]            the first, the last item
   # [RETURN]               takes the lit item
   # [an item's key]        takes that item
@@ -35,18 +39,20 @@ module BBS
   #   when :quit, nil then return
   #   end
   class Selector
-    # One row of the menu: its +label+ (ANSI colours allowed), its +key+
+    # One cell of the menu: its +label+ (ANSI colours allowed), its +key+
     # (a letter or digit that takes it, or +nil+), its +value+ (what #run
     # returns for it), its +about+ (a line shown under the menu while it is
-    # lit, or +nil+) and +heading+ (true for a row that only labels the ones
-    # under it and is never lit).
-    Item = Struct.new(:label, :key, :value, :about, :heading, keyword_init: true) do
-      # Whether the cursor can light it: every row but a heading.
+    # lit, or +nil+), its +color+ (an SGR sequence for its key and its bar
+    # in place of the menu's, or +nil+) and +heading+ (true for a cell that
+    # only labels the ones under it, or keeps a place empty, and is never
+    # lit).
+    Item = Struct.new(:label, :key, :value, :about, :color, :heading, keyword_init: true) do
+      # Whether the cursor can light it: every cell but a heading.
       def selectable? = !heading
     end
 
     # The colours as ANSI SGR sequences: +text+ the labels, +key+ the keys
-    # and numbers, +bar+ the lit row (reversed), +heading+ the headings,
+    # and numbers, +bar+ the lit cell (reversed), +heading+ the headings,
     # +about+ the about row, +hint+ the status row.
     COLORS = {
       text: "\e[0;37m", key: "\e[1;33m", bar: "\e[0;36m", heading: "\e[1;30m",
@@ -55,16 +61,21 @@ module BBS
     # The keys that return +back+.
     BACK_KEYS = %i[escape interrupt].freeze
     # The keys that turn the page, and which way.
-    PAGE_KEYS = { left: -1, right: 1, page_up: -1, page_down: 1, '-' => -1, '+' => 1 }.freeze
+    PAGE_KEYS = { page_up: -1, page_down: 1, '-' => -1, '+' => 1 }.freeze
+    # The keys that go sideways, and which way.
+    SIDE_KEYS = { left: -1, right: 1 }.freeze
     # The most digits a number typed with +numbers+ can have.
     MAX_DIGITS = 4
 
     # An Item that can be lit: +label+, and the +key+ that takes it, the
-    # +value+ #run returns for it and its +about+ line.
-    def self.item(label, key: nil, value: nil, about: nil) = Item.new(label: label, key: key, value: value, about: about)
+    # +value+ #run returns for it, its +about+ line and its +color+.
+    def self.item(label, key: nil, value: nil, about: nil, color: nil)
+      Item.new(label: label, key: key, value: value, about: about, color: color)
+    end
 
-    # A heading Item: +label+ shown in the heading colour, never lit.
-    def self.heading(label) = Item.new(label: label, heading: true)
+    # A heading Item: +label+ (ANSI colours allowed) shown in the heading
+    # colour, never lit. An empty label keeps a place empty.
+    def self.heading(label = '') = Item.new(label: label, heading: true)
 
     # A numbered menu of +objects+, each labelled by the block; the object
     # taken, or +back+. The other options are those of ::new.
@@ -80,11 +91,15 @@ module BBS
 
     # Creates a menu for +session+.
     #
-    # [items]   the rows, an Array of Item (see ::item and ::heading); at
-    #           least one must be selectable
-    # [width]   the columns a row takes; on a C64 keep it out of the last
+    # [items]   the cells, an Array of Item (see ::item and ::heading),
+    #           down the first column, then down the next; at least one
+    #           must be selectable
+    # [width]   the columns the menu takes; on a C64 keep it out of the last
     #           column
-    # [height]  the item rows a page shows; default all of them
+    # [height]  the rows a page shows; default all the items, shared out
+    #           among the +columns+
+    # [columns] the columns of cells side by side, each as wide as the
+    #           +width+ shared out
     # [index]   the item lit first; default the first selectable one
     # [numbers] true to number the items (1, 2, …) and let the digits
     #           typed light them; the items' own keys still work
@@ -94,14 +109,15 @@ module BBS
     #           <tt>{ 'q' => :quit }</tt>
     # [back]    what #run returns for RUN/STOP, ← or Esc
     # [colors]  colours over COLORS
-    def initialize(session, items, width:, height: nil, index: nil, numbers: false, across: false, hint: nil,
-                   exits: {}, back: nil, colors: {})
+    def initialize(session, items, width:, height: nil, columns: 1, index: nil, numbers: false, across: false,
+                   hint: nil, exits: {}, back: nil, colors: {})
       raise ArgumentError, 'a selector needs an item to select' unless items.any?(&:selectable?)
 
       @session = session
       @items   = items
       @width   = [width, 4].max
-      @height  = across ? items.size : (height || items.size).clamp(1, items.size)
+      @columns = across ? 1 : columns.clamp(1, items.size)
+      @height  = across ? items.size : (height || ((items.size + @columns - 1) / @columns)).clamp(1, items.size)
       @numbers = numbers
       @across  = across
       @hint    = hint
@@ -138,9 +154,14 @@ module BBS
 
     private
 
-    def pages = (@items.size + @height - 1) / @height
+    def per_page = @height * @columns
 
-    def page = @index / @height
+    def pages = (@items.size + per_page - 1) / per_page
+
+    def page = @index / per_page
+
+    # The screen row of item +index+ in the menu, from 1.
+    def line_of(index) = @across ? 1 : (index % per_page % @height) + 1
 
     def rows = (@across ? 1 : @height) + @about + @status
 
@@ -160,7 +181,8 @@ module BBS
       when :home then light(step(-1, 1))
       when :end then light(step(@items.size, -1))
       when :backspace then type(@typed.chop)
-      when *PAGE_KEYS.keys then @across ? move(PAGE_KEYS[key]) : turn(PAGE_KEYS[key])
+      when *SIDE_KEYS.keys then side(SIDE_KEYS[key])
+      when *PAGE_KEYS.keys then turn(PAGE_KEYS[key])
       else
         type(@typed + key) if @numbers && key.is_a?(String) && key.match?(/\A\d\z/)
       end
@@ -179,11 +201,28 @@ module BBS
       light(step(@index, dir))
     end
 
+    # Sideways: the next item on one row, the item beside in columns (the
+    # nearest selectable one under it, else above it), else the page.
+    def side(dir)
+      return move(dir) if @across
+      return turn(dir) if @columns == 1
+
+      target = @index + (dir * @height)
+      return turn(dir) unless target.between?(0, @items.size - 1) && target / per_page == page
+
+      top    = target - (target % per_page % @height)
+      column = (top...[top + @height, @items.size].min).select { |i| @items[i].selectable? }
+      return if column.empty?
+
+      @typed.clear
+      light(column.min_by { |i| [(i - target).abs, i < target ? 1 : 0] })
+    end
+
     def turn(dir)
       return if pages == 1
 
       @typed.clear
-      first = ((page + dir) % pages) * @height
+      first = ((page + dir) % pages) * per_page
       light(@items[first].selectable? ? first : step(first, 1))
     end
 
@@ -197,20 +236,15 @@ module BBS
       @typed.empty? ? paint_status : light(@typed.to_i - 1)
     end
 
-    # Lights item +index+, repainting what changed: the old and the new row,
-    # or the whole page when the page turned.
+    # Lights item +index+, repainting what changed: the rows of the old and
+    # the new item, or the whole page when the page turned.
     def light(index)
       old    = @index
-      turned = index / @height != page
+      turned = index / per_page != page
       @index = index
+      lines  = turned ? (1..@height).to_a : [line_of(old), line_of(index)].uniq
       out = +''
-      if @across
-        out << row_at(1, across_row)
-      elsif turned
-        @height.times { |r| out << row_at(r + 1, item_row(page * @height + r)) }
-      else
-        out << row_at(old - (page * @height) + 1, item_row(old)) << row_at(index - (page * @height) + 1, item_row(index))
-      end
+      lines.each { |l| out << row_at(l, line(l)) }
       out << about_row << status_row << park
       @session.write(out)
     end
@@ -218,7 +252,7 @@ module BBS
     def paint_status = @session.write(status_row << park)
 
     def draw
-      lines = @across ? [across_row] : Array.new(@height) { |r| item_row(page * @height + r) }
+      lines = Array.new(@across ? 1 : @height) { |l| line(l + 1) }
       lines << about_text if @about.positive?
       lines << status_text if @status.positive?
       @session.write(lines.join(Ansi::CRLF))
@@ -226,10 +260,10 @@ module BBS
       @session.write(park)
     end
 
-    # The cursor to the start of the lit row.
+    # The cursor to the start of the lit item.
     def park
-      row = @across ? 1 : @index - (page * @height) + 1
-      @screen.move(row, 1)
+      col = @across ? 1 : 1 + (cell_width * (@index % per_page / @height))
+      @screen.move(line_of(@index), col)
     end
 
     def finish(result)
@@ -248,6 +282,20 @@ module BBS
 
     def status_row = @status.positive? ? row_at(rows, status_text) : +''
 
+    def cell_width = @width / @columns
+
+    # Screen row +number+ of the page: the cell of each column side by side,
+    # the last column taking what the others leave.
+    def line(number)
+      return across_row if @across
+
+      first = (page * per_page) + number - 1
+      (0...@columns).map do |c|
+        width = c == @columns - 1 ? @width - (cell_width * c) : cell_width
+        cell(first + (c * @height), width)
+      end.join
+    end
+
     def key_width
       @key_width ||= if @numbers
                        @items.size.to_s.length
@@ -261,21 +309,22 @@ module BBS
       key.rjust(key_width)
     end
 
-    # Item +index+ as a row: blank past the last item, a heading in its
-    # colour, the lit one as a bar of plain text (an SGR reset inside it
-    # would end the reversing), the others in their own colours.
-    def item_row(index)
+    # Item +index+ as a cell +width+ wide: blank past the last item, a
+    # heading in its colour, the lit one as a bar of plain text (an SGR
+    # reset inside it would end the reversing), the others in their own
+    # colours.
+    def cell(index, width)
       item = @items[index]
-      return "#{@colors[:text]}#{' ' * @width}" unless item
-      return "#{@colors[:heading]}#{fit(" #{item.label}")}#{@colors[:text]}" if item.heading
+      return "#{@colors[:text]}#{' ' * width}" unless item
+      return "#{@colors[:heading]}#{fit_ansi(" #{item.label}", width)}#{@colors[:text]}" if item.heading
 
       prefix = key_width.positive? ? " #{key_text(index)} " : ' '
       if index == @index
-        "#{@colors[:bar]}#{Ansi::REVERSE}#{fit(prefix + plain(item.label))}#{Ansi::REVERSE_OFF}#{@colors[:text]}"
+        bar = item.color || @colors[:bar]
+        "#{bar}#{Ansi::REVERSE}#{fit(prefix + plain(item.label), width)}#{Ansi::REVERSE_OFF}#{@colors[:text]}"
       else
-        label = FrameBuffer.clip_ansi(item.label.to_s, @width - prefix.length)
-        pad   = ' ' * (@width - prefix.length - FrameBuffer.visible_width(label))
-        "#{@colors[:key]}#{prefix}#{@colors[:text]}#{label}#{@colors[:text]}#{pad}"
+        key = item.color || @colors[:key]
+        "#{key}#{prefix}#{@colors[:text]}#{fit_ansi(item.label.to_s, width - prefix.length)}#{@colors[:text]}"
       end
     end
 
@@ -289,9 +338,9 @@ module BBS
         break if used + word.length + 2 > @width
 
         out << if i == @index
-                 "#{@colors[:bar]}#{Ansi::REVERSE} #{word} #{Ansi::REVERSE_OFF}#{@colors[:text]}"
+                 "#{item.color || @colors[:bar]}#{Ansi::REVERSE} #{word} #{Ansi::REVERSE_OFF}#{@colors[:text]}"
                elsif item.key
-                 " #{@colors[:key]}#{item.key.to_s.upcase}#{@colors[:text]} #{plain(item.label)} "
+                 " #{item.color || @colors[:key]}#{item.key.to_s.upcase}#{@colors[:text]} #{plain(item.label)} "
                else
                  " #{@colors[:text]}#{word} "
                end
@@ -300,7 +349,7 @@ module BBS
       "#{@colors[:text]}#{out}#{' ' * (@width - used)}"
     end
 
-    def about_text = "#{@colors[:about]}#{fit(" #{plain(@items[@index].about)}")}#{@colors[:text]}"
+    def about_text = "#{@colors[:about]}#{fit(" #{plain(@items[@index].about)}", @width)}#{@colors[:text]}"
 
     def status_text
       right = if !@typed.empty? then "##{@typed}"
@@ -313,6 +362,12 @@ module BBS
 
     def plain(text) = FrameBuffer.text(text.to_s).gsub(FrameBuffer::ANSI_ESC_RE, '')
 
-    def fit(text) = text.length > @width ? text[0, @width] : text.ljust(@width)
+    def fit(text, width) = text.length > width ? text[0, width] : text.ljust(width)
+
+    # +text+ with its colours cut or padded to +width+ visible columns.
+    def fit_ansi(text, width)
+      text = FrameBuffer.clip_ansi(text, width)
+      "#{text}#{' ' * (width - FrameBuffer.visible_width(text))}"
+    end
   end
 end

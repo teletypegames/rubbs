@@ -1496,6 +1496,20 @@ the next, left and right (`+` and `-`) turn them. `exits: { 'x' => :value }`
 adds keys that return a value without an item. It raises IOError when the
 caller hangs up.
 
+With `columns: 2` (and a `height:`) the items run down the first column, then
+down the next; CRSR left and right go to the item beside. An empty
+`S.heading` keeps a place, so sections can stand level with each other, and
+an item's `color:` gives its key and its bar a colour of their own:
+
+```ruby
+items = [S.heading("\e[1;32m\e[7m messages \e[27m"),
+         S.item('message boards', key: 'm', value: :boards, color: "\e[1;32m"), S.heading,
+         S.heading("\e[0;36m\e[7m content \e[27m"),
+         S.item('file areas', key: 'f', value: :files, color: "\e[0;36m"),
+         S.item('news', key: 'n', value: :news, color: "\e[0;36m")]
+S.new(session, items, width: 39, columns: 2, height: 3).run
+```
+
 ### Two faces on one port (`BBS::Terminal`)
 
 A board with a modern face and a PETSCII face (a C64) asks the caller first, with the
