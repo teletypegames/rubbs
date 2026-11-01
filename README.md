@@ -1412,6 +1412,19 @@ BBS::Gateway.new(host: board.host, port: board.port, name: board.name, connect_t
 end
 ```
 
+- A Commodore 64 can call a board made for ASCII and ANSI terminals with
+  `translate: true`: the line then goes through a `BBS::Gateway::AsciiBridge`.
+  The board's text (UTF-8, or CP437 once it is not UTF-8) reaches the C64 as
+  PETSCII, with letters in the C64's case, ANSI colours as C64 colours and
+  line drawing as the nearest glyph; the C64's keys reach the board as an ANSI
+  terminal sends them (RETURN as CR, DEL as backspace, the cursor keys as
+  `ESC [ A`…). The board sees an `ANSI` terminal of the C64's 40 columns. A
+  modern caller's line is never translated.
+
+```ruby
+BBS::Gateway.new(host: board.host, port: board.port, translate: !board.petscii?).call(session)
+```
+
 ### File downloads (`BBS::Zmodem`)
 
 The sending side of ZMODEM, so a caller's terminal can save a file from the

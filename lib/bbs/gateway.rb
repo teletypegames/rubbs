@@ -64,13 +64,19 @@ module BBS
     #                   the call ends as if the caller hung up; +nil+ means
     #                   <tt>BBS.config.idle_seconds</tt>, or
     #                   BBS::Server::DEFAULT_TIMEOUT when that is not set
-    def initialize(host:, port:, name: nil, terminal: 'XTERM-256COLOR', connect_timeout: CONNECT_TIMEOUT, idle: nil)
+    # [translate]       whether a PETSCII caller gets the other board through
+    #                   an AsciiBridge (a board for ASCII and ANSI terminals);
+    #                   the board then sees an ANSI terminal of the C64's
+    #                   size. A modern caller's line is never translated.
+    def initialize(host:, port:, name: nil, terminal: 'XTERM-256COLOR', connect_timeout: CONNECT_TIMEOUT, idle: nil,
+                   translate: false)
       @host            = host
       @port            = port.to_i
       @name            = name || "#{host}:#{port}"
       @terminal        = terminal
       @connect_timeout = connect_timeout
       @idle            = idle
+      @translate       = translate
     end
 
     # The door's program: connects, carries the line until the other board
@@ -89,7 +95,7 @@ module BBS
       report = Report.new(connected: false, received: 0)
       remote = connect(session, report) or return
       begin
-        link = Link.new(session, remote, terminal: @terminal, idle: idle_seconds)
+        link = Link.new(session, remote, terminal: @terminal, idle: idle_seconds, bridge: bridge(session))
         hung_up = link.run
         report.hung_up = hung_up ? :caller : :board
       ensure
@@ -107,6 +113,9 @@ module BBS
     private
 
     def idle_seconds = @idle || BBS.config.idle_seconds || Server::DEFAULT_TIMEOUT
+
+    # The AsciiBridge of a translated call of a PETSCII caller, or +nil+.
+    def bridge(session) = (AsciiBridge.new if @translate && session.petscii?)
 
     def connect(session, report)
       session.write "#{Ansi::CRLF}  Connecting to #{@name}…#{Ansi::CRLF}"
@@ -174,14 +183,17 @@ module BBS
       # Creates a link between the caller's +session+ and the +remote+
       # socket of the other board. +terminal+ is the terminal type reported
       # when the other board asks; +idle+ the seconds the line may stay
-      # silent both ways (+nil+: no limit).
-      def initialize(session, remote, terminal:, idle: nil)
+      # silent both ways (+nil+: no limit); +bridge+ an AsciiBridge that
+      # translates both ways (+nil+: the bytes cross as they are), behind
+      # which a PETSCII caller is an ANSI terminal to the other board.
+      def initialize(session, remote, terminal:, idle: nil, bridge: nil)
         @received = 0
         @session  = session
         @client   = session.line
         @remote   = remote
-        @terminal = terminal
-        @petscii  = session.petscii?
+        @terminal = bridge ? 'ANSI' : terminal
+        @bridge   = bridge
+        @petscii  = session.petscii? && bridge.nil?
         @naws     = false
         @answered = {}
         @binary   = { WILL => false, DO => false }
@@ -249,7 +261,7 @@ module BBS
               if b == IAC then state = :iac else out << b end
             when :iac
               case b
-              when IAC then out << IAC << IAC; state = :data
+              when IAC then out << data_iac; state = :data
               when WILL, WONT, DO, DONT then cmd = b; state = :opt
               when SB then sub = []; state = :sb
               else state = :data
@@ -271,7 +283,7 @@ module BBS
           end
           next if out.empty?
 
-          @client.write(out)
+          @client.write(@bridge ? @bridge.down(out) : out)
           @received += out.bytesize
         end
       rescue EOFError, IOError, SystemCallError
@@ -308,12 +320,18 @@ module BBS
               end
             end
           end
+          out = @bridge.up(out.pack('C*')).bytes if @bridge
           send_remote(out) unless out.empty?
         end
       rescue EOFError, IOError, SystemCallError
         @hung_up = true
         @remote.shutdown rescue nil
       end
+
+      # A data byte 255 from the other board: doubled again for the caller's
+      # telnet client, or single for the AsciiBridge, which doubles what it
+      # sends down itself.
+      def data_iac = @bridge ? IAC.chr : (IAC.chr * 2)
 
       # A subnegotiation keeps at most Telnet::MAX_SUBNEGOTIATION bytes; the
       # rest is read and dropped.
