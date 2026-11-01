@@ -15,12 +15,37 @@ module BBS
   # later size changes on. A PETSCII line has no window size to report, so
   # the other board takes it for a Commodore. Everything else goes through
   # untouched both ways, mouse reports and PETSCII included.
+  #
+  # A gateway is made for one address; a directory that dials many boards
+  # makes one a call, and reads how it went from the Report its block gets:
+  #
+  #   BBS::Gateway.new(host: 'bbs.example.org', port: 23).call(session) do |report|
+  #     log(report.connected ? "#{report.received} bytes" : report.error.class)
+  #   end
   class Gateway
-    # Seconds to wait for the other board to accept the connection.
+    # Seconds to wait for the other board to accept the connection, by
+    # default.
     CONNECT_TIMEOUT = 5
     # Seconds to wait for the caller's key before the line goes back to the
     # board.
     BACK_WAIT       = 30
+
+    # How one #call went, given to its block.
+    #
+    # [connected]       whether the other board accepted the connection
+    # [error]           the exception that kept it from connecting
+    #                   (SocketError when the name did not resolve,
+    #                   Errno::ECONNREFUSED, IO::TimeoutError or
+    #                   Errno::ETIMEDOUT …), +nil+ when it connected
+    # [address]         the IP address called, as a String; +nil+ when it
+    #                   did not connect
+    # [connect_seconds] how long the connection took to open, a Float;
+    #                   +nil+ when it did not connect
+    # [received]        the bytes the other board sent the caller, telnet
+    #                   commands not counted
+    # [hung_up]         who ended the crossing: +:board+ or +:caller+;
+    #                   +nil+ when it did not connect
+    Report = Struct.new(:connected, :error, :address, :connect_seconds, :received, :hung_up, keyword_init: true)
 
     # The other board's host name, its port as an Integer, and the name
     # shown to the caller.
@@ -28,14 +53,18 @@ module BBS
 
     # Creates a gateway to +host+:+port+.
     #
-    # [name]     the name shown to the caller; defaults to <tt>host:port</tt>
-    # [terminal] the terminal type reported to the other board when it asks
-    #            (not on a PETSCII line)
-    def initialize(host:, port:, name: nil, terminal: 'XTERM-256COLOR')
-      @host     = host
-      @port     = port.to_i
-      @name     = name || "#{host}:#{port}"
-      @terminal = terminal
+    # [name]            the name shown to the caller; defaults to
+    #                   <tt>host:port</tt>
+    # [terminal]        the terminal type reported to the other board when it
+    #                   asks (not on a PETSCII line)
+    # [connect_timeout] seconds to wait for the other board to accept the
+    #                   connection (CONNECT_TIMEOUT)
+    def initialize(host:, port:, name: nil, terminal: 'XTERM-256COLOR', connect_timeout: CONNECT_TIMEOUT)
+      @host            = host
+      @port            = port.to_i
+      @name            = name || "#{host}:#{port}"
+      @terminal        = terminal
+      @connect_timeout = connect_timeout
     end
 
     # The door's program: connects, carries the line until the other board
@@ -46,29 +75,44 @@ module BBS
     #
     # [session]  the caller's BBS::Session
     # [_context] the caller's context; not used
+    #
+    # With a block, yields a Report of the call once it is over (also when
+    # the caller hung up and the IOError is on its way).
     def call(session, _context = {})
-      remote = connect(session) or return
+      report = Report.new(connected: false, received: 0)
+      remote = connect(session, report) or return
       begin
-        hung_up = Link.new(session, remote, terminal: @terminal).run
+        link = Link.new(session, remote, terminal: @terminal)
+        hung_up = link.run
+        report.hung_up = hung_up ? :caller : :board
       ensure
+        report.received = link&.received.to_i
         remote.close rescue nil
       end
       raise IOError, 'the caller hung up' if hung_up
 
       session.write "#{Ansi::RESET}#{Ansi::CRLF * 2}  #{@name} hung up. Press a key to return.#{Ansi::CRLF}"
       session.readkey(timeout: BACK_WAIT)
+    ensure
+      yield report if block_given? && report
     end
 
     private
 
-    def connect(session)
+    def connect(session, report)
       session.write "#{Ansi::CRLF}  Connecting to #{@name}…#{Ansi::CRLF}"
-      socket = Socket.tcp(@host, @port, connect_timeout: CONNECT_TIMEOUT)
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      socket = Socket.tcp(@host, @port, connect_timeout: @connect_timeout)
       error  = socket.getsockopt(Socket::SOL_SOCKET, Socket::SO_ERROR).int
       raise SystemCallError.new("connect to #{@host}:#{@port}", error) unless error.zero?
 
+      report.connected       = true
+      report.connect_seconds = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+      report.address         = (socket.remote_address.ip_address rescue nil)
       socket
     rescue SystemCallError, SocketError, IOError => e
+      socket&.close rescue nil
+      report.error = e
       warn "BBS gateway #{@name} (#{@host}:#{@port}): #{e.class}: #{e.message}"
       session.write "#{Ansi::CRLF}  #{@name} does not answer. Try again later. Press a key.#{Ansi::CRLF}"
       session.readkey(timeout: BACK_WAIT)
@@ -114,10 +158,15 @@ module BBS
       # The low byte of a 16-bit NAWS value.
       BYTE_MASK  = 0xff
 
+      # The bytes the other board sent the caller so far, telnet commands
+      # not counted.
+      attr_reader :received
+
       # Creates a link between the caller's +session+ and the +remote+
       # socket of the other board. +terminal+ is the terminal type reported
       # when the other board asks.
       def initialize(session, remote, terminal:)
+        @received = 0
         @session  = session
         @client   = session.line
         @remote   = remote
@@ -186,7 +235,10 @@ module BBS
               end
             end
           end
-          @client.write(out) unless out.empty?
+          next if out.empty?
+
+          @client.write(out)
+          @received += out.bytesize
         end
       rescue EOFError, IOError, SystemCallError
         nil

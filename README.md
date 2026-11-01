@@ -1300,6 +1300,19 @@ door :feedia, FEEDIA, label: '&Feedia'
   when it does not answer (5 s), the caller is told so and comes back. A caller
   who hangs up inside ends the call, and the other board's connection with it.
 - `session.line` is the caller's socket, for a door like this one.
+- A directory that dials many boards makes a gateway a call
+  (`connect_timeout:` sets the wait, 5 s by default) and reads how it went from
+  the `BBS::Gateway::Report` its block gets: `connected`, the `error` that kept
+  it from connecting (`SocketError` for a name that does not resolve,
+  `Errno::ECONNREFUSED`, a timeout), the `address` called, `connect_seconds`,
+  the bytes `received` from the other board and who `hung_up`. The block runs
+  when the call is over, also when the caller hung up inside.
+
+```ruby
+BBS::Gateway.new(host: board.host, port: board.port, name: board.name, connect_timeout: 10).call(session) do |report|
+  record(board, report.connected ? 'ok' : 'refused')
+end
+```
 
 ### File downloads (`BBS::Zmodem`)
 
