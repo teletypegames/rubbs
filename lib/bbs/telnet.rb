@@ -34,9 +34,9 @@ module BBS
     # The most bytes #readline keeps in a line; further characters are dropped.
     MAX_LINE = 1024
     # The widest terminal accepted from a NAWS report, in columns.
-    MAX_COLS = 500
+    MAX_COLS = 255
     # The tallest terminal accepted from a NAWS report, in rows.
-    MAX_ROWS = 200
+    MAX_ROWS = 100
     # Seconds to wait for the rest of an escape sequence (or UTF-8
     # character) before a lone ESC counts as the Escape key.
     ESC_WAIT = 0.15
@@ -365,17 +365,20 @@ module BBS
     end
 
     # Writes +data+ (a String) to the caller, encoded to PETSCII on a
-    # PETSCII line. Errors are swallowed: returns +nil+ when the write fails.
+    # PETSCII line. Returns +nil+ when the write fails, except for a caller
+    # who stopped reading: when the write times out (IO::TimeoutError) the
+    # line is closed and IOError is raised, which ends the session.
     def write(data)
-      @client.write(@petscii ? @petscii.encode(data) : data)
+      send_raw(@petscii ? @petscii.encode(data) : data)
+    rescue IOError
+      raise
     rescue StandardError
       nil
     end
 
     # Writes the bytes of +data+ to the caller as they are, not encoded to
     # PETSCII even on a PETSCII line: for binary protocols (BBS::Zmodem,
-    # BBS::Xmodem) and telnet commands. Errors are swallowed: returns +nil+
-    # when the write fails.
+    # BBS::Xmodem) and telnet commands. Fails as #write does.
     def write_raw(data) = send_raw(data)
 
     private
@@ -547,6 +550,9 @@ module BBS
 
     def send_raw(data)
       @client.write(data)
+    rescue IO::TimeoutError
+      @client.close rescue nil
+      raise IOError, 'the caller stopped reading'
     rescue StandardError
       nil
     end

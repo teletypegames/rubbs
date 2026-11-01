@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'io/wait'
 require 'socket'
 
 module BBS
@@ -59,17 +60,23 @@ module BBS
     #                   asks (not on a PETSCII line)
     # [connect_timeout] seconds to wait for the other board to accept the
     #                   connection (CONNECT_TIMEOUT)
-    def initialize(host:, port:, name: nil, terminal: 'XTERM-256COLOR', connect_timeout: CONNECT_TIMEOUT)
+    # [idle]            seconds the line may stay silent both ways before
+    #                   the call ends as if the caller hung up; +nil+ means
+    #                   <tt>BBS.config.idle_seconds</tt>, or
+    #                   BBS::Server::DEFAULT_TIMEOUT when that is not set
+    def initialize(host:, port:, name: nil, terminal: 'XTERM-256COLOR', connect_timeout: CONNECT_TIMEOUT, idle: nil)
       @host            = host
       @port            = port.to_i
       @name            = name || "#{host}:#{port}"
       @terminal        = terminal
       @connect_timeout = connect_timeout
+      @idle            = idle
     end
 
     # The door's program: connects, carries the line until the other board
     # hangs up, and waits for a key before the board takes the line back.
-    # A caller who hangs up meanwhile ends the call (IOError). When the
+    # A caller who hangs up meanwhile ends the call (IOError), and so does a
+    # line silent both ways for the +idle+ seconds. When the
     # other board does not answer, the caller is told so and the method
     # returns after a key.
     #
@@ -82,7 +89,7 @@ module BBS
       report = Report.new(connected: false, received: 0)
       remote = connect(session, report) or return
       begin
-        link = Link.new(session, remote, terminal: @terminal)
+        link = Link.new(session, remote, terminal: @terminal, idle: idle_seconds)
         hung_up = link.run
         report.hung_up = hung_up ? :caller : :board
       ensure
@@ -98,6 +105,8 @@ module BBS
     end
 
     private
+
+    def idle_seconds = @idle || BBS.config.idle_seconds || Server::DEFAULT_TIMEOUT
 
     def connect(session, report)
       session.write "#{Ansi::CRLF}  Connecting to #{@name}…#{Ansi::CRLF}"
@@ -164,8 +173,9 @@ module BBS
 
       # Creates a link between the caller's +session+ and the +remote+
       # socket of the other board. +terminal+ is the terminal type reported
-      # when the other board asks.
-      def initialize(session, remote, terminal:)
+      # when the other board asks; +idle+ the seconds the line may stay
+      # silent both ways (+nil+: no limit).
+      def initialize(session, remote, terminal:, idle: nil)
         @received = 0
         @session  = session
         @client   = session.line
@@ -177,13 +187,16 @@ module BBS
         @binary   = { WILL => false, DO => false }
         @mu       = Mutex.new
         @hung_up  = false
+        @idle     = idle
+        @heard    = monotonic
       end
 
       # Carries the bytes both ways until one side hangs up: the other
       # board's down to the caller in this thread, the caller's up in a new
       # one.
       #
-      # Returns true when the caller hung up, false when the other board did.
+      # Returns true when the caller hung up or the line stayed silent both
+      # ways for the +idle+ seconds, false when the other board hung up.
       # The caller's side ends by shutting the other board's socket down,
       # which wakes the reader of this thread; it is closed by the gateway,
       # never by a thread that may be killed halfway through closing it.
@@ -203,13 +216,34 @@ module BBS
         nil
       end
 
+      def monotonic = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+      def heard(bytes)
+        @heard = monotonic
+        bytes
+      end
+
+      # Waits for the other board's bytes; false once the line has been
+      # silent both ways for the idle seconds.
+      def wait_remote
+        return true if @idle.nil?
+
+        loop do
+          left = @heard + @idle - monotonic
+          return false unless left.positive?
+          return true if @remote.wait_readable(left)
+        end
+      end
+
       def downstream
         state = :data
         cmd   = nil
         sub   = []
         loop do
+          return silent unless wait_remote
+
           out = +''.b
-          @remote.readpartial(CHUNK).each_byte do |b|
+          heard(@remote.readpartial(CHUNK)).each_byte do |b|
             case state
             when :data
               if b == IAC then state = :iac else out << b end
@@ -224,13 +258,13 @@ module BBS
               answer(cmd, b)
               state = :data
             when :sb
-              if b == IAC then state = :sb_iac else sub << b end
+              if b == IAC then state = :sb_iac else add(sub, b) end
             when :sb_iac
               if b == SE
                 subnegotiation(sub)
                 state = :data
               else
-                sub << b if b == IAC
+                add(sub, b) if b == IAC
                 state = :sb
               end
             end
@@ -249,7 +283,7 @@ module BBS
         sub   = []
         loop do
           out = []
-          @client.readpartial(CHUNK).each_byte do |b|
+          heard(@client.readpartial(CHUNK)).each_byte do |b|
             case state
             when :data
               if b == IAC then state = :iac else out << b end
@@ -263,13 +297,13 @@ module BBS
             when :opt
               state = :data
             when :sb
-              if b == IAC then state = :sb_iac else sub << b end
+              if b == IAC then state = :sb_iac else add(sub, b) end
             when :sb_iac
               if b == SE
                 resize(sub)
                 state = :data
               else
-                sub << b if b == IAC
+                add(sub, b) if b == IAC
                 state = :sb
               end
             end
@@ -279,6 +313,19 @@ module BBS
       rescue EOFError, IOError, SystemCallError
         @hung_up = true
         @remote.shutdown rescue nil
+      end
+
+      # A subnegotiation keeps at most Telnet::MAX_SUBNEGOTIATION bytes; the
+      # rest is read and dropped.
+      def add(sub, byte)
+        sub << byte if sub.size < Telnet::MAX_SUBNEGOTIATION
+      end
+
+      # The line went silent both ways: counted as the caller hanging up;
+      # #run stops the caller's reader.
+      def silent
+        @hung_up = true
+        nil
       end
 
       # Each option is answered once: a board that asks again gets no loop.

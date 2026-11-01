@@ -136,6 +136,16 @@ module BBS
     ANSWER_WAIT  = 10
     # Seconds to wait for the receiver's ZFIN.
     FIN_WAIT     = 5
+    # The most times a file is sent again from where the receiver asks
+    # (ZRPOS) before the transfer is given up.
+    RESTARTS     = 16
+    # The most bytes of a file sent, counting the restarts, as a multiple of
+    # its size (or of SUBPACKET for a smaller file); past it the transfer is
+    # given up.
+    BUDGET_FACTOR = 4
+    # The most bytes of the receiver kept while looking for a header; older
+    # ones are dropped.
+    MAX_PENDING  = 64
 
     # A parsed ZMODEM header: +type+ is the header type (ZRINIT, ZRPOS, ...),
     # +bytes+ the four data bytes. #position reads them as a little-endian
@@ -163,7 +173,9 @@ module BBS
     # [telnet]  double 0xFF bytes as telnet IAC; +false+ for a plain byte pipe
     #
     # Returns +:ok+ when the terminal took the files (or skipped some),
-    # +:cancelled+ when the caller or the terminal gave up, +:timeout+ when
+    # +:cancelled+ when the caller or the terminal gave up (or the terminal
+    # asked for a file again more than RESTARTS times or for more than
+    # BUDGET_FACTOR times its bytes), +:timeout+ when
     # no receiver answered within +wait+ seconds, +:hangup+ when the line
     # dropped.
     def send_files(session, files, wait: WAIT, telnet: true)
@@ -263,18 +275,30 @@ module BBS
         raise Timeout
       end
 
+      # Sends +data+ from +pos+ and its end, again from where the receiver
+      # asks, at most RESTARTS times and BUDGET_FACTOR times its size.
       def stream(data, pos)
-        loop do
-          send_data(data, pos)
-          bin_header(ZEOF, position_bytes(data.bytesize))
-          header = expect(ZRINIT, ZRPOS, ZNAK)
-          case header.type
-          when ZRINIT then return
-          when ZRPOS then pos = header.position
-          end
+        @budget = BUDGET_FACTOR * [data.bytesize, SUBPACKET].max
+        RESTARTS.times do
+          pos = send_data(data, pos) || end_of_file(data, pos)
+          return if pos == :done
+        end
+        raise Cancelled
+      end
+
+      # :done when the receiver took the file, else where to send from.
+      def end_of_file(data, pos)
+        bin_header(ZEOF, position_bytes(data.bytesize))
+        header = expect(ZRINIT, ZRPOS, ZNAK)
+        case header.type
+        when ZRINIT then :done
+        when ZRPOS  then header.position
+        else pos
         end
       end
 
+      # The subpackets from +pos+ to the end: nil when all went out, the
+      # position the receiver asked for (ZRPOS) when it wants them again.
       def send_data(data, pos)
         pos = pos.clamp(0, data.bytesize)
         return if pos == data.bytesize
@@ -283,21 +307,29 @@ module BBS
         bin_header(ZDATA, position_bytes(pos))
         acked = pos
         while pos < data.bytesize
-          chunk = data.byteslice(pos, SUBPACKET)
+          chunk = spend(data.byteslice(pos, SUBPACKET))
           pos  += chunk.bytesize
           last  = pos >= data.bytesize
           if @window.positive? && pos - acked >= @window && !last
             subpacket(chunk, ZCRCW)
             header = expect(ZACK, ZRPOS)
-            return send_data(data, header.position) if header.type == ZRPOS
+            return header.position if header.type == ZRPOS
 
             acked = pos
           else
             subpacket(chunk, last ? ZCRCE : ZCRCG)
           end
           header = poll_header
-          return send_data(data, header.position) if header&.type == ZRPOS && header.position != start
+          return header.position if header&.type == ZRPOS && header.position != start
         end
+        nil
+      end
+
+      def spend(chunk)
+        @budget -= chunk.bytesize
+        raise Cancelled if @budget.negative?
+
+        chunk
       end
 
       def finish
@@ -381,6 +413,7 @@ module BBS
         raise Cancelled if @cans >= CANCEL_COUNT
 
         @pending << byte
+        @pending.shift(@pending.size - MAX_PENDING) if @pending.size > MAX_PENDING
       end
 
       def scan_pending

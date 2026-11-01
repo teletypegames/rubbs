@@ -28,6 +28,10 @@ module BBS
     WRAP_TOKEN_RE = /(\e\[[\d;]*[A-Za-z~]|[^\s\e]+|\s+)/
     # A token that is whitespace only.
     BLANK_RE = /\A\s+\z/
+    # A character a cell never holds: a C0 control, DEL, a C1 control or a
+    # bidirectional control, any of which would move or restyle the caller's
+    # screen behind the frame buffer's back.
+    CONTROL_CHAR = /[\u0000-\u001F\u007F-\u009F#{Text::BIDI_CONTROLS}]/
 
     # Returns +value+ as a String a regexp can read: invalid bytes become
     # <tt>?</tt>.
@@ -150,13 +154,15 @@ module BBS
     end
 
     # Writes +text+ character by character from the cursor with style +sgr+,
-    # advancing the cursor. Escape sequences are not interpreted; characters
-    # off the grid are dropped.
+    # advancing the cursor. Control characters (CONTROL_CHAR, escape
+    # sequences among them) are dropped and take no cell; characters off the
+    # grid are dropped.
     def write(text, sgr: nil)
-      text.to_s.each_char do |ch|
+      self.class.text(text).each_char do |ch|
         break if @cy >= @rows
-        @cells[@cy][@cx] = Cell.new(ch, sgr) if visible?
-        @cx += 1
+        next if ch.match?(CONTROL_CHAR)
+
+        put(ch, sgr)
       end
     end
 
@@ -167,8 +173,8 @@ module BBS
     # [cursor]   honour <tt>\e[row;colH</tt> cursor moves (a TUI page); off by
     #            default so content in a widget cannot jump out of it
     #
-    # <tt>\e[nC</tt> writes +n+ styled spaces. Other control characters and
-    # other escape sequences are skipped.
+    # <tt>\e[nC</tt> writes +n+ styled spaces. Other escape sequences and
+    # control characters (CONTROL_CHAR) are skipped.
     def write_ansi(text, base_sgr: nil, cursor: false)
       cur_sgr = base_sgr
       s       = text.to_s
@@ -207,9 +213,8 @@ module BBS
           else
             i += 1
           end
-        elsif ch.ord >= Ascii::SPACE
-          @cells[@cy][@cx] = Cell.new(ch, cur_sgr) if visible?
-          @cx += 1
+        elsif !ch.match?(CONTROL_CHAR)
+          put(ch, cur_sgr)
           i += 1
         else
           i += 1
@@ -357,6 +362,13 @@ module BBS
     # Returns the Cell at the 0-based +row+ and +col+.
     def cell_at(row, col)
       @cells[row][col]
+    end
+
+    private
+
+    def put(char, sgr)
+      @cells[@cy][@cx] = Cell.new(char, sgr) if visible?
+      @cx += 1
     end
   end
 end

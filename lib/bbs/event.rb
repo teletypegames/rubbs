@@ -37,7 +37,8 @@ module BBS
     # The key name after the +alt_+ prefix as a String (<tt>"x"</tt> for
     # <tt>:alt_x</tt>), or +nil+ when this is not an Alt key.
     def alt_char = alt? ? key.to_s.sub('alt_', '') : nil
-    # True for a key event that is a single printable character.
-    def char? = key? && key.is_a?(String) && key.length == 1
+    # True for a key event that is a single printable character
+    # (BBS::Text.printable?: no control, no bidirectional control).
+    def char? = key? && Text.printable?(key)
   end
 end

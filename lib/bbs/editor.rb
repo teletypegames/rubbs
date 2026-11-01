@@ -46,8 +46,8 @@ module BBS
     # [single_line] one paragraph, wrapped on the screen: RETURN saves and
     #               line ends in +text+ become spaces
     # [max]         the most characters the text may hold (line ends
-    #               count as one), or +nil+ for no limit; the title bar
-    #               counts them
+    #               count as one), or +nil+ for TextBuffer::MAX_LENGTH;
+    #               the title bar counts them when it is given
     # [cols]        the screen width; default the session's
     # [rows]        the screen height; default the session's
     def initialize(session, text: '', title: '', single_line: false, max: nil, cols: nil, rows: nil)

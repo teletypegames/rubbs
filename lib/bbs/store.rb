@@ -16,8 +16,9 @@ module BBS
   # filled with the UTC time a row is created.
   class Store
     # The control characters removed from a value before it is written:
-    # C0 except tab and LF, and DEL.
-    CONTROL_CHARS = /[\u0000-\u0008\u000b-\u001f\u007f]/
+    # C0 except tab and LF, DEL, C1 and the bidirectional controls
+    # (BBS::Text::CONTROLS).
+    CONTROL_CHARS = Text::CONTROLS
 
     # The column names (an Array of String) and the CSV file path.
     attr_reader :headers, :path
@@ -115,9 +116,7 @@ module BBS
     end
 
     # Valid UTF-8 without control characters, so a stray byte from the terminal never lands in the file.
-    def clean(value)
-      value.to_s.dup.force_encoding(Encoding::UTF_8).scrub('').gsub(CONTROL_CHARS, '')
-    end
+    def clean(value) = Text.clean(value)
 
     def ensure_file!
       FileUtils.mkdir_p(File.dirname(@path))

@@ -2,6 +2,8 @@
 
 require_relative 'bbs/ansi'
 require_relative 'bbs/ascii'
+require_relative 'bbs/text'
+require_relative 'bbs/address'
 require_relative 'bbs/patterns'
 require_relative 'bbs/color'
 require_relative 'bbs/config'

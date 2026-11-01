@@ -30,17 +30,33 @@ module BBS
     # [max_sessions]     the most callers served at once; more are turned
     #                    away. Default the +BBS_MAX_SESSIONS+ environment
     #                    variable or 100
+    # [max_sessions_per_ip] the most callers served at once from one public
+    #                    address; local ones (a proxy on the Docker network,
+    #                    see BBS::Address.local?) are not limited. Default
+    #                    the +BBS_MAX_SESSIONS_PER_IP+ environment variable
+    #                    or 6
+    # [ai_concurrency]   the most BBS::AI::Client requests running at once in
+    #                    the process; default 2
+    # [user_agent]       the User-Agent header of BBS::HTTP requests;
+    #                    default <tt>rubbs/<version> (+https://teletypegames.org)</tt>
     attr_accessor :screens_dir, :flow, :on_session_end,
-                  :port, :theme, :mouse, :mouse_on_connect, :idle_seconds, :max_sessions
+                  :port, :theme, :mouse, :mouse_on_connect, :idle_seconds, :max_sessions,
+                  :max_sessions_per_ip, :ai_concurrency, :user_agent
 
-    # Creates a Config with the defaults, reading +BBS_PORT+ and
-    # +BBS_MAX_SESSIONS+ from the environment.
+    # The User-Agent of BBS::HTTP when none is configured.
+    DEFAULT_USER_AGENT = "rubbs/#{Gem.loaded_specs['bbs']&.version || 'dev'} (+https://teletypegames.org)".freeze
+
+    # Creates a Config with the defaults, reading +BBS_PORT+,
+    # +BBS_MAX_SESSIONS+ and +BBS_MAX_SESSIONS_PER_IP+ from the environment.
     def initialize
       @port         = (ENV['BBS_PORT'] || 2323).to_i
       @mouse        = false
       @mouse_on_connect = true
       @idle_seconds = nil
       @max_sessions = (ENV['BBS_MAX_SESSIONS'] || 100).to_i
+      @max_sessions_per_ip = (ENV['BBS_MAX_SESSIONS_PER_IP'] || 6).to_i
+      @ai_concurrency      = 2
+      @user_agent          = DEFAULT_USER_AGENT
     end
   end
 end

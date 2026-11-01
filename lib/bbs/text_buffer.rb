@@ -14,8 +14,11 @@ module BBS
   class TextBuffer
     # The control characters of a new text that become a space: tab and CR.
     SPACED_CONTROLS = "\t\r"
-    # One printable character, the only kind #edit inserts.
-    PRINTABLE_CHAR = /\A[[:print:]]\z/
+    # One printable character, the only kind #edit inserts
+    # (BBS::Text::PRINTABLE_CHAR).
+    PRINTABLE_CHAR = Text::PRINTABLE_CHAR
+    # The most characters a buffer holds when it is given no +max+: 64 KiB.
+    MAX_LENGTH = 65_536
 
     # The lines of the text, without line ends (Array of String).
     attr_reader :lines
@@ -29,11 +32,11 @@ module BBS
     # [text]        the text to start from; lines end with LF, tabs become
     #               spaces
     # [max]         the most characters the text may hold (line ends count
-    #               as one), or +nil+ for no limit
+    #               as one); +nil+ means MAX_LENGTH
     # [single_line] one line: line ends in +text+ become spaces and RETURN
     #               does not split the line
     def initialize(text = '', max: nil, single_line: false)
-      @max    = max
+      @max    = max || MAX_LENGTH
       @single = single_line
       text    = text.to_s.gsub(Ansi::CRLF, "\n").tr(SPACED_CONTROLS, '  ')
       text    = text.tr("\n", ' ') if @single
@@ -87,7 +90,7 @@ module BBS
 
     private
 
-    def full? = !@max.nil? && length >= @max
+    def full? = length >= @max
 
     def insert(char)
       return if full? || !char.match?(PRINTABLE_CHAR)

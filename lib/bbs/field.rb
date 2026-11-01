@@ -50,7 +50,7 @@ module BBS
     #
     # [text]  the text to start from, the cursor at its end
     # [width] the columns the field takes, at least 2
-    # [max]   the most characters the text may hold, or +nil+ for no limit
+    # [max]   the most characters the text may hold; +nil+ means TextBuffer::MAX_LENGTH
     # [mask]  shown in place of every character (for a password, e.g.
     #         <tt>'*'</tt>), or +nil+ to show the text
     def initialize(session, text: '', width:, max: nil, mask: nil)
