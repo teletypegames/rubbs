@@ -1,127 +1,129 @@
 # frozen_string_literal: true
 
-require 'csv'
-require 'fileutils'
 require 'time'
 
 module BBS
-  # A small thread-safe CSV table keyed by session id, for keeping what
-  # callers entered. The file is created with a header row on first use and
-  # read once into memory.
+  # A small thread-safe table keyed by session id, for keeping what callers
+  # entered, in a BBS::SQLite file. The file and the table are created on
+  # first use; a column added to +headers+ later is added to the table.
   #
   #   store = BBS::Store.new(path: 'data/callers.csv', headers: %w[session_id timestamp name])
   #   store.upsert(session_id: ctx[:session_id], name: 'Ada')
   #
-  # A +session_id+ column is the key; a +timestamp+ column, when present, is
-  # filled with the UTC time a row is created.
+  # A +path+ ending in <tt>.csv</tt> names the CSV file of earlier versions:
+  # the database is the <tt>.sqlite3</tt> file beside it, and on first use
+  # the rows of the CSV file (when it exists and the table is empty) are
+  # imported in one transaction and the CSV file is renamed to
+  # <tt><name>.csv.imported</tt>.
+  #
+  # The +session_id+ column is the key; a +timestamp+ column, when present,
+  # is filled with the UTC time a row is created.
   class Store
     # The control characters removed from a value before it is written:
     # C0 except tab and LF, DEL, C1 and the bidirectional controls
     # (BBS::Text::CONTROLS).
     CONTROL_CHARS = Text::CONTROLS
+    # The table that holds the rows.
+    TABLE = 'store'
+    # The key column, kept even when +headers+ leave it out.
+    KEY = 'session_id'
 
-    # The column names (an Array of String) and the CSV file path.
+    # The column names (an Array of String) and the path the store was made
+    # with (see the class description for the database file).
     attr_reader :headers, :path
 
-    # Creates a store over the CSV file at +path+ with the column names
-    # +headers+. The file is not touched until the first read or write.
+    # Creates a store at +path+ with the column names +headers+. The file is
+    # not touched until the first read or write.
     def initialize(path:, headers:)
-      @path    = path
-      @headers = headers
+      @path    = path.to_s
+      @headers = headers.map(&:to_s)
       @mutex   = Mutex.new
-      @rows    = nil
     end
 
-    # Updates the row of +session_id+ with +fields+, or appends a new row
-    # when there is none. Keys that are not columns are ignored; values are
-    # stored as strings with control characters removed. Writes the file.
+    # The path of the SQLite file: +path+, or the <tt>.sqlite3</tt> file
+    # beside it when +path+ names a CSV file.
+    def database_path = @path.sub(/\.csv\z/, '.sqlite3')
+
+    # Updates the row of +session_id+ with +fields+, or adds a new row when
+    # there is none. Keys that are not columns are ignored; values are
+    # stored as strings cleaned with BBS::Text.clean.
     #
     # Returns +self+.
     def upsert(session_id:, **fields)
-      @mutex.synchronize do
-        load_rows!
-        row = @rows.find { |r| r['session_id'] == session_id }
-
-        if row
-          fields.each { |k, v| row[k.to_s] = clean(v) if @headers.include?(k.to_s) }
-          flush!
-        else
-          @rows << build_row(session_id, fields)
-          append_row(@rows.last)
-        end
-      end
+      values = fields.filter_map { |name, value| [name.to_s, clean(value)] if @headers.include?(name.to_s) }.to_h
+      db.transaction { find(session_id) ? update(session_id, values) : add(session_id, fields) }
       self
     end
 
     # Returns the row of +session_id+ as a Hash of column name to value, or
     # +nil+.
     def find(session_id)
-      @mutex.synchronize do
-        load_rows!
-        row = @rows.find { |r| r['session_id'] == session_id }
-        row ? row.to_h : nil
-      end
+      row = db.get("SELECT * FROM #{TABLE} WHERE #{KEY} = ?", session_id.to_s)
+      row && project(row)
     end
 
-    # Returns every row as an Array of Hash.
-    def all
-      @mutex.synchronize do
-        load_rows!
-        @rows.map(&:to_h)
-      end
-    end
+    # Returns every row as an Array of Hash, oldest first.
+    def all = db.query("SELECT * FROM #{TABLE} ORDER BY rowid").map { |row| project(row) }
 
-    # Removes the row of +session_id+ and rewrites the file when there was
-    # one.
+    # Removes the row of +session_id+, if there is one.
     def delete(session_id)
-      @mutex.synchronize do
-        load_rows!
-        removed = @rows.reject! { |r| r['session_id'] == session_id }
-        flush! if removed
-      end
+      db.change("DELETE FROM #{TABLE} WHERE #{KEY} = ?", session_id.to_s)
+      nil
     end
 
     private
 
-    def load_rows!
-      return @rows if @rows
-      ensure_file!
-      # Bytes, not text: a line with invalid UTF-8 (e.g. raw telnet negotiation saved with the input)
-      # would otherwise raise CSV::InvalidEncodingError and kill every session that touches the store.
-      raw   = File.binread(@path).force_encoding(Encoding::UTF_8).scrub
-      table = CSV.parse(raw, headers: true)
-      @rows = table.map { |row| row }
-    end
+    def db = @mutex.synchronize { @db ||= open }
 
-    def build_row(session_id, fields)
-      values = @headers.map do |h|
-        case h
-        when 'session_id' then session_id
-        when 'timestamp'  then Time.now.utc.iso8601
-        else (v = fields[h.to_sym]).nil? ? nil : clean(v)
-        end
-      end
-      CSV::Row.new(@headers, values)
-    end
-
-    def append_row(row)
-      CSV.open(@path, 'a') { |csv| csv << row.fields }
-    end
-
-    def flush!
-      CSV.open(@path, 'w') do |csv|
-        csv << @headers
-        @rows.each { |r| csv << r.fields }
+    def open
+      SQLite.new(database_path).tap do |db|
+        db.query("CREATE TABLE IF NOT EXISTS #{TABLE} (#{KEY} TEXT UNIQUE)")
+        known = db.query("PRAGMA table_info(#{TABLE})").map { |column| column['name'] }
+        (@headers - known).each { |name| db.query("ALTER TABLE #{TABLE} ADD COLUMN #{quote(name)} TEXT") }
+        import(db) if @path != database_path && File.exist?(@path)
       end
     end
 
-    # Valid UTF-8 without control characters, so a stray byte from the terminal never lands in the file.
+    def update(session_id, values)
+      return if values.empty?
+
+      sets = values.keys.map { |name| "#{quote(name)} = ?" }.join(', ')
+      db.change("UPDATE #{TABLE} SET #{sets} WHERE #{KEY} = ?", *values.values, session_id.to_s)
+    end
+
+    def add(session_id, fields)
+      row = @headers.to_h { |name| [name, fields[name.to_sym]&.then { |value| clean(value) }] }
+      row['timestamp'] = Time.now.utc.iso8601 if @headers.include?('timestamp')
+      insert(db, row.merge(KEY => session_id.to_s))
+    end
+
+    def insert(db, row)
+      names = row.keys.map { |name| quote(name) }.join(', ')
+      db.insert("INSERT OR IGNORE INTO #{TABLE} (#{names}) VALUES (#{(['?'] * row.size).join(', ')})", *row.values)
+    end
+
+    def import(db)
+      return unless db.get("SELECT COUNT(*) AS n FROM #{TABLE}")['n'].zero?
+
+      rows = csv_rows.reject(&:empty?)
+      db.transaction { rows.each { |row| insert(db, row) } }
+      File.rename(@path, "#{@path}.imported")
+      warn "BBS::Store: #{rows.size} rows of #{@path} imported into #{database_path}"
+    end
+
+    # Bytes, not text: a line with invalid UTF-8 must not stop the import.
+    def csv_rows
+      require 'csv'
+      columns = [KEY, *@headers]
+      CSV.parse(Text.utf8(File.binread(@path)), headers: true).map do |row|
+        row.to_h.slice(*columns).transform_values { |value| value && clean(value) }
+      end
+    end
+
+    def project(row) = @headers.to_h { |name| [name, row[name]] }
+
+    def quote(name) = %("#{name.gsub('"', '""')}")
+
     def clean(value) = Text.clean(value)
-
-    def ensure_file!
-      FileUtils.mkdir_p(File.dirname(@path))
-      return if File.exist?(@path)
-      CSV.open(@path, 'w') { |csv| csv << @headers }
-    end
   end
 end

@@ -15,4 +15,5 @@ Gem::Specification.new do |s|
     'documentation_uri' => 'https://wiki.teletypegames.org/rdoc/bbs/latest/'
   }
   s.add_dependency 'artii', '~> 2.1'
+  s.add_dependency 'sqlite3', '~> 2.1'
 end
