@@ -38,7 +38,7 @@ Connect with `telnet localhost 2323`.
 13. [FrameBuffer & drawing primitives](#13-framebuffer--drawing-primitives)
 14. [Markdown renderer](#14-markdown-renderer)
 15. [Banner, ASCII art & ERB screens](#15-banner-ascii-art--erb-screens)
-16. [Persistence (`BBS::Store`)](#16-persistence-bbsstore)
+16. [Persistence and shared blocks (`Store`, `SQLite`, `HTTP`, `Cache`, `RateLimit`, `Text`)](#16-persistence-and-shared-blocks-store-sqlite-http-cache-ratelimit-text)
 17. [AI characters (`BBS::AI`)](#17-ai-characters-bbsai)
 18. [Doors (`BBS::Door`)](#18-doors-bbsdoor) — telnet gateways (`BBS::Gateway`) and file downloads (`BBS::Zmodem`, `BBS::Xmodem`)
 19. [Telnet, sessions & input model](#19-telnet-sessions--input-model)
@@ -152,6 +152,9 @@ The `Server` reads it once at boot; per-session state lives on `BBS::Session`.
 | `mouse_on_connect` | `true` | With `mouse`, whether reporting starts on connect. `false` leaves it to the flow (`session.enable_mouse`), e.g. after asking whether the caller has a C64, which would print the escape sequence. Applications and doors still switch it on and off. |
 | `idle_seconds` | `nil` | Hard idle-timeout of the Application loop and the TUI. It is also each connection's socket read/write timeout (900 s when `nil`), so a line that stays silent at a login prompt or inside a door is dropped too. Every session starts with this value; `session.idle_seconds = 3600` changes it for one caller (the loop and the socket timeout alike). |
 | `max_sessions` | `ENV["BBS_MAX_SESSIONS"] \|\| 100` | Connections served at once; one more is told to try later and closed, and the server logs `BBS busy: …`. |
+| `max_sessions_per_ip` | `ENV["BBS_MAX_SESSIONS_PER_IP"] \|\| 6` | Connections served at once from one address; one more is told so and closed (`BBS crowded: …`). Private, loopback and link-local peers (bbs-web proxying many callers from the Docker network) are not limited. |
+| `ai_concurrency` | `2` | `BBS::AI::Client` requests running at once in the process; the next waits up to 5 s, then gets `BBS::AI::Busy`. |
+| `user_agent` | `"rubbs/<version> (+https://teletypegames.org)"` | The `User-Agent` of `BBS::HTTP` requests. |
 | `theme` | `nil` | Default `BBS::Theme` for Applications. |
 | `screens_dir` | `nil` | Directory for ERB templates used by `Flow#screen`. |
 | `on_session_end` | `nil` | `->(session) { … }` invoked from the server thread after each session ends, even on errors. |
@@ -166,8 +169,11 @@ Boots a `BBS::Server` (one thread per client). Each thread:
 
 ### `BBS::Server`
 
-Lightweight wrapper around `TCPServer`. Catches accept-loop errors
-(`Errno::EMFILE`, `IOError`, …) and warns instead of crashing.
+Lightweight wrapper around `TCPServer`. Catches accept-loop errors (any
+`SystemCallError`, `IOError`) and warns instead of crashing; stops on Ctrl-C
+and on SIGTERM (`docker stop`) with `Server stopped.`. `#admit(address)` is the
+door policy (`:ok`, `:busy`, `:crowded`); a session's slot is given back
+whatever ends it.
 
 ---
 
@@ -1141,10 +1147,36 @@ Available colors: `:reset :gray :yellow :white :blue :cyan :green :magenta :red`
 
 ---
 
-## 16. Persistence (`BBS::Store`)
+## 16. Persistence and shared blocks (`Store`, `SQLite`, `HTTP`, `Cache`, `RateLimit`, `Text`)
 
-A thread-safe, upsert-by-`session_id` CSV file with an in-memory cache.
-Used by `Flow#persist` but useful standalone.
+The parts every content board needs, so a board writes none of them by hand.
+
+### `BBS::SQLite`
+
+One SQLite file and its one connection, shared by the callers' threads
+behind a lock: WAL mode (a command-line tool of the board can use the file
+meanwhile), a busy timeout, foreign keys on. The schema is a list of
+migrations numbered by `PRAGMA user_version`; a file runs only the ones it
+has not had, each in a transaction.
+
+```ruby
+DB = BBS::SQLite.new('data/board.sqlite3')        # creates data/ when needed
+DB.migrate(
+  'CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT NOT NULL)',
+  'ALTER TABLE posts ADD COLUMN body TEXT',
+  ->(db) { db.insert('INSERT INTO posts (title) VALUES (?)', 'Welcome') }
+)
+DB.query('SELECT * FROM posts')                    # => [{ 'id' => 1, 'title' => 'Welcome', 'body' => nil }]
+DB.get('SELECT * FROM posts WHERE id = ?', 1)      # first row or nil
+DB.insert('INSERT INTO posts (title) VALUES (?)', 'Hi')   # => the new rowid
+DB.change('DELETE FROM posts WHERE id = ?', 2)     # => rows changed
+DB.transaction { … }                               # nested calls join the outer one
+```
+
+### `BBS::Store`
+
+A thread-safe, upsert-by-`session_id` table in a `BBS::SQLite` file. Used by
+`Flow#persist` but useful standalone.
 
 ```ruby
 USERS = BBS::Store.new(
@@ -1154,13 +1186,79 @@ USERS = BBS::Store.new(
 
 USERS.upsert(session_id: sid, username: 'joe', email: 'j@e.com')
 USERS.find(sid)        # => { 'session_id' => …, 'username' => 'joe', … } or nil
-USERS.all              # => [ {…}, {…}, … ]
+USERS.all              # => [ {…}, {…}, … ], oldest first
 USERS.delete(sid)
 ```
 
-- Headers `session_id` and `timestamp` are filled automatically when present.
-- New rows append in O(1); updates rewrite the file under the mutex.
-- `find` / `all` return Hashes.
+- A `.csv` path means the `.sqlite3` file beside it (`data/users.sqlite3`).
+  The CSV file of an earlier version is imported on first use, when the table
+  is empty, in one transaction, and renamed to `users.csv.imported`.
+- Headers `session_id` and `timestamp` are filled automatically when present;
+  a header added later becomes a new column.
+- Values are cleaned with `BBS::Text.clean`; `find` / `all` return Hashes.
+
+### `BBS::HTTP`
+
+Bounded requests to the services a board shows. Every failure raises
+`BBS::HTTP::Error`, whose message names the address without its query string.
+
+```ruby
+response = BBS::HTTP.get('https://en.wikipedia.org/w/api.php?action=query&…',
+                         headers: { 'Accept' => 'application/json' })
+response.status    # => 200
+response.ok?       # => true for 2xx; other statuses are returned, not raised
+response.headers   # => { 'content-type' => … }   (lowercase names)
+response.body      # => binary String
+
+BBS::HTTP.post(SPARQL_URL, body: URI.encode_www_form(query: q),
+               headers: { 'Content-Type' => 'application/x-www-form-urlencoded' })
+```
+
+| Option | Default | |
+|---|---|---|
+| `open_timeout` / `read_timeout` | 5 / 15 s | per connection / per read |
+| `deadline` | 30 s | the whole request, redirects included |
+| `max_bytes` | 4 MiB | the body is streamed and the request fails above it |
+| `redirects` | 3 (`post`: 0) | followed to `http`/`https` only |
+| `public_only` | `true` | refuses hosts that resolve to loopback, private, link-local, CGNAT, ULA and other non-public ranges (`BBS::Address.public?`); the vetted address is the one connected to, Host and SNI kept |
+| `user_agent` | `BBS.config.user_agent` | |
+
+### `BBS::Cache`
+
+```ruby
+ARTICLES = BBS::Cache.new(ttl: 600, max_entries: 500, max_bytes: 8 * 1024 * 1024)
+ARTICLES.fetch([lang, title]) { BBS::HTTP.get(url).body }
+```
+
+TTL, least-recently-used eviction, a byte cap (`bytesize`, or `size: ->(v) { … }`),
+one computation per key (callers missing the same key at once wait for it and
+share its value or error), and the expired value served when the computation
+raises. `delete(key)`, `clear`, `size`.
+
+### `BBS::RateLimit`
+
+```ruby
+TIPS = BBS::RateLimit.new(limit: 3, per: 3600)
+key  = BBS::RateLimit.caller_key(session)
+TIPS.allow?(key)   # => true, and counted; false when over the limit
+TIPS.wait(key)     # => seconds until the next event is allowed (0.0 now)
+```
+
+A sliding window per key, thread-safe; quiet keys are forgotten.
+`caller_key(session)` is the caller's IP address on the internet, and
+`line:<session id>` behind a local proxy (bbs-web), whose address is shared.
+
+### `BBS::Text` and `BBS::Address`
+
+- `BBS::Text.clean(text, keep_newlines: true)`: valid UTF-8, without C0
+  controls (tab kept, LF kept unless `keep_newlines: false`), DEL, C1 and the
+  bidirectional override/isolate characters. `BBS::Text.printable?(char)` is
+  the rule of every input (`Event#char?`, `TextBuffer`).
+- `BBS::Address.local?(ip)` (private, loopback, link-local) and
+  `BBS::Address.public?(ip)` (on the public internet).
+
+The frame buffer stores no control character either, so text from a service
+cannot move or restyle the caller's screen.
 
 ---
 
@@ -1210,7 +1308,7 @@ fallback:                  # canned replies, tried top to bottom
 | Class | |
 |---|---|
 | `Persona.load(path)` | the YAML above; `#messages(facts = nil)` (system, plus the facts for one request, + examples), `#deflect(text)` (the reply of the first matching `deflect` rule, or nil: what a small model answers out of character however it is asked, so the code answers it), `#fallback(text)`, `#options` |
-| `Client.new(url:, model: nil, api_key: nil, open_timeout: 2, read_timeout: 30)` | `#stream(messages, **options) { \|piece\| }` over `/v1/chat/completions` with `stream: true`; `#enabled?` is false for an empty URL |
+| `Client.new(url:, model: nil, api_key: nil, open_timeout: 2, read_timeout: 30, deadline: 120, max_bytes: 65_536)` | `#stream(messages, **options) { \|piece\| }` over `/v1/chat/completions` with `stream: true`; `#enabled?` is false for an empty URL. At most `BBS.config.ai_concurrency` requests run at once in the process; a request that waits 5 s for its turn raises `BBS::AI::Busy` (a `BBS::AI::Error`, as are a passed `deadline` and a reply over `max_bytes`) |
 | `Chat.new(persona:, client:, history: 6, key: :ai_history, filter: PLAIN_TEXT, options: {})` | `#reply(text, ctx, facts: nil, fallback: nil) { \|piece\| }` returns the reply and yields it as it streams. The history lives in `ctx[key]`, so it lasts for the call. `facts` is added to the system prompt for this one request (what the character should know right now, looked up for the question; not kept in the history); `fallback` replaces the persona's canned reply when the model is missing or fails. `filter` drops markdown marks and emoji. `options` override the persona's. |
 | `Typewriter.new(io, prefix:, style:, width: nil)` | `#write(piece)`, `#finish(newlines: 2)`: word-wraps streamed text to the caller's terminal under the prefix |
 
@@ -1890,7 +1988,12 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `bbs/theme.rb` | Style palette (synchronet, nortoncommander, dosnavigator, neumanntronics, mono). |
 | `bbs/markdown.rb` | Markdown → ANSI line array renderer. |
 | `bbs/event.rb` | Unified key + mouse event objects. |
-| `bbs/store.rb` | Thread-safe cached CSV upsert. |
+| `bbs/store.rb` | Thread-safe upsert-by-session table on SQLite (imports the CSV file of earlier versions). |
+| `bbs/sqlite.rb` | One shared SQLite connection: WAL, lock, query helpers, `user_version` migrations. |
+| `bbs/http.rb` | Bounded HTTP GET/POST: deadline, body cap, safe redirects, public addresses only. |
+| `bbs/cache.rb` | TTL + LRU + byte-capped cache with single-flight and stale-on-error. |
+| `bbs/rate_limit.rb` | Sliding-window rate limit per key; `caller_key(session)`. |
+| `bbs/text.rb`, `bbs/address.rb` | Control-free text; local / public IP addresses. |
 | `bbs/fake_os.rb` | Character-mode OS simulator: boot script + command shell. |
 | `bbs/door.rb` | Doors: hand the line to a program and take it back. |
 | `bbs/gateway.rb` | Telnet gateway doors: the line handed on to another board. |
@@ -1899,3 +2002,4 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `bbs/ai.rb` | AI characters: persona file, OpenAI-compatible streaming client, chat with memory and fallback, typewriter output. |
 | `bbs/banner.rb`, `bbs/renderer.rb` | FIGlet + ERB. |
 | `bbs/color.rb` | Simple ANSI colour helper. |
+| `test/` | minitest suite: `bundle exec rake test`; style: `bundle exec rubocop`. |
