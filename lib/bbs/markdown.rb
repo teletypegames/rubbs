@@ -18,7 +18,7 @@ module BBS
     # A line break in the source: LF or CRLF.
     LINE_BREAK = /\r?\n/
     # A heading: one to six <tt>#</tt>, the text, optional closing marks.
-    HEADING = /\A([#]{1,6})\s+(.+?)\s*#*\s*\z/
+    HEADING = /\A(\#{1,6})\s+(.+?)\s*#*\s*\z/
     # A horizontal rule: three or more of the same <tt>-</tt>, <tt>*</tt>
     # or <tt>_</tt>.
     RULE = /\A\s*([-*_])\1{2,}\s*\z/
@@ -71,7 +71,7 @@ module BBS
         link:   theme[:accent],
         quote:  theme[:text_dim],
         bullet: theme[:accent],
-        rule:   theme[:label],
+        rule:   theme[:label]
       }
       result    = []
       paragraph = []
@@ -108,7 +108,11 @@ module BBS
           level   = m[1].length
           heading = m[2].strip
           flush_paragraph.call
-          style = level == 1 ? styles[:h1] : (level == 2 ? styles[:h2] : styles[:h3])
+          style = if level == 1
+                    styles[:h1]
+                  else
+                    (level == 2 ? styles[:h2] : styles[:h3])
+                  end
           FrameBuffer.wrap_ansi(inline(heading, styles, base), width).each do |l|
             result << "#{style}#{l}#{base}"
           end
@@ -218,7 +222,7 @@ module BBS
     # strings, tolerating missing leading/trailing pipes.
     def split_row(line)
       s = line.strip
-      s = s[1..]  if s.start_with?('|')
+      s = s[1..] if s.start_with?('|')
       s = s[0..-2] if s.end_with?('|')
       s.split('|').map(&:strip)
     end
@@ -238,8 +242,8 @@ module BBS
         left  = c.start_with?(':')
         right = c.end_with?(':')
         if left && right then :center
-        elsif right       then :right
-        else                   :left
+        elsif right then :right
+        else :left
         end
       end
       aligns << :left while aligns.size < ncols
@@ -309,7 +313,7 @@ module BBS
       pad = w - vis
       case align
       when :right  then "#{' ' * pad}#{content}"
-      when :center then "#{' ' * (pad / 2)}#{content}#{' ' * (pad - pad / 2)}"
+      when :center then "#{' ' * (pad / 2)}#{content}#{' ' * (pad - (pad / 2))}"
       else              "#{content}#{' ' * pad}"
       end
     end

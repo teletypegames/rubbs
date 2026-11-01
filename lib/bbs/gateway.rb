@@ -249,9 +249,9 @@ module BBS
               if b == IAC then state = :iac else out << b end
             when :iac
               case b
-              when IAC              then out << IAC << IAC; state = :data
+              when IAC then out << IAC << IAC; state = :data
               when WILL, WONT, DO, DONT then cmd = b; state = :opt
-              when SB               then sub = []; state = :sb
+              when SB then sub = []; state = :sb
               else state = :data
               end
             when :opt
@@ -289,9 +289,9 @@ module BBS
               if b == IAC then state = :iac else out << b end
             when :iac
               case b
-              when IAC              then out << IAC << IAC; state = :data
+              when IAC then out << IAC << IAC; state = :data
               when WILL, WONT, DO, DONT then state = :opt
-              when SB               then sub = []; state = :sb
+              when SB then sub = []; state = :sb
               else state = :data
               end
             when :opt

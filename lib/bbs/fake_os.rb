@@ -52,15 +52,15 @@ module BBS
       error:  Ansi::BRIGHT_RED,
       dim:    Ansi::DARK_GREY,
       prompt: Ansi::GREY,
-      base:   '', # what every reset returns to: a background here colours the whole screen
+      base:   '' # what every reset returns to: a background here colours the whole screen
     }.freeze
 
     # Builds a Definition by evaluating the block in a new one.
     #
     # Returns the Definition.
-    def self.define(&block)
+    def self.define(&)
       definition = Definition.new
-      definition.instance_eval(&block)
+      definition.instance_eval(&)
       definition
     end
 
@@ -220,9 +220,9 @@ module BBS
       end
 
       # The terminal width in columns; 80 when the terminal did not report it.
-      def cols = (@session.term_cols || Telnet::DEFAULT_COLS)
+      def cols = @session.term_cols || Telnet::DEFAULT_COLS
       # The terminal height in rows; 24 when the terminal did not report it.
-      def rows = (@session.term_rows || Telnet::DEFAULT_ROWS)
+      def rows = @session.term_rows || Telnet::DEFAULT_ROWS
 
       # Stops the shell loop after the current command (used by an
       # +exit+/+quit+ command).

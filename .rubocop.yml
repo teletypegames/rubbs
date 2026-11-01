@@ -1,0 +1,92 @@
+inherit_from: .rubocop_todo.yml
+
+# The files listed in .rubocop_todo.yml add to the Exclude lists here.
+inherit_mode:
+  merge:
+    - Exclude
+
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.2
+  SuggestExtensions: false
+  Exclude:
+    - "vendor/**/*"
+    - "doc/**/*"
+
+# The house style aligns hashes, assignments and keyword arguments as tables.
+Layout/HashAlignment:
+  Enabled: false
+Layout/ExtraSpacing:
+  AllowForAlignment: true
+Layout/LineLength:
+  Max: 130
+  AutoCorrect: false
+# Continuation lines line up with what they continue, not with the call.
+Layout/FirstArgumentIndentation:
+  Enabled: false
+Layout/ArgumentAlignment:
+  Enabled: false
+Layout/MultilineMethodCallBraceLayout:
+  Enabled: false
+Layout/ClosingParenthesisIndentation:
+  Enabled: false
+Layout/EmptyLineAfterGuardClause:
+  Enabled: false
+
+# Key tables (`when :x then …; :keep`) read best on one line.
+Style/BlockDelimiters:
+  Enabled: false
+Style/SingleLineDoEndBlock:
+  Enabled: false
+Style/Semicolon:
+  AllowAsExpressionSeparator: true
+# `x rescue nil` for a best-effort close or write, and `if … then … else
+# … end` on one line in the telnet state machines.
+Style/RescueModifier:
+  Enabled: false
+Style/OneLineConditional:
+  Enabled: false
+Style/RescueStandardError:
+  EnforcedStyle: explicit
+Style/FetchEnvVar:
+  Enabled: false
+# The documentation is RDoc, checked at 100% by `rdoc -C lib` in CI.
+Style/Documentation:
+  Enabled: false
+
+# Small methods: new code is held to these; today's offenders are listed in
+# .rubocop_todo.yml.
+Metrics/MethodLength:
+  Max: 15
+  Exclude:
+    - "test/**/*"
+# Options are keyword arguments with defaults, documented one by one.
+Metrics/ParameterLists:
+  CountKeywordArgs: false
+Metrics/AbcSize:
+  Max: 20
+  Exclude:
+    - "test/**/*"
+Metrics/CyclomaticComplexity:
+  Exclude:
+    - "test/**/*"
+Metrics/BlockLength:
+  Exclude:
+    - "test/**/*"
+    - "bbs.gemspec"
+Metrics/ClassLength:
+  Exclude:
+    - "test/**/*"
+
+# BBS::Cache#fetch takes a block, not a default.
+Style/RedundantFetchBlock:
+  Exclude:
+    - "test/**/*"
+
+# Short names (x, y, w, h, ch) are the idiom of the drawing code.
+Naming/MethodParameterName:
+  MinNameLength: 1
+
+# The gem is installed from git, not pushed to rubygems.org.
+Gemspec/RequireMFA:
+  Enabled: false

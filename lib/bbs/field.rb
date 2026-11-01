@@ -53,7 +53,7 @@ module BBS
     # [max]   the most characters the text may hold; +nil+ means TextBuffer::MAX_LENGTH
     # [mask]  shown in place of every character (for a password, e.g.
     #         <tt>'*'</tt>), or +nil+ to show the text
-    def initialize(session, text: '', width:, max: nil, mask: nil)
+    def initialize(session, width:, text: '', max: nil, mask: nil)
       @session = session
       @screen  = Cursor.new(session)
       @buffer  = TextBuffer.new(text, max: max, single_line: true)

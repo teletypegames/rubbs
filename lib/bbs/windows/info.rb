@@ -111,7 +111,7 @@ module BBS
         h = @height || (@padding[:top] + body_rows + button_h + @padding[:bottom])
         w = [@width, @app.cols - 4].min
         h = [h, @app.rows - 4].min
-        [(@app.cols - w) / 2 + 1, (@app.rows - h) / 2 + 1, w, h]
+        [((@app.cols - w) / 2) + 1, ((@app.rows - h) / 2) + 1, w, h]
       end
 
       # The scroll body fills the new size; its lines were wrapped by the
@@ -133,7 +133,7 @@ module BBS
         w = bounds.width
         h = bounds.height
 
-        inner_w = w - @padding[:sides] * 2
+        inner_w = w - (@padding[:sides] * 2)
         inner_x = bounds.x + @padding[:sides]
         inner_y = bounds.y + @padding[:top]
         body_h  = h - @padding[:top] - @padding[:bottom] - button_h

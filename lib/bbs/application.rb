@@ -343,11 +343,9 @@ module BBS
       win = Dialogs.message(self, text, title: ' Please wait ', width: text.length + LOADING_CHROME)
       do_render
       Thread.new do
-        begin
-          @loading_result = block.call
-        ensure
-          close_window(win)
-        end
+        @loading_result = block.call
+      ensure
+        close_window(win)
       end.join
       @loading_result
     end
@@ -358,7 +356,7 @@ module BBS
       case key
       when Telnet::MouseEvent then Event.mouse(key)
       when :idle              then Event.idle
-      else                          Event.key(key)
+      else Event.key(key)
       end
     end
 
@@ -473,11 +471,10 @@ module BBS
       @statusbar&.render(@next)
 
       delta = @next.diff(@committed)
-      if first || resized || !delta.empty?
-        prefix = (first || resized) ? Ansi::CLEAR : ''
-        @session.write("#{Ansi::HIDE_CURSOR}#{prefix}#{delta}#{Ansi::SHOW_CURSOR}")
-        @committed = @next
-      end
+      return unless first || resized || !delta.empty?
+      prefix = first || resized ? Ansi::CLEAR : ''
+      @session.write("#{Ansi::HIDE_CURSOR}#{prefix}#{delta}#{Ansi::SHOW_CURSOR}")
+      @committed = @next
     end
 
     # ── Builder DSL ───────────────────────────────────────────────────────────
@@ -573,7 +570,7 @@ module BBS
       def on_door(&block) = (@door_block = block)
       # Evaluates the block in the helper module: the methods it defines
       # become methods of every Application this builder makes.
-      def helpers(&block) = @helper_module.module_eval(&block)
+      def helpers(&) = @helper_module.module_eval(&)
       # Sets the block that builds the menubar, evaluated in a
       # MenubarBuilder.
       def menubar(&block) = (@menubar_block = block)
@@ -619,7 +616,7 @@ module BBS
           sb = Statusbar.new
           sb.theme = app.theme
           @statusbar_hints.each do |k, l, blk, hidden|
-            wrapped = blk ? ->{ app.instance_exec(&blk) } : ->{ nil }
+            wrapped = blk ? -> { app.instance_exec(&blk) } : -> {}
             sb.add_hint(k, l, hidden: hidden, &wrapped)
           end
           app.statusbar = sb
@@ -723,7 +720,7 @@ module BBS
       # Application#add). Returns +widget+.
       def add(widget) = @app.add(widget)
       # The Application being built.
-      def app         = @app
+      attr_reader :app
     end
 
     # DSL inside <tt>theme do ... end</tt>. A call named after a style role

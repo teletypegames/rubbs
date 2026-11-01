@@ -4,13 +4,14 @@ module BBS
   # Text a caller typed or a remote service sent, made safe to keep and to
   # show: valid UTF-8, no control characters, no bidirectional overrides.
   #
-  #   BBS::Text.clean("Ada\e[2J‮txt.exe")   # => "Ada[2Jtxt.exe"
+  #   BBS::Text.clean("Ada\e[2J\u202Etxt.exe")   # => "Ada[2Jtxt.exe"
   #   BBS::Text.printable?('é')                   # => true
   module Text
     # The bidirectional embedding, override and isolate characters, which
     # can make a line read differently from what it holds.
-    BIDI_CONTROLS = "‪-‮⁦-⁩"
-    # The C0 controls except tab and LF, DEL and the C1 controls.
+    BIDI_CONTROLS = "\u202A-\u202E\u2066-\u2069"
+    # The C0 controls except tab and LF, DEL, the C1 controls and the
+    # BIDI_CONTROLS.
     CONTROLS = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F#{BIDI_CONTROLS}]/
     # The same, with LF as well.
     LINE_CONTROLS = /[\u0000-\u0008\u000A-\u001F\u007F-\u009F#{BIDI_CONTROLS}]/

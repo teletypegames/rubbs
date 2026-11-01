@@ -45,7 +45,7 @@ module BBS
     def run
       negotiate
       enable_mouse if BBS.config.mouse && BBS.config.mouse_on_connect
-      flow = BBS.config.flow or raise "BBS.config.flow is not set"
+      flow = BBS.config.flow or raise 'BBS.config.flow is not set'
       FlowRunner.new(self, @session_id, flow).run
     ensure
       disable_mouse rescue nil

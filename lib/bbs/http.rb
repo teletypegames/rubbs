@@ -60,7 +60,7 @@ module BBS
     # [public_only]  refuse a host that is not on the public internet
     #                (BBS::Address.public?); the address checked is the one
     #                connected to, so a name cannot resolve twice
-    def get(url, **options) = Request.new(:get, url, **options).run
+    def get(url, **) = Request.new(:get, url, **).run
 
     # Sends a POST request with +body+ (a String) to +url+, with the options
     # of #get; a redirect is not followed but returned. Returns the Response
@@ -68,7 +68,7 @@ module BBS
     #
     #   BBS::HTTP.post(SPARQL, body: URI.encode_www_form(query: q),
     #                  headers: { 'Content-Type' => 'application/x-www-form-urlencoded' })
-    def post(url, body:, **options) = Request.new(:post, url, body: body, redirects: 0, **options).run
+    def post(url, body:, **) = Request.new(:post, url, body: body, redirects: 0, **).run
 
     # One request and its redirects; HTTP.get and HTTP.post make one.
     class Request
@@ -124,7 +124,7 @@ module BBS
           http.open_timeout = left(uri, @timeouts[0])
           http.read_timeout = left(uri, @timeouts[1])
           http.write_timeout = left(uri, @timeouts[1])
-          http.max_retries  = 0
+          http.max_retries = 0
         end
       end
 

@@ -109,13 +109,15 @@ end
 
 puts "#{ARGV[0]}: #{art.cols}×#{art.rows} #{art.charset}, palette #{art.palette.keys.join}, " \
      "layers #{art.layers.empty? ? '-' : art.layers.join(',')}" \
-     "#{art.stacked.empty? ? '' : " (stacked: #{art.stacked.join(',')})"}"
+     "#{" (stacked: #{art.stacked.join(',')})" unless art.stacked.empty?}"
 art.hotspots.each_value { |h| puts "  hotspot #{h.name}: col #{h.col}, row #{h.row}, #{h.width}×#{h.height}" }
 
 if art.petscii?
   frame = art.petscii
   puts "  PETSCII frame: #{frame.bytesize} bytes"
-  frame.bytes.each_slice(16).with_index { |b, i| puts format('  %04x  %s', i * 16, b.map { |x| format('%02x', x) }.join(' ')) } if options[:hex]
+  if options[:hex]
+    frame.bytes.each_slice(16).with_index { |b, i| puts format('  %04x  %s', i * 16, b.map { |x| format('%02x', x) }.join(' ')) }
+  end
   File.binwrite(options[:seq], frame) && puts("  wrote #{options[:seq]}") if options[:seq]
   if options[:png]
     chargen = options[:chargen] || CHARGEN_PATHS.find { |p| File.file?(p) }

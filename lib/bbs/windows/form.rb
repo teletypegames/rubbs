@@ -171,7 +171,7 @@ module BBS
       def normal_rect
         w = [@width, @app.cols - 4].min
         h = [@height || natural_height, @app.rows - 4].min
-        [(@app.cols - w) / 2 + 1, (@app.rows - h) / 2 + 1, w, h]
+        [((@app.cols - w) / 2) + 1, ((@app.rows - h) / 2) + 1, w, h]
       end
 
       # Fields one under the other at the given size; a single textarea

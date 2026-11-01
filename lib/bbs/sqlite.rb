@@ -29,7 +29,7 @@ module BBS
     def initialize(path)
       @path = path.to_s
       FileUtils.mkdir_p(File.dirname(@path))
-      @db   = SQLite3::Database.new(@path, results_as_hash: true)
+      @db = SQLite3::Database.new(@path, results_as_hash: true)
       @db.busy_timeout = BUSY_TIMEOUT
       @db.execute('PRAGMA journal_mode = WAL')
       @db.execute('PRAGMA foreign_keys = ON')
@@ -41,7 +41,7 @@ module BBS
     def query(sql, *args) = @lock.synchronize { @db.execute(sql, args) }
 
     # Returns the first row of #query, or +nil+.
-    def get(sql, *args) = query(sql, *args).first
+    def get(sql, *) = query(sql, *).first
 
     # Runs the INSERT +sql+ and returns the rowid of the row it inserted.
     def insert(sql, *args) = run(sql, args) { @db.last_insert_row_id }
@@ -57,7 +57,7 @@ module BBS
       @lock.synchronize do
         return yield if @db.transaction_active?
 
-        @db.transaction(:immediate) { yield }
+        @db.transaction(:immediate, &)
       end
     end
 

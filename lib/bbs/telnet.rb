@@ -187,7 +187,7 @@ module BBS
     # count as one +:enter+. +timeout+ +nil+ waits forever.
     def readkey(timeout: nil)
       loop do
-        raw  = read_byte(timeout)
+        raw = read_byte(timeout)
         return :idle if raw == :timeout
         return nil if raw.nil?
         byte = raw.ord
@@ -206,7 +206,7 @@ module BBS
         # CR LF and CR NUL are one Enter, not two.
         after_cr  = @after_cr
         @after_cr = byte == Ascii::CR
-        next if after_cr && (byte == Ascii::LF || byte == Ascii::NUL)
+        next if after_cr && [Ascii::LF, Ascii::NUL].include?(byte)
 
         case byte
         when Ascii::CR, Ascii::LF  then return :enter
@@ -262,7 +262,7 @@ module BBS
       line = +''.b
 
       loop do
-        raw  = @client.read(1)
+        raw = @client.read(1)
         return nil if raw.nil?
         byte = raw.ord
 
@@ -279,14 +279,14 @@ module BBS
 
         after_cr  = @after_cr
         @after_cr = byte == Ascii::CR
-        next if after_cr && (byte == Ascii::LF || byte == Ascii::NUL)
+        next if after_cr && [Ascii::LF, Ascii::NUL].include?(byte)
 
-        if byte == Ascii::CR || byte == Ascii::LF
+        if [Ascii::CR, Ascii::LF].include?(byte)
           write Ansi::CRLF
           return line.force_encoding(Encoding::UTF_8).scrub('')
         end
 
-        if byte == Ascii::BS || byte == Ascii::DEL
+        if [Ascii::BS, Ascii::DEL].include?(byte)
           unless line.empty?
             text = line.dup.force_encoding(Encoding::UTF_8)
             line = (text.valid_encoding? ? text.chop : text.byteslice(0, text.bytesize - 1)).b
@@ -435,7 +435,7 @@ module BBS
       end
 
       # SGR mouse: ESC [ < b ; x ; y (M|m)
-      if raw.start_with?(SGR_MOUSE) && (final == MOUSE_PRESS || final == MOUSE_RELEASE)
+      if raw.start_with?(SGR_MOUSE) && [MOUSE_PRESS, MOUSE_RELEASE].include?(final)
         parts = raw[1..].split(';')
         return :escape if parts.size != SGR_MOUSE_FIELDS
         b = parts[0].to_i
@@ -468,7 +468,11 @@ module BBS
     # the bytes do not make one.
     def read_utf8(lead)
       bytes = lead.b
-      (lead.ord >= UTF8_LEAD_4 ? 3 : lead.ord >= UTF8_LEAD_3 ? 2 : 1).times do
+      (if lead.ord >= UTF8_LEAD_4
+         3
+       else
+         lead.ord >= UTF8_LEAD_3 ? 2 : 1
+       end).times do
         return nil unless IO.select([@client], nil, nil, ESC_WAIT)
 
         nxt = @client.read(1)
@@ -495,7 +499,11 @@ module BBS
         button = button_id == 0 ? :up : :down
       else
         button = MOUSE_BUTTONS.fetch(button_id, :none)
-        kind = motion ? :move : (pressed ? :press : :release)
+        kind = if motion
+                 :move
+               else
+                 (pressed ? :press : :release)
+               end
       end
 
       MouseEvent.new(kind: kind, button: button, x: x, y: y, mods: mods)
@@ -519,9 +527,7 @@ module BBS
             buf << b.ord
           end
         end
-        if opt&.ord == NAWS_OPT && buf.size >= NAWS_SIZE
-          resize!((buf[0] << 8) | buf[1], (buf[2] << 8) | buf[3])
-        end
+        resize!((buf[0] << 8) | buf[1], (buf[2] << 8) | buf[3]) if opt&.ord == NAWS_OPT && buf.size >= NAWS_SIZE
       when WILL, WONT, DO, DONT
         @client.read(1)
       end
@@ -541,7 +547,7 @@ module BBS
         end
       when String
         if line.bytesize < MAX_LINE
-          line = line + key.b
+          line += key.b
           write(mask.nil? ? key : mask)
         end
       end

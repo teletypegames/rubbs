@@ -152,7 +152,7 @@ module BBS
     # The Season of +time+, a Time in the local zone already (see ::now for
     # the arguments).
     def initialize(time, jam: nil, latitude: LATITUDE, longitude: LONGITUDE)
-      @time   = time
+      @time = time
       @latitude = latitude
       @season = SEASONS.fetch(time.month)
       @sunrise, @sunset = local_sun(latitude, longitude)

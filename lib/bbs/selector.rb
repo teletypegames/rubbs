@@ -81,9 +81,9 @@ module BBS
     # taken, or +back+. The other options are those of ::new.
     #
     #   post = BBS::Selector.list(session, posts, width: 38, height: 18, &:title)
-    def self.list(session, objects, back: nil, **options, &label)
+    def self.list(session, objects, back: nil, **, &label)
       items = objects.map { |o| item(label.call(o).to_s, value: o) }
-      new(session, items, numbers: true, back: back, **options).run
+      new(session, items, numbers: true, back: back, **).run
     end
 
     # The index of the lit item in the items; after #run, the one taken.
@@ -120,7 +120,11 @@ module BBS
       @items   = items
       @width   = [width, 4].max
       @columns = across ? 1 : columns.clamp(1, items.size)
-      @height  = across ? items.size : (height || ((items.size + @columns - 1) / @columns)).clamp(1, fill && height ? height : items.size)
+      @height  = if across
+                   items.size
+                 else
+                   (height || ((items.size + @columns - 1) / @columns)).clamp(1, fill && height ? height : items.size)
+                 end
       @numbers = numbers
       @across  = across
       @hint    = hint
@@ -281,7 +285,13 @@ module BBS
       out
     end
 
-    def about_row = @about.positive? ? row_at((@across ? 1 : @height) + 1, about_text) : +''
+    def about_row
+      if @about.positive?
+        row_at((@across ? 1 : @height) + 1, about_text)
+      else
+        +''
+      end
+    end
 
     def status_row = @status.positive? ? row_at(rows, status_text) : +''
 

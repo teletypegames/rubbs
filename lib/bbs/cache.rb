@@ -15,7 +15,7 @@ module BBS
   class Cache
     # One kept value: the value, when it expires (monotonic seconds) and its
     # size in bytes.
-    Entry = Struct.new(:value, :expires, :size)
+    Entry = Struct.new(:value, :expires, :bytes)
 
     # One running computation of a key, which the callers missing the same
     # key wait for: its value, its error, and whether it is over.
@@ -47,7 +47,7 @@ module BBS
     # Returns the fresh value of +key+, or computes it with the block, keeps
     # it and returns it. Raises what the block raises, unless an expired
     # value of +key+ is kept: that one is returned then.
-    def fetch(key, &compute)
+    def fetch(key, &)
       flight = @mu.synchronize do
         entry = fresh(key) and return entry.value
         if (running = @flights[key])
@@ -56,7 +56,7 @@ module BBS
         end
         @flights[key] = Flight.new
       end
-      fly(key, flight, &compute)
+      fly(key, flight, &)
       flight.outcome
     end
 
@@ -112,7 +112,7 @@ module BBS
 
     def drop(key)
       entry = @entries.delete(key) or return
-      @bytes -= entry.size
+      @bytes -= entry.bytes
       entry
     end
 

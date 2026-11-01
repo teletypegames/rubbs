@@ -29,7 +29,7 @@ module BBS
       # BBS::FrameBuffer, cut to the width and aligned.
       def render(frame)
         return if bounds.width <= 0
-        line  = @text.to_s
+        line = @text.to_s
         clipped = line[0, bounds.width].to_s
         x = case @align
             when :center then bounds.x + ([bounds.width - clipped.length, 0].max / 2)
@@ -102,7 +102,7 @@ module BBS
       # Calls +on_click+ with the button, unless the button is disabled.
       # Returns :halt when +on_click+ returned :halt, :handled otherwise.
       def fire
-        return :handled if !enabled
+        return :handled unless enabled
         result = @on_click&.call(self)
         result == :halt ? :halt : :handled
       end
@@ -113,7 +113,7 @@ module BBS
       def handle_event(event)
         return nil unless enabled
         if event.key?
-          return fire if event.key == :enter || event.key == ' '
+          return fire if [:enter, ' '].include?(event.key)
         elsif event.mouse?
           if event.mouse.kind == :press && event.mouse.button == :left &&
              bounds.contains?(event.x, event.y)
@@ -185,12 +185,11 @@ module BBS
           frame.write(visible, sgr: sgr)
         end
 
-        if focused
-          cx = bounds.x + (@cursor - @scroll)
-          cx = bounds.x + bounds.width - 1 if cx >= bounds.x + bounds.width
-          frame.move(cx, bounds.y)
-          frame.write('_', sgr: sgr)
-        end
+        return unless focused
+        cx = bounds.x + (@cursor - @scroll)
+        cx = bounds.x + bounds.width - 1 if cx >= bounds.x + bounds.width
+        frame.move(cx, bounds.y)
+        frame.write('_', sgr: sgr)
       end
 
       # Edits the text on a key event: Left, Right, Home and End move the
@@ -290,14 +289,12 @@ module BBS
           frame.move(bounds.x, bounds.y + r)
           frame.write(line[0, bounds.width].to_s, sgr: sgr)
         end
-        if focused
-          cy = bounds.y + (@cursor_r - @scroll_r)
-          cx = bounds.x + [@cursor_c, bounds.width - 1].min
-          if cy >= bounds.y && cy < bounds.y + bounds.height
-            frame.move(cx, cy)
-            frame.write('_', sgr: sgr)
-          end
-        end
+        return unless focused
+        cy = bounds.y + (@cursor_r - @scroll_r)
+        cx = bounds.x + [@cursor_c, bounds.width - 1].min
+        return unless cy >= bounds.y && cy < bounds.y + bounds.height
+        frame.move(cx, cy)
+        frame.write('_', sgr: sgr)
       end
 
       # Edits the text on a key event: arrows move the cursor (Left and
@@ -408,7 +405,7 @@ module BBS
       # :handled. Returns +nil+ for other events and when disabled.
       def handle_event(event)
         return nil unless enabled && event.key?
-        if event.key == :enter || event.key == ' '
+        if [:enter, ' '].include?(event.key)
           @checked = !@checked
           @on_change&.call(@checked, self)
           return :handled
@@ -566,14 +563,13 @@ module BBS
           frame.write_ansi(FrameBuffer.clip_ansi(line.to_s, bounds.width), base_sgr: sgr)
         end
         # right-side scrollbar
-        if @lines.size > bounds.height && bounds.width > 1
-          track_h = bounds.height
-          thumb_y = bounds.y + (@scroll * (track_h - 1).to_f / [@lines.size - bounds.height, 1].max).to_i
-          frame.vline(x: bounds.x + bounds.width - 1, y: bounds.y, length: track_h,
-                      char: '│', sgr: style(:scrollbar))
-          frame.move(bounds.x + bounds.width - 1, thumb_y)
-          frame.write('█', sgr: style(:scrollbar_thumb))
-        end
+        return unless @lines.size > bounds.height && bounds.width > 1
+        track_h = bounds.height
+        thumb_y = bounds.y + (@scroll * (track_h - 1).to_f / [@lines.size - bounds.height, 1].max).to_i
+        frame.vline(x: bounds.x + bounds.width - 1, y: bounds.y, length: track_h,
+                    char: '│', sgr: style(:scrollbar))
+        frame.move(bounds.x + bounds.width - 1, thumb_y)
+        frame.write('█', sgr: style(:scrollbar_thumb))
       end
 
       # Scrolls with Up, Down, Page Up, Page Down, Home and End, and by three
@@ -630,11 +626,10 @@ module BBS
         frame.move(bounds.x, bounds.y)
         frame.write('█' * bars, sgr: fill)
         frame.write('░' * (bounds.width - bars), sgr: sgr)
-        if @label
-          text = @label[0, bounds.width]
-          frame.move(bounds.x + (bounds.width - text.length) / 2, bounds.y)
-          frame.write_ansi(text, base_sgr: sgr)
-        end
+        return unless @label
+        text = @label[0, bounds.width]
+        frame.move(bounds.x + ((bounds.width - text.length) / 2), bounds.y)
+        frame.write_ansi(text, base_sgr: sgr)
       end
     end
 
@@ -686,7 +681,7 @@ module BBS
       def layout(x, y, w, h)
         super
         return if @children.empty?
-        per = ((w - (@children.size - 1) * @gap) / @children.size.to_f)
+        per = ((w - ((@children.size - 1) * @gap)) / @children.size.to_f)
         cx = x
         @children.each_with_index do |c, i|
           width = (per * (i + 1)).to_i - (per * i).to_i
@@ -713,7 +708,7 @@ module BBS
       def layout(x, y, w, h)
         super
         return if @children.empty?
-        per = ((h - (@children.size - 1) * @gap) / @children.size.to_f)
+        per = ((h - ((@children.size - 1) * @gap)) / @children.size.to_f)
         cy = y
         @children.each_with_index do |c, i|
           height = (per * (i + 1)).to_i - (per * i).to_i
@@ -751,7 +746,7 @@ module BBS
         frame.box(
           x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height,
           sgr: style(:window_border), fill_sgr: style(:window_bg),
-          style: @box_style, title: @title, title_sgr: style(:window_title),
+          style: @box_style, title: @title, title_sgr: style(:window_title)
         )
         super
       end

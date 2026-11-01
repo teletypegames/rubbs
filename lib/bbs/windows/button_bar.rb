@@ -101,7 +101,7 @@ module BBS
         center_indices = aligns.each_index.select { |i| aligns[i] == :center }
         total_center   = center_indices.sum { |i| button_width(widgets[i]) + 1 } - 1
         total_center   = [total_center, 0].max
-        x = win_x0 + (win_w - total_center) / 2
+        x = win_x0 + ((win_w - total_center) / 2)
         center_indices.each do |i|
           bw = button_width(widgets[i])
           widgets[i].layout(x, row_y, bw, 1)

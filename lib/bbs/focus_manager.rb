@@ -84,10 +84,9 @@ module BBS
         @focused.on_blur
       end
       @focused = widget
-      if widget
-        widget.focused = true
-        widget.on_focus
-      end
+      return unless widget
+      widget.focused = true
+      widget.on_focus
     end
   end
 end

@@ -308,9 +308,7 @@ module BBS
         return button.fire
       end
 
-      if event.key? && event.key == @close_key
-        return close
-      end
+      return close if event.key? && event.key == @close_key
       nil
     end
 
@@ -377,7 +375,10 @@ module BBS
         @kbd_mode = @kbd_mode == :move ? :size : :move
       elsif (step = ARROWS[key.to_s.delete_prefix('shift_').to_sym])
         size = (@kbd_mode == :size || key.to_s.start_with?('shift_')) && sizable?
-        x, y, w, h = bounds.x, bounds.y, bounds.width, bounds.height
+        x = bounds.x
+        y = bounds.y
+        w = bounds.width
+        h = bounds.height
         size ? move_to(x, y, w + step[0], h + step[1]) : move_to(x + step[0], y + step[1], w, h)
       end
       :handled
@@ -407,8 +408,8 @@ module BBS
       return move_to(*@placed) if @placed && !@maximized
       return place(*(@maximized ? app.desktop_rect : normal_rect)) if resizable?
 
-      dx = [(app.cols - bounds.width) / 2 + 1, 1].max - bounds.x
-      dy = [(app.rows - bounds.height) / 2 + 1, 1].max - bounds.y
+      dx = [((app.cols - bounds.width) / 2) + 1, 1].max - bounds.x
+      dy = [((app.rows - bounds.height) / 2) + 1, 1].max - bounds.y
       shift(dx, dy)
     end
 

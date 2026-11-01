@@ -44,7 +44,7 @@ module BBS
     def clear
       @row = 1
       @col = 1
-      @petscii ? +"#{Ansi::RESET}#{Ansi::CLEAR_SCREEN}" : +"#{Ansi::RESET}#{Ansi::CLEAR}"
+      @petscii ? "#{Ansi::RESET}#{Ansi::CLEAR_SCREEN}" : "#{Ansi::RESET}#{Ansi::CLEAR}"
     end
 
     # Returns the bytes that move the cursor to +row+, +col+.

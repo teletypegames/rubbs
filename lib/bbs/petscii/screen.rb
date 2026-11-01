@@ -267,8 +267,8 @@ module BBS
       # those of BBS::Selector.new.
       #
       # Returns the value of the item taken, or +back+ for ← or RUN/STOP.
-      def menu(items, back: nil, **options)
-        Selector.new(@session, items, width: @cols - 1, back: back, colors: MENU, **options).run
+      def menu(items, back: nil, **)
+        Selector.new(@session, items, width: @cols - 1, back: back, colors: MENU, **).run
       end
 
       # The keys of +actions+, <tt>[key, label]</tt> pairs, as a #menu on

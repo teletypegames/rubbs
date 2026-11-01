@@ -72,31 +72,31 @@ module BBS
         @align       = align
         @valign      = valign
         @fill_parent = fill_parent
-        @art_width   = (lines.map { |l| visible_length(l) }.max || 0)
+        @art_width   = lines.map { |l| visible_length(l) }.max || 0
         @art_height  = lines.size
       end
 
       # Creates the widget from the art file at +path+ (see the file handling
       # above). +opts+ go to AnsiArt.new. Raises SystemCallError when the file
       # cannot be read.
-      def self.from_file(path, **opts)
-        new(lines: load_file(path), **opts)
+      def self.from_file(path, **)
+        new(lines: load_file(path), **)
       end
 
       # Creates the widget from +text+, split into lines at CR, LF or CRLF.
       # +opts+ go to AnsiArt.new.
-      def self.from_string(text, **opts)
-        new(lines: split_lines(text), **opts)
+      def self.from_string(text, **)
+        new(lines: split_lines(text), **)
       end
 
       # Pick a random file from +dir+. Returns a built-in fallback if the
       # directory is missing or empty.
-      def self.random(dir, **opts)
+      def self.random(dir, **)
         files = Dir.glob(File.join(dir, '*.{ans,ansi,asc,nfo,txt}')).reject { |f| File.directory?(f) }
-        return new(lines: built_in_fallback, **opts) if files.empty?
-        from_file(files.sample, **opts)
+        return new(lines: built_in_fallback, **) if files.empty?
+        from_file(files.sample, **)
       rescue StandardError
-        new(lines: built_in_fallback, **opts)
+        new(lines: built_in_fallback, **)
       end
 
       # Returns the lines of the built-in art used when no file is available.
@@ -109,9 +109,7 @@ module BBS
       # style.
       def render(frame)
         return if @lines.empty?
-        if @fill_parent && parent && parent.bounds
-          @bounds = parent.bounds.dup
-        end
+        @bounds = parent.bounds.dup if @fill_parent && parent && parent.bounds
         return if bounds.width <= 0 || bounds.height <= 0
 
         visible_h = [@art_height, bounds.height].min
@@ -181,7 +179,7 @@ module BBS
         left   = [(cols - width) / 2, 0].max
         shown  = lines[top, view_h] || []
         offset = [(view_h - lines.size) / 2, 0].max
-        out = +"#{Ansi::HIDE_CURSOR}#{Ansi::RESET}#{Ansi::CLEAR_SCREEN}"
+        out = "#{Ansi::HIDE_CURSOR}#{Ansi::RESET}#{Ansi::CLEAR_SCREEN}"
         shown.each_with_index do |line, i|
           out << "#{Ansi::CSI}#{offset + i + 1};#{left + 1}H" << FrameBuffer.clip_ansi(line, cols - left) << Ansi::RESET
         end
@@ -215,7 +213,7 @@ module BBS
           record = f.read(SAUCE_SIZE)
           return nil unless record.start_with?(SAUCE_ID)
 
-          field = ->(from, length) do
+          field = lambda do |from, length|
             record.byteslice(from, length).force_encoding('IBM437')
                   .encode('UTF-8', invalid: :replace, undef: :replace).delete(Ascii::NUL_CHAR).strip
           end
@@ -247,8 +245,12 @@ module BBS
         else
           # try utf8 first
           utf8 = bytes.dup.force_encoding('UTF-8')
-          utf8.valid_encoding? ? utf8 : bytes.force_encoding('IBM437').encode('UTF-8',
-            invalid: :replace, undef: :replace)
+          if utf8.valid_encoding?
+            utf8
+          else
+            bytes.force_encoding('IBM437').encode('UTF-8',
+                      invalid: :replace, undef: :replace)
+          end
         end
       end
 
@@ -307,7 +309,7 @@ module BBS
           "#{y}     ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀#{r}",
           '',
           "          #{d}F10#{r}  open the top menu   #{d}F1#{r}  help",
-          "          #{d}F2#{r}   message boards      #{d}F4#{r}  chat",
+          "          #{d}F2#{r}   message boards      #{d}F4#{r}  chat"
         ]
       end
     end

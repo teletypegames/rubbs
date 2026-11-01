@@ -52,10 +52,10 @@ module BBS
     def self.centred_window(app, width:, height:, title: nil)
       cols  = app.cols
       rows  = app.rows
-      w     = [width, cols - 2 * SCREEN_MARGIN].min
-      h     = [height, rows - 2 * SCREEN_MARGIN].min
-      x     = (cols - w) / 2 + 1
-      y     = (rows - h) / 2 + 1
+      w     = [width, cols - (2 * SCREEN_MARGIN)].min
+      h     = [height, rows - (2 * SCREEN_MARGIN)].min
+      x     = ((cols - w) / 2) + 1
+      y     = ((rows - h) / 2) + 1
       win   = Window.new(title: title, modal: true)
       win.layout(x, y, w, h)
       win
@@ -67,7 +67,7 @@ module BBS
     # Returns the Window.
     def self.message(app, text, title: ' Message ', width: nil)
       lines  = wrap(text, width ? width - TEXT_CHROME : WRAP_WIDTH)
-      w      = (width || [(lines.map(&:length).max || 0) + TEXT_CHROME, MESSAGE_MIN_WIDTH].max)
+      w      = width || [(lines.map(&:length).max || 0) + TEXT_CHROME, MESSAGE_MIN_WIDTH].max
       h      = lines.size + CHROME_ROWS
       window = centred_window(app, width: w, height: h, title: title)
       w      = window.bounds.width
@@ -75,12 +75,12 @@ module BBS
 
       lines.each_with_index do |line, i|
         label = Widgets::Label.new(text: line, style_key: :window_text)
-        label.layout(window.bounds.x + PADDING, window.bounds.y + TEXT_TOP + i, w - 2 * PADDING, 1)
+        label.layout(window.bounds.x + PADDING, window.bounds.y + TEXT_TOP + i, w - (2 * PADDING), 1)
         window.add(label)
       end
 
       btn = Widgets::Button.new(label: '&OK', on_click: ->(_) { app.close_window(window) })
-      btn.layout(window.bounds.x + (w - BUTTON_WIDTH) / 2, window.bounds.y + h - BUTTON_ROW, BUTTON_WIDTH, 1)
+      btn.layout(window.bounds.x + ((w - BUTTON_WIDTH) / 2), window.bounds.y + h - BUTTON_ROW, BUTTON_WIDTH, 1)
       window.add(btn)
       window.reset_focus
       app.open_window(window)
@@ -101,7 +101,7 @@ module BBS
 
       lines.each_with_index do |line, i|
         label = Widgets::Label.new(text: line, style_key: :window_text)
-        label.layout(window.bounds.x + PADDING, window.bounds.y + TEXT_TOP + i, w - 2 * PADDING, 1)
+        label.layout(window.bounds.x + PADDING, window.bounds.y + TEXT_TOP + i, w - (2 * PADDING), 1)
         window.add(label)
       end
 
@@ -109,8 +109,8 @@ module BBS
                                 on_click: ->(_) { app.close_window(window); on_yes&.call })
       no  = Widgets::Button.new(label: '&No',
                                 on_click: ->(_) { app.close_window(window); on_no&.call })
-      yes.layout(window.bounds.x + w / 2 - HALF_GAP - BUTTON_WIDTH, window.bounds.y + h - BUTTON_ROW, BUTTON_WIDTH, 1)
-      no.layout(window.bounds.x + w / 2 + HALF_GAP, window.bounds.y + h - BUTTON_ROW, BUTTON_WIDTH, 1)
+      yes.layout(window.bounds.x + (w / 2) - HALF_GAP - BUTTON_WIDTH, window.bounds.y + h - BUTTON_ROW, BUTTON_WIDTH, 1)
+      no.layout(window.bounds.x + (w / 2) + HALF_GAP, window.bounds.y + h - BUTTON_ROW, BUTTON_WIDTH, 1)
       window.add(yes)
       window.add(no)
       window.reset_focus
@@ -132,7 +132,7 @@ module BBS
       h      = window.bounds.height
 
       label = Widgets::Label.new(text: prompt, style_key: :window_text)
-      label.layout(window.bounds.x + PADDING, window.bounds.y + TEXT_TOP, w - 2 * PADDING, 1)
+      label.layout(window.bounds.x + PADDING, window.bounds.y + TEXT_TOP, w - (2 * PADDING), 1)
       window.add(label)
 
       # Enter in the field is the OK button.
@@ -143,14 +143,14 @@ module BBS
         :handled
       end
       input = Widgets::TextInput.new(value: value, on_submit: ->(_text, _field) { submit.call(nil) })
-      input.layout(window.bounds.x + PADDING, window.bounds.y + INPUT_ROW, w - 2 * PADDING, 1)
+      input.layout(window.bounds.x + PADDING, window.bounds.y + INPUT_ROW, w - (2 * PADDING), 1)
       window.add(input)
 
       ok = Widgets::Button.new(label: '&OK', on_click: submit)
       cancel = Widgets::Button.new(label: '&Cancel',
                                    on_click: ->(_) { app.close_window(window) })
-      ok.layout(window.bounds.x + w / 2 - HALF_GAP - BUTTON_WIDTH, window.bounds.y + h - BUTTON_ROW, BUTTON_WIDTH, 1)
-      cancel.layout(window.bounds.x + w / 2 + HALF_GAP, window.bounds.y + h - BUTTON_ROW, CANCEL_WIDTH, 1)
+      ok.layout(window.bounds.x + (w / 2) - HALF_GAP - BUTTON_WIDTH, window.bounds.y + h - BUTTON_ROW, BUTTON_WIDTH, 1)
+      cancel.layout(window.bounds.x + (w / 2) + HALF_GAP, window.bounds.y + h - BUTTON_ROW, CANCEL_WIDTH, 1)
       window.add(ok)
       window.add(cancel)
       window.reset_focus

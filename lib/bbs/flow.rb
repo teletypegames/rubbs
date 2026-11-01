@@ -29,9 +29,9 @@ module BBS
     # +screens_dir+ is where this flow's #screen steps find their ERB files;
     # without it they use <tt>BBS.config.screens_dir</tt>. A flow that ships
     # with its own screens (a door from a gem) names its folder here.
-    def self.define(screens_dir: nil, &block)
+    def self.define(screens_dir: nil, &)
       flow = new(screens_dir: screens_dir)
-      flow.instance_eval(&block)
+      flow.instance_eval(&)
       flow.freeze
     end
 
@@ -102,11 +102,11 @@ module BBS
     # steps defined in the block run on yes and the flow goes on either way.
     # Without a block, the flow goes on only on yes. On no, +denied+ is
     # written when given.
-    def confirm(message, denied: nil, &block)
+    def confirm(message, denied: nil, &)
       step = { message: message, denied: denied }
       if block_given?
         sub = Flow.new
-        sub.instance_eval(&block)
+        sub.instance_eval(&)
         @steps << step.merge(type: :confirm_block, sub_steps: sub.steps)
       else
         @steps << step.merge(type: :confirm_halt)
@@ -117,9 +117,9 @@ module BBS
     # MenuBuilder#option, reads a number, and runs that option's steps. An
     # out-of-range answer asks again. With +loop+ the menu comes back after
     # each option until one runs #exit_menu.
-    def menu(prompt, loop: false, &block)
+    def menu(prompt, loop: false, &)
       builder = MenuBuilder.new
-      builder.instance_eval(&block)
+      builder.instance_eval(&)
       @steps << { type: :menu, prompt: prompt, loop: loop, options: builder.options }
     end
 
@@ -180,9 +180,9 @@ module BBS
     # The chosen element is stored in the context as +:picked+ and the steps
     # of the block run; an empty answer skips them. With no elements, +empty+
     # is shown instead.
-    def pick(from:, prompt:, empty: 'No items.', item:, hint: nil, &block)
+    def pick(from:, prompt:, item:, empty: 'No items.', hint: nil, &)
       sub = Flow.new
-      sub.instance_eval(&block) if block_given?
+      sub.instance_eval(&) if block_given?
       @steps << { type: :pick, from: from, prompt: prompt, empty: empty,
                   item: item, hint: hint, sub_steps: sub.steps }
     end
@@ -226,9 +226,9 @@ module BBS
 
     # Adds an option labelled +label+ whose steps are the Flow steps defined
     # in the block.
-    def option(label, &block)
+    def option(label, &)
       sub = Flow.new
-      sub.instance_eval(&block) if block_given?
+      sub.instance_eval(&) if block_given?
       @options << { label: label, steps: sub.steps }
     end
   end

@@ -44,8 +44,8 @@ module BBS
         inner = "#{' ' * padding}#{text}#{' ' * padding}"
         bar   = '═' * inner.length
         "#{green}╔#{bar}╗#{reset}\n" \
-        "#{green}║#{inner}║#{reset}\n" \
-        "#{green}╚#{bar}╝#{reset}"
+          "#{green}║#{inner}║#{reset}\n" \
+          "#{green}╚#{bar}╝#{reset}"
       end
 
       # Returns +text+ as large Artii letters in +font+ (default
@@ -53,9 +53,9 @@ module BBS
       # LF-separated.
       def big_banner(text, font: 'slant')
         Artii::Base.new(font: font).asciify(text)
-          .split("\n")
-          .map { |l| "  #{green}#{l}#{reset}" }
-          .join("\n")
+                   .split("\n")
+                   .map { |l| "  #{green}#{l}#{reset}" }
+                   .join("\n")
       end
 
       # Escape sequence that clears the screen and homes the cursor.

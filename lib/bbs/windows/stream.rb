@@ -101,9 +101,9 @@ module BBS
       # the requested size, or the screen less 8 columns and 6 rows,
       # centred.
       def normal_rect
-        w = @width  || @app.cols - 8
-        h = @height || @app.rows - 6
-        [(@app.cols - w) / 2 + 1, (@app.rows - h) / 2 + 1, w, h]
+        w = @width  || (@app.cols - 8)
+        h = @height || (@app.rows - 6)
+        [((@app.cols - w) / 2) + 1, ((@app.rows - h) / 2) + 1, w, h]
       end
 
       # History on top, the input line under it, the button row at the

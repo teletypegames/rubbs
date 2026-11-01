@@ -16,9 +16,9 @@ module BBS
       inner = "#{' ' * padding}#{text}#{' ' * padding}"
       bar   = '═' * inner.length
       rst   = Ansi::RESET
-      "#{Ansi::CRLF}  #{color}╔#{bar}╗#{rst}#{Ansi::CRLF}" \
-      "  #{color}║#{inner}║#{rst}#{Ansi::CRLF}"   \
-      "  #{color}╚#{bar}╝#{rst}#{Ansi::CRLF * 2}"
+      "#{Ansi::CRLF}  #{color}╔#{bar}╗#{rst}#{Ansi::CRLF}  " \
+        "#{color}║#{inner}║#{rst}#{Ansi::CRLF}  " \
+        "#{color}╚#{bar}╝#{rst}#{Ansi::CRLF * 2}"
     end
 
     # Returns +text+ as large FIGlet-style letters drawn by Artii, each line

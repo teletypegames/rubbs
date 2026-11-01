@@ -33,11 +33,21 @@ module BBS
     # screen behind the frame buffer's back.
     CONTROL_CHAR = /[\u0000-\u001F\u007F-\u009F#{Text::BIDI_CONTROLS}]/
 
-    # Returns +value+ as a String a regexp can read: invalid bytes become
-    # <tt>?</tt>.
+    # Returns +value+ as a UTF-8 String a regexp can read: a binary String
+    # is taken as UTF-8, another encoding is converted, and invalid bytes
+    # become <tt>?</tt>.
     def self.text(value)
       s = value.to_s
+      s = utf8(s) unless s.encoding == Encoding::UTF_8
       s.valid_encoding? ? s : s.scrub('?')
+    end
+
+    # Returns +s+ in UTF-8: bytes of a binary String as they are, another
+    # encoding converted (what does not convert becomes <tt>?</tt>).
+    def self.utf8(s)
+      return s.dup.force_encoding(Encoding::UTF_8) if s.encoding == Encoding::BINARY
+
+      s.encode(Encoding::UTF_8, invalid: :replace, undef: :replace, replace: '?')
     end
 
     # Returns the number of characters of +text+ left once its ANSI escape
@@ -99,7 +109,7 @@ module BBS
 
       s.scan(WRAP_TOKEN_RE) do |(tok)|
         if tok.start_with?(Ansi::ESC)
-          active_sgr = (tok == Ansi::RESET || tok == SHORT_RESET) ? nil : tok
+          active_sgr = [Ansi::RESET, SHORT_RESET].include?(tok) ? nil : tok
           cur << tok
           next
         end
@@ -253,7 +263,7 @@ module BBS
     # corners +:tl+, +:tr+, +:bl+, +:br+ and the edges +:h+, +:v+.
     BOX_CHARS = {
       single: { tl: '┌', tr: '┐', bl: '└', br: '┘', h: '─', v: '│' },
-      double: { tl: '╔', tr: '╗', bl: '╚', br: '╝', h: '═', v: '║' },
+      double: { tl: '╔', tr: '╗', bl: '╚', br: '╝', h: '═', v: '║' }
     }.freeze
 
     # Draws a frame of +width+ by +height+ cells with its top left at +x+,
@@ -273,11 +283,11 @@ module BBS
       move(x, y)
       write(g[:tl], sgr: sgr)
       if title && title.length > 0
-        indent  = [title_indent, 0].max
+        indent = [title_indent, 0].max
         title_max = [iw - 2 - indent, 0].max
         clipped   = title[0, title_max]
         write(g[:h] * indent, sgr: sgr) if indent > 0
-        prefix  = "#{g[:h]} "
+        prefix = "#{g[:h]} "
         write(prefix, sgr: sgr)
         write(clipped, sgr: title_sgr || sgr)
         rest = iw - indent - prefix.length - clipped.length
@@ -322,7 +332,7 @@ module BBS
     # style change starts from a reset; the stream ends with a reset when
     # any styled cell was written. Both buffers must have the same size.
     def diff(from)
-      out     = +""
+      out     = +''
       cur_sgr = :_none
       exp_r   = nil
       exp_c   = nil
@@ -333,9 +343,7 @@ module BBS
           oc = from.cell_at(r, c)
           next if nc == oc
 
-          unless r == exp_r && c == exp_c
-            out << "#{Ansi::CSI}#{r + 1};#{c + 1}H"
-          end
+          out << "#{Ansi::CSI}#{r + 1};#{c + 1}H" unless r == exp_r && c == exp_c
 
           # Each style starts from a reset, so no attribute of the cell
           # painted before it carries over.

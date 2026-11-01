@@ -75,14 +75,12 @@ module BBS
         cx += text_key.length + text_lbl.length + 1
       end
 
-      if @right_text
-        txt = @right_text.to_s
-        rx  = bounds.x + bounds.width - txt.length - 1
-        if rx >= cx
-          frame.move(rx, bounds.y)
-          frame.write(txt, sgr: sgr)
-        end
-      end
+      return unless @right_text
+      txt = @right_text.to_s
+      rx  = bounds.x + bounds.width - txt.length - 1
+      return unless rx >= cx
+      frame.move(rx, bounds.y)
+      frame.write(txt, sgr: sgr)
     end
 
     # Runs the hint whose key matches a key +event+, or the shown hint under
@@ -104,9 +102,7 @@ module BBS
         text_key = hint.key.to_s
         text_lbl = " #{hint.label} "
         width    = text_key.length + text_lbl.length
-        if event.x >= cx && event.x < cx + width
-          return hint.on_activate&.call || :handled
-        end
+        return hint.on_activate&.call || :handled if event.x >= cx && event.x < cx + width
         cx += width + 1
       end
       nil

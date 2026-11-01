@@ -29,7 +29,7 @@ module BBS
       yellow:  Ansi::YELLOW,
       white:   Ansi::WHITE,
       green:   Ansi::BRIGHT_GREEN,
-      red:     Ansi::BRIGHT_RED,
+      red:     Ansi::BRIGHT_RED
     }.freeze
 
     # Moves the cursor up a line and erases that line: takes back the
@@ -81,7 +81,7 @@ module BBS
     def execute(steps)
       steps.each do |step|
         result = dispatch(step)
-        return result if result == :halt || result == :exit_menu
+        return result if %i[halt exit_menu].include?(result)
       end
       nil
     end
@@ -240,7 +240,7 @@ module BBS
       result == :halt ? :halt : nil
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       :halt
-    rescue => e
+    rescue StandardError => e
       warn "BBS call error: #{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}"
       write "#{Ansi::CRLF}  #{STYLES[:error]}Something went wrong.#{Ansi::RESET}#{Ansi::CRLF * 2}"
       nil
@@ -275,7 +275,7 @@ module BBS
       nil
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       :halt
-    rescue => e
+    rescue StandardError => e
       warn "BBS rows error: #{e.class}: #{e.message}"
       write "#{Ansi::CRLF}  #{STYLES[:error]}Error loading content.#{Ansi::RESET}#{Ansi::CRLF}"
       nil
@@ -289,7 +289,7 @@ module BBS
       nil
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       :halt
-    rescue => e
+    rescue StandardError => e
       warn "BBS table error: #{e.class}: #{e.message}"
       write "#{Ansi::CRLF}  #{STYLES[:error]}Error loading content.#{Ansi::RESET}#{Ansi::CRLF}"
       nil
@@ -309,7 +309,7 @@ module BBS
       nil
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       :halt
-    rescue => e
+    rescue StandardError => e
       warn "BBS fetch error: #{e.class}: #{e.message}"
       write "#{Ansi::CRLF}  #{STYLES[:error]}Error loading content.#{Ansi::RESET}#{Ansi::CRLF}"
       nil
@@ -376,7 +376,7 @@ module BBS
       nil
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       :halt
-    rescue => e
+    rescue StandardError => e
       warn "BBS body error: #{e.class}: #{e.message}"
       nil
     end
@@ -387,7 +387,7 @@ module BBS
       nil
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       :halt
-    rescue => e
+    rescue StandardError => e
       warn "BBS output error: #{e.class}: #{e.message}"
       write "#{Ansi::CRLF}  #{STYLES[:error]}Error rendering content.#{Ansi::RESET}#{Ansi::CRLF}"
       nil
@@ -448,7 +448,7 @@ module BBS
     def validation_message(validator)
       case validator
       when :email then "That doesn't look like a valid email address. Farewell."
-      else "Invalid input. Farewell."
+      else 'Invalid input. Farewell.'
       end
     end
   end

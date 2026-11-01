@@ -64,8 +64,8 @@ module BBS
       # BBS::Selector.new. Raises ArgumentError for a menu with nothing to
       # select or an unknown colour.
       def initialize(session, items, canvas:, row:, col:, width:, rest: [Canvas::ROWS - 1, 0], idle: nil,
-                     colors: {}, **options, &on_idle)
-        super(session, items, width: width, **options)
+                     colors: {}, **, &on_idle)
+        super(session, items, width: width, **)
         @canvas  = canvas
         @top     = row
         @left    = col
@@ -135,7 +135,11 @@ module BBS
         old    = @index
         turned = index / per_page != page
         @index = index
-        lines  = turned ? (1..(@across ? 1 : @height)).to_a : [line_of(old), line_of(index)].uniq
+        lines  = if turned
+                   (1..(@across ? 1 : @height)).to_a
+                 else
+                   [line_of(old), line_of(index)].uniq
+                 end
         lines << ((@across ? 1 : @height) + 1) if @about.positive?
         lines << rows if @status.positive?
         repaint(lines.uniq)

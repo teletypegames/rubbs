@@ -114,7 +114,7 @@ module BBS
         check_on:         "\e[1;32;44m",
         check_off:        "\e[0;37;44m",
 
-        reset:            "\e[0m",
+        reset:            "\e[0m"
       }.freeze).freeze
     end
 
@@ -171,7 +171,7 @@ module BBS
         scrollbar:        "\e[0;36;44m",
         scrollbar_thumb:  "\e[1;37;46m",
 
-        reset:            "\e[0m",
+        reset:            "\e[0m"
       }.freeze).freeze
     end
 
@@ -228,7 +228,7 @@ module BBS
         scrollbar:        "\e[0;30;47m",
         scrollbar_thumb:  "\e[1;37;46m",
 
-        reset:            "\e[0m",
+        reset:            "\e[0m"
       }.freeze).freeze
     end
 
@@ -288,7 +288,7 @@ module BBS
         check_on:         "\e[0;38;5;220;48;5;16m",
         check_off:        "\e[0;38;5;73;48;5;16m",
 
-        reset:            "\e[0m",
+        reset:            "\e[0m"
       }.freeze).freeze
     end
 
@@ -296,7 +296,7 @@ module BBS
     # reverse video, for terminals without colour.
     def self.mono
       Theme.new(:mono, {
-        screen:           "",
+        screen:           '',
         text:             "\e[0;37m",
         text_dim:         "\e[0;2;37m",
         text_bright:      "\e[1;37m",
@@ -305,7 +305,7 @@ module BBS
         success:          "\e[1;37m",
         warning:          "\e[1;37m",
         error:            "\e[7m",
-        window_bg:        "",
+        window_bg:        '',
         window_border:    "\e[1;37m",
         window_title:     "\e[1;37m",
         window_title_focused: "\e[7m",
@@ -338,7 +338,7 @@ module BBS
         scrollbar_thumb:  "\e[1;37m",
         check_on:         "\e[1;7m",
         check_off:        "\e[0;37m",
-        reset:            "\e[0m",
+        reset:            "\e[0m"
       }.freeze).freeze
     end
   end

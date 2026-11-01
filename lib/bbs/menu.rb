@@ -96,7 +96,8 @@ module BBS
     # Returns the Menu that is dropped down, or +nil+.
     def opened_menu     = @open_index ? @menus[@open_index] : nil
     # Returns the index of the open menu in #menus, or +nil+.
-    def open_index      = @open_index
+    attr_reader :open_index
+
     # Returns the highlighted MenuItem of the open menu, or +nil+.
     def selected_item   = opened_menu&.items&.[](@item_index)
     # Returns the hint of the highlighted item while a menu is open, or
@@ -139,7 +140,7 @@ module BBS
       @menus.each_with_index do |menu, i|
         menu.x = cx
         is_open = (@open_index == i)
-        slabel  = is_open ? sel    : sgr
+        slabel  = is_open ? sel : sgr
         shotkey = is_open ? sel_hot : hotkey
         frame.move(cx, bounds.y)
         frame.write(' ', sgr: slabel)
@@ -161,9 +162,7 @@ module BBS
     def handle_event(event)
       return navigate(event) if open?
       return open_via_keyboard(event) if event.key?
-      if event.mouse? && event.mouse.kind == :press && event.mouse.button == :left
-        return handle_mouse_press(event)
-      end
+      return handle_mouse_press(event) if event.mouse? && event.mouse.kind == :press && event.mouse.button == :left
       nil
     end
 
@@ -178,9 +177,7 @@ module BBS
     # +:halt+, +:handled+ otherwise, or +nil+ when no menu is open.
     def navigate(event)
       if event.mouse?
-        if event.mouse.kind == :press && event.mouse.button == :left
-          return handle_mouse_press(event)
-        end
+        return handle_mouse_press(event) if event.mouse.kind == :press && event.mouse.button == :left
         return :handled
       end
 
@@ -361,11 +358,10 @@ module BBS
           frame.write(item.display, sgr: sgr)
         end
 
-        if item.shortcut
-          short = item.shortcut.to_s
-          frame.move(x + w - 1 - short.length, row_y)
-          frame.write(short, sgr: sgr)
-        end
+        next unless item.shortcut
+        short = item.shortcut.to_s
+        frame.move(x + w - 1 - short.length, row_y)
+        frame.write(short, sgr: sgr)
       end
     end
 

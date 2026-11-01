@@ -324,10 +324,10 @@ module BBS
           @grid[lr + r][lc + c] = cell
         end
       end
-      @palette  = @palette.merge(layer.palette)
+      @palette = @palette.merge(layer.palette)
       moved = layer.hotspots.transform_values { |h| Hotspot.new(h.name, h.col + lc, h.row + lr, h.width, h.height) }
       @hotspots = @hotspots.merge(moved)
-      @stacked  = @stacked + [name]
+      @stacked += [name]
     end
 
     private

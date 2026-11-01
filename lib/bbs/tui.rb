@@ -20,9 +20,9 @@ module BBS
     attr_reader :init_block, :chrome_block, :pages, :start_page, :helper_module
 
     # Builds a TUI by evaluating the block in a new instance, and returns it.
-    def self.define(&block)
+    def self.define(&)
       tui = new
-      tui.instance_eval(&block)
+      tui.instance_eval(&)
       tui
     end
 
@@ -42,16 +42,16 @@ module BBS
 
     # Evaluates the block in the helper Module; the methods it defines can be
     # called from every page block.
-    def helpers(&block)
-      @helper_module.module_eval(&block)
+    def helpers(&)
+      @helper_module.module_eval(&)
     end
 
     # Defines the page +name+ by evaluating the block in a new Page.
     #
     # Returns the Page.
-    def page(name, &block)
+    def page(name, &)
       page_definition = Page.new(name)
-      page_definition.instance_eval(&block)
+      page_definition.instance_eval(&)
       @pages[name] = page_definition
     end
 
@@ -103,7 +103,7 @@ module BBS
 
         case mode
         when :menu
-          size = coerce.(opts.fetch(:size))
+          size = coerce.call(opts.fetch(:size))
           key(:up)   { n = instance_exec(&size); @menu_selection = (@menu_selection - 1) % n if n.positive? }
           key(:down) { n = instance_exec(&size); @menu_selection = (@menu_selection + 1) % n if n.positive? }
 
@@ -112,7 +112,7 @@ module BBS
           key(:down) { @item_selection = (@item_selection + 1) % @items.size if @items.any? }
 
         when :list
-          window = coerce.(opts.fetch(:window))
+          window = coerce.call(opts.fetch(:window))
           key(:up) do
             next if @item_selection <= 0
             @item_selection -= 1
@@ -147,7 +147,7 @@ module BBS
 
         when :scroll
           content = opts.fetch(:content)
-          window  = coerce.(opts.fetch(:window))
+          window  = coerce.call(opts.fetch(:window))
           key(:up)   { @scroll = [@scroll - 1, 0].max }
           key(:down) do
             max = [instance_exec(&content).size - instance_exec(&window), 0].max

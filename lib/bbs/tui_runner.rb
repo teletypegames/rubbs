@@ -66,7 +66,7 @@ module BBS
       BACKGROUND_COLORS = {
         black:  Ansi::BG_BLACK, red:    "\e[41m", green: "\e[42m",
         yellow: "\e[43m",       blue:   "\e[44m", cyan:  "\e[46m",
-        white:  "\e[47m",
+        white:  "\e[47m"
       }.freeze
 
       # Creates the context for +tui+ on +session+ and extends it with the
@@ -114,11 +114,10 @@ module BBS
 
         delta = @next_frame.diff(@committed_frame)
 
-        if first_render || resized || !delta.empty?
-          prefix = (first_render || resized) ? Ansi::CLEAR : ""
-          @session.write("#{Ansi::HIDE_CURSOR}#{prefix}#{delta}#{Ansi::SHOW_CURSOR}")
-          @committed_frame = @next_frame
-        end
+        return unless first_render || resized || !delta.empty?
+        prefix = first_render || resized ? Ansi::CLEAR : ''
+        @session.write("#{Ansi::HIDE_CURSOR}#{prefix}#{delta}#{Ansi::SHOW_CURSOR}")
+        @committed_frame = @next_frame
       end
 
       # Runs the current page's binding for +key+: the mouse handler for a
@@ -140,10 +139,8 @@ module BBS
 
         handler = page.key_bindings[key]
 
-        if handler.nil? && key.is_a?(String) && key.length == 1
-          if (printable_handler = page.key_bindings[:printable])
-            return instance_exec(key, &printable_handler)
-          end
+        if handler.nil? && key.is_a?(String) && key.length == 1 && (printable_handler = page.key_bindings[:printable])
+          return instance_exec(key, &printable_handler)
         end
 
         if handler.nil? && (any_handler = page.key_bindings[:any])
@@ -197,10 +194,10 @@ module BBS
         items.each_with_index do |item, index|
           at x, y + index
           if index == selected
-            @next_frame.write("▶ ", sgr: highlight_style)
+            @next_frame.write('▶ ', sgr: highlight_style)
             @next_frame.write_ansi(item.to_s, base_sgr: highlight_style)
           else
-            @next_frame.write("  ", sgr: normal_style)
+            @next_frame.write('  ', sgr: normal_style)
             @next_frame.write_ansi(item.to_s, base_sgr: normal_style)
           end
         end
@@ -215,9 +212,9 @@ module BBS
       #            selected item is written below the list (at +hint_y+, by
       #            default one row under it)
       def list_view(items, x:, y:, height:, scroll:, selected: nil,
-                   label: :to_s, hint: nil, hint_y: nil,
-                   empty: 'No items found.',
-                   style: nil, highlight: nil)
+                    label: :to_s, hint: nil, hint_y: nil,
+                    empty: 'No items found.',
+                    style: nil, highlight: nil)
         visible = items[scroll, height] || []
         if visible.empty?
           text empty, x: x, y: y, style: style
@@ -225,14 +222,14 @@ module BBS
         end
 
         call_label = label.is_a?(Symbol) ? ->(item) { item.public_send(label) } : label
-        list visible.map { |item| call_label.(item).to_s },
+        list visible.map { |item| call_label.call(item).to_s },
              x: x, y: y,
              selected: selected && (selected - scroll),
              style: style, highlight: highlight
 
         return unless hint && selected && (item = items[selected])
-        hint_text = (hint.is_a?(Symbol) ? item.public_send(hint) : hint.(item)).to_s.strip
-        text hint_text, x: x, y: (hint_y || y + height + 1), style: style unless hint_text.empty?
+        hint_text = (hint.is_a?(Symbol) ? item.public_send(hint) : hint.call(item)).to_s.strip
+        text hint_text, x: x, y: hint_y || (y + height + 1), style: style unless hint_text.empty?
       end
 
       # Fills a +width+ x +height+ block at +x+, +y+ with +background+.
@@ -281,13 +278,13 @@ module BBS
 
       # Draws a #box centred on the screen, clamped to fit with a two-cell
       # margin, and yields its inner area.
-      def float(title: nil, width: 40, height: 20, style: :muted, background: :black, &block)
+      def float(title: nil, width: 40, height: 20, style: :muted, background: :black, &)
         clamped_width  = [[width,  term_cols - 4].min, 4].max
         clamped_height = [[height, term_rows - 4].min, 3].max
-        x = (term_cols - clamped_width)  / 2 + 1
-        y = (term_rows - clamped_height) / 2 + 1
+        x = ((term_cols - clamped_width)  / 2) + 1
+        y = ((term_rows - clamped_height) / 2) + 1
         box(x: x, y: y, width: clamped_width, height: clamped_height,
-            title: title, style: style, background: background, &block)
+            title: title, style: style, background: background, &)
       end
 
       # ── Text utilities ────────────────────────────────────────────────────────
@@ -304,9 +301,10 @@ module BBS
         lines       = []
         current     = +''
         words.each do |word|
-          if    current.empty?                               then current << word
-          elsif current.length + 1 + word.length <= width   then current << ' ' << word
-          else  lines << current.dup; current = +word
+          if    current.empty? then current << word
+          elsif current.length + 1 + word.length <= width then current << ' ' << word
+          else
+            lines << current.dup; current = +word
           end
         end
         lines << current unless current.empty?

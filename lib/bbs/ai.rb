@@ -57,7 +57,7 @@ module BBS
       # keys are ignored. Raises the usual file and Psych errors for a
       # missing or invalid file.
       def self.load(path)
-        data = YAML.safe_load(File.read(path), aliases: false) || {}
+        data = YAML.safe_load_file(path, aliases: false) || {}
         new(**data.transform_keys(&:to_sym).slice(:system, :examples, :options, :deflect, :fallback))
       end
 
@@ -80,8 +80,8 @@ module BBS
           [{ role: 'user', content: turn.fetch('user').to_s.strip },
            { role: 'assistant', content: turn.fetch('assistant').to_s.strip }]
         end.freeze
-        @options  = (options || {}).transform_keys(&:to_sym).freeze
-        fallback  = fallback || {}
+        @options = (options || {}).transform_keys(&:to_sym).freeze
+        fallback ||= {}
         @deflect  = rules(deflect)
         @replies  = rules(fallback['replies'])
         @default  = fallback['default'].to_s.strip
@@ -240,7 +240,7 @@ module BBS
 
       private
 
-      def request(messages, options)
+      def request(messages, options, &block)
         uri  = URI.join(@url, '/v1/chat/completions')
         body = { messages: messages, stream: true, **options }
         body[:model] = @model if @model
@@ -249,7 +249,7 @@ module BBS
           http.request(build_request(uri, body)) do |response|
             raise "HTTP #{response.code}" unless response.is_a?(Net::HTTPSuccess)
 
-            read_reply(response) { |piece| yield piece }
+            read_reply(response, &block)
           end
         end
       end
@@ -334,7 +334,7 @@ module BBS
       #            the persona's canned one, such as the looked-up facts as
       #            they are
       def reply(text, ctx = {}, facts: nil, fallback: nil, &on_text)
-        text  = text.to_s.dup.force_encoding(Encoding::UTF_8).scrub('').strip
+        text = text.to_s.dup.force_encoding(Encoding::UTF_8).scrub('').strip
         if (canned = @persona.deflect(text))
           return canned.tap { |line| on_text&.call(line) }
         end
@@ -393,7 +393,7 @@ module BBS
         @io      = io
         @style   = style
         @indent  = ' ' * prefix.size
-        @width   = [(width || io.cols - 1) - prefix.size, 20].max
+        @width   = [(width || (io.cols - 1)) - prefix.size, 20].max
         @col     = 0
         @gap     = nil
         @pending = +''

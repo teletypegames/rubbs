@@ -122,9 +122,9 @@ module BBS
       { app: app, **context, **services, **extras }
     end
 
-    def resolve(key, ctx, *args)
+    def resolve(key, ctx, *)
       val = @attrs[key]
-      val.is_a?(Proc) ? val.call(ctx, *args) : val
+      val.is_a?(Proc) ? val.call(ctx, *) : val
     end
 
     def open_info(app, ctx)

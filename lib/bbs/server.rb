@@ -59,9 +59,9 @@ module BBS
     # [+:ok+]      admitted; #release must follow when the call ends
     # [+:busy+]    <tt>BBS.config.max_sessions</tt> callers are on
     # [+:crowded+] <tt>BBS.config.max_sessions_per_ip</tt> calls come from
-    #              this public address already; a local one (a proxy such
-    #              as bbs-web on the Docker network, see
-    #              BBS::Address.local?) has no such limit
+    #              this address already; a local one (a proxy such as
+    #              bbs-web on the Docker network, see BBS::Address.local?)
+    #              or an unknown one has no such limit
     def admit(address)
       @mu.synchronize do
         return :busy if @sessions >= BBS.config.max_sessions
@@ -84,8 +84,11 @@ module BBS
 
     private
 
+    # An address that is no IP address (a test's pipe) is not limited.
     def crowded?(address)
-      !Address.local?(address) && @calls[address] >= BBS.config.max_sessions_per_ip
+      return false if Address.parse(address).nil? || Address.local?(address)
+
+      @calls[address] >= BBS.config.max_sessions_per_ip
     end
 
     def stop_on_term
@@ -111,6 +114,13 @@ module BBS
       Thread.new { converse(client, address) }
     end
 
+    # A line that stays silent (or stops reading) longer than the idle limit
+    # is dropped, at a login prompt or inside a door alike.
+    def timed(client)
+      client.timeout = BBS.config.idle_seconds || DEFAULT_TIMEOUT if client.respond_to?(:timeout=)
+      client
+    end
+
     def peer(client)
       client.remote_address.ip_address
     rescue StandardError
@@ -125,26 +135,17 @@ module BBS
       client.close rescue nil
     end
 
-    # A line that stays silent (or stops reading) longer than the idle limit
-    # is dropped, at a login prompt or inside a door alike.
     def converse(client, address)
-      client.timeout = BBS.config.idle_seconds || DEFAULT_TIMEOUT if client.respond_to?(:timeout=)
-      session = Session.new(client)
+      session = Session.new(timed(client))
       session.run
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET, Errno::ETIMEDOUT => e
       puts "BBS session dropped by the client (#{e.message})"
     rescue StandardError => e
       warn "BBS session error: #{e.class}: #{e.message}\n#{e.backtrace.first(BACKTRACE_LINES).join("\n")}"
     ensure
-      client.close rescue nil
+      client.close
       release(address)
-      finished(session) if session
-    end
-
-    def finished(session)
-      BBS.config.on_session_end&.call(session)
-    rescue StandardError => e
-      warn "BBS on_session_end error: #{e.class}: #{e.message}"
+      BBS.config.on_session_end&.call(session) if session
     end
   end
 end

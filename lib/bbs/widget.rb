@@ -25,7 +25,7 @@ module BBS
     # visible, enabled and not focused.
     attr_accessor :bounds, :parent, :id, :visible, :focused, :enabled
     # The BBS::Theme set on this widget, or +nil+ to use the parent's.
-    attr_reader   :theme
+    attr_accessor :theme
 
     # Creates a widget.
     #
@@ -59,7 +59,7 @@ module BBS
     def handle_event(_event) = nil
 
     # Convenience: yield this widget. Subclasses override to walk a tree.
-    def each(&block)
+    def each(&)
       yield self
       nil
     end
@@ -70,9 +70,6 @@ module BBS
     end
 
     # Apply a theme. Subclasses with children propagate via Container#theme=.
-    def theme=(value)
-      @theme = value
-    end
 
     # Move/resize. Subclasses may override to relayout children.
     def layout(x, y, width, height)

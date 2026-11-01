@@ -53,7 +53,7 @@ module BBS
     CANCEL_COUNT = 2
     # What the sender writes to cancel: eight CAN, then eight backspaces to
     # erase their echo.
-    ABORT = ([CAN] * 8 + [Ascii::BS] * 8).pack('C*').freeze
+    ABORT = (([CAN] * 8) + ([Ascii::BS] * 8)).pack('C*').freeze
 
     # Seconds to wait for the receiver to start, by default.
     WAIT        = 60

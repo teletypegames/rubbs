@@ -143,9 +143,9 @@ module BBS
       # the requested size, or the screen less 4 columns and 6 rows,
       # centred.
       def normal_rect
-        w = @width  || @app.cols - 4
-        h = @height || @app.rows - 6
-        [(@app.cols - w) / 2 + 1, (@app.rows - h) / 2 + 1, w, h]
+        w = @width  || (@app.cols - 4)
+        h = @height || (@app.rows - 6)
+        [((@app.cols - w) / 2) + 1, ((@app.rows - h) / 2) + 1, w, h]
       end
 
       # Lays the window out at the given size (terminal resized, maximized,
@@ -211,10 +211,9 @@ module BBS
         detail_w = [bounds.width - @list_w - 5, 1].max
         @detail_view.layout(detail_x, list_y, detail_w, panel_h)
 
-        if @meta_label
-          meta_y = bounds.y + h - (has_buttons ? 3 : 2)
-          @meta_label.layout(bounds.x + 2, meta_y, bounds.width - 4, 1)
-        end
+        return unless @meta_label
+        meta_y = bounds.y + h - (has_buttons ? 3 : 2)
+        @meta_label.layout(bounds.x + 2, meta_y, bounds.width - 4, 1)
       end
     end
   end

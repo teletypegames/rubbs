@@ -77,7 +77,7 @@ module BBS
     SUBPACKET = 1024
     # The abort sequence: eight Ctrl-X followed by eight backspaces, which
     # makes the receiver drop the transfer and erases the echo.
-    ABORT     = (ZDLE.chr * 8 + Ascii::BS.chr * 8).b
+    ABORT     = ((ZDLE.chr * 8) + (Ascii::BS.chr * 8)).b
 
     # The command that starts the receiver on a Unix shell: +rz+ and CR.
     RZ_COMMAND   = "rz#{Ansi::CR}".b.freeze
@@ -113,7 +113,7 @@ module BBS
     # The byte ZRUB0 stands for: DEL.
     ZRUB0_VALUE = 0x7f
     # ZRUB1: ZDLE and this byte stand for ZRUB1_VALUE.
-    ZRUB1      = 0x6d
+    ZRUB1 = 0x6d
     # The byte ZRUB1 stands for.
     ZRUB1_VALUE = 0xff
     # The bytes of a header before its CRC: the type and four data bytes.
@@ -145,7 +145,7 @@ module BBS
     BUDGET_FACTOR = 4
     # The most bytes of the receiver kept while looking for a header; older
     # ones are dropped.
-    MAX_PENDING  = 64
+    MAX_PENDING = 64
 
     # A parsed ZMODEM header: +type+ is the header type (ZRINIT, ZRPOS, ...),
     # +bytes+ the four data bytes. #position reads them as a little-endian
@@ -361,11 +361,11 @@ module BBS
 
       def subpacket(data, frameend)
         out = Zmodem.escape(data) << ZDLE << frameend
-        if @crc32
-          out << Zmodem.escape([Zlib.crc32(data + frameend.chr)].pack('V'))
-        else
-          out << Zmodem.escape([Zmodem.crc16(data + frameend.chr)].pack('n'))
-        end
+        out << if @crc32
+                 Zmodem.escape([Zlib.crc32(data + frameend.chr)].pack('V'))
+               else
+                 Zmodem.escape([Zmodem.crc16(data + frameend.chr)].pack('n'))
+               end
         out << XON if frameend == ZCRCW
         emit(out)
       end
@@ -455,7 +455,7 @@ module BBS
         return [nil, from] unless text.match?(HEX_HEADER_RE)
 
         bytes = [text].pack('H*').bytes
-        crc   = bytes[HEADER_SIZE] << 8 | bytes[HEADER_SIZE + 1]
+        crc   = (bytes[HEADER_SIZE] << 8) | bytes[HEADER_SIZE + 1]
         return [nil, from + HEX_DIGITS] unless Zmodem.crc16(bytes[0, HEADER_SIZE].pack('C*')) == crc
 
         [Header.new(bytes[0], bytes[1, 4]), from + HEX_DIGITS]
@@ -471,7 +471,11 @@ module BBS
             return [nil, nil] if i + 1 >= buf.size
 
             c = buf[i + 1]
-            bytes << (c == ZRUB0 ? ZRUB0_VALUE : c == ZRUB1 ? ZRUB1_VALUE : c ^ ZDLE_XOR)
+            bytes << (if c == ZRUB0
+                        ZRUB0_VALUE
+                      else
+                        c == ZRUB1 ? ZRUB1_VALUE : c ^ ZDLE_XOR
+                      end)
             i += 2
           else
             bytes << buf[i]
@@ -483,7 +487,7 @@ module BBS
         ok = if crc_size == CRC32_SIZE
                Zlib.crc32(frame) == crc.pack('C*').unpack1('V')
              else
-               Zmodem.crc16(frame) == (crc[0] << 8 | crc[1])
+               Zmodem.crc16(frame) == ((crc[0] << 8) | crc[1])
              end
         ok ? [Header.new(bytes[0], bytes[1, 4]), i] : [nil, i]
       end

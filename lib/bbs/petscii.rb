@@ -201,7 +201,7 @@ module BBS
       '…' => '...', '·' => '.', '•' => '*', '●' => '*', '◆' => '*', '★' => '*', '■' => '*', '☼' => '*',
       '○' => 'o', '◄' => '<', '◀' => '<', '‹' => '<', '«' => '<', '►' => '>', '▶' => '>', '▸' => '>',
       '›' => '>', '»' => '>', '→' => '>', '↓' => 'v', '×' => 'x', '°' => 'o', '≈' => '-', '∿' => '-',
-      '≋' => '-', " " => ' ', 'ß' => 'ss', 'π' => 'pi'
+      '≋' => '-', ' ' => ' ', 'ß' => 'ss', 'π' => 'pi'
     }.freeze
 
     # Translates a +byte+ the C64 sent into a key the way BBS::Telnet#readkey
@@ -212,7 +212,7 @@ module BBS
     # +nil+ for a byte that is not a key.
     def self.key(byte)
       case byte
-      when KEY_RETURN      then :enter
+      when KEY_RETURN then :enter
       when DEL.ord, Ascii::BS, Ascii::DEL then :backspace
       when DOWN.ord        then :down
       when UP.ord          then :up
