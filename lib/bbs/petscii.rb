@@ -265,6 +265,11 @@ module BBS
     # ANSI colours pass through.
     UNPLAIN = /[^ -~\e]/
 
+    # The characters the C64 has keys and glyphs of its own for. GLYPHS maps
+    # them to their PETSCII codes, which happen to be in the ASCII range;
+    # ::plain keeps them as they are, so the Encoder still finds them.
+    NATIVE = %w[£ ← ↑].freeze
+
     # Returns +text+ in characters the C64 shows one to a cell, so that it
     # wraps where it is counted: the typography of GLYPHS that has an ASCII
     # form becomes it (an ellipsis three dots, a dash a hyphen), the box
@@ -275,6 +280,8 @@ module BBS
     #   BBS::Petscii.plain('Ærø – “café”…')   # => 'Aero - "cafe"...'
     def self.plain(text)
       text.to_s.gsub(UNPLAIN) do |c|
+        next c if NATIVE.include?(c)
+
         glyph = GLYPHS[c]
         next glyph if glyph&.ascii_only?
         next c if glyph
