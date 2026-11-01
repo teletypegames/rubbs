@@ -1510,6 +1510,75 @@ items = [S.heading("\e[1;32m\e[7m messages \e[27m"),
 S.new(session, items, width: 39, columns: 2, height: 3).run
 ```
 
+### The screen of a line-by-line C64 board (`BBS::Petscii::Screen`)
+
+What every line-by-line C64 board writes for itself: the 40×25 screen of one
+call and the ways such a board talks. The colours are two-letter ANSI
+constants in `BBS::Petscii::Colors` (`WH YE CY LG GR DG LB BL GN RD PU OR`,
+`RV`/`RO` reverse on/off), which the PETSCII line turns into the C64's own.
+
+```ruby
+module UI
+  module Petscii
+    BBS::Petscii::Colors.install(self)   # bare WH, LG … in every class nested here
+
+    class Screen < BBS::Petscii::Screen  # or: Screen = BBS::Petscii::Screen
+      def banner(text) = puts(" #{YE}#{text}#{LG}")   # the board's own methods
+    end
+  end
+end
+
+screen = UI::Petscii::Screen.new(runner.session)
+screen.title('the shelves', 'q: back')          # CLR + reversed title bar
+screen.say('A paragraph, wrapped to 38 columns.', GR)
+screen.page('chapter 1', lines, numbers: true)  # 20 lines a page, RETURN for more
+book = screen.pick('the shelves', books, &:title)   # numbered BBS::Selector.list
+key  = screen.actions(%w[r read], %w[q back])       # a row of keys, cursor menu
+name = screen.ask(' name> ', max: 20)               # BBS::Field
+text = screen.edit('', title: 'TIP', single_line: true, max: 200)   # BBS::Editor
+```
+
+`Colors.install(mod)` is needed for a namespace module because Ruby looks a
+bare constant up in the lexically enclosing modules, not in what they include;
+a class can simply `include BBS::Petscii::Colors` (the Screen does, so its
+subclasses have the names). On a C64 the screen makes titles, paragraphs and
+list labels `plain` (`BBS::Petscii.plain`: typography and accents become
+ASCII, so a line wraps where it is counted). `Screen.new(session, cols: 80,
+rows: 24)` serves a modern terminal too: there it clears with ANSI and leaves
+the text alone.
+
+### Block-font logos, goodbyes, Discord (`BBS::BlockFont`, `BBS::Goodbye`, `BBS::DiscordWebhook`)
+
+```ruby
+F = BBS::BlockFont
+F.half_blocks('WARP')                                   # 3 rows of ▀▄█ for a modern face
+F.half_blocks('TTG BBS', colors: [YE, OR, RD])           # each row in its colour
+F.petscii('SCRIPTORIUM', colors: [WH, WH, YE, YE, CY], glyphs: F::NARROW_I, indent: 2)
+F.rows('TTG WIKI', glyphs: F::WIDE_W)                    # the pixel rows, # and .
+
+BBS::Goodbye.modern(runner, title: 'Feedia', note: "The stories are their publishers'.")
+BBS::Goodbye.petscii(screen, title: 'feedia', color: YE, note: "The stories are their publishers'.")
+```
+
+`BlockFont` is a 3×5 font (A–Z, 0–9, space and `. , ! ? - + : ' /`); `glyphs:`
+lays other shapes over it. `Goodbye.modern` writes "Thanks for calling …",
+the note, "More of us: teletypegames.org" and NO CARRIER; `Goodbye.petscii`
+draws the reversed bar, the note (or what its block writes), then `+++`,
+`ATH0` and NO CARRIER a moment apart.
+
+`BBS::DiscordWebhook` is plain Ruby and loads alone (`require
+'bbs/discord_webhook'`), for a board's domain layer:
+
+```ruby
+discord = BBS::DiscordWebhook.new(ENV['DISCORD_WEBHOOK'], embeds: false, label: 'commodex: Discord')
+discord.post("🕹️ a tip from #{BBS::DiscordWebhook.escape(author)}")   # => Thread, or nil
+```
+
+It posts in a background thread with mentions off, cuts the content at `max:`
+(1500), lets at most `relay_max:` posts (20) out in `relay_window:` seconds
+(600; `relay_max: nil` for no limit), times out after `timeout:` (10 s), and
+warns instead of raising. An empty URL turns it off (`enabled?`).
+
 ### Two faces on one port (`BBS::Terminal`)
 
 A board with a modern face and a PETSCII face (a C64) asks the caller first, with the
@@ -1592,6 +1661,10 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `bbs/session.rb` | Telnet negotiation, mouse enable/disable, idle timer. |
 | `bbs/telnet.rb` | Telnet protocol, full key parsing, xterm SGR mouse, PETSCII mode. |
 | `bbs/petscii.rb` | PETSCII: the C64's colours and controls, the UTF-8/ANSI → PETSCII encoder, the C64's keys. |
+| `bbs/petscii/colors.rb`, `bbs/petscii/screen.rb` | The ANSI colour constants and the 40×25 screen of a line-by-line C64 board. |
+| `bbs/block_font.rb` | A 3×5 block font for logos: half blocks (modern) and reversed spaces (C64). |
+| `bbs/goodbye.rb` | The NO CARRIER screen of a call, modern and C64. |
+| `bbs/discord_webhook.rb` | Discord webhook posts, standalone: background thread, mentions off, relay limit. |
 | `bbs/terminal.rb` | The terminal question of a two-faced board: modern (ANSI) or C64 (PETSCII). |
 | `bbs/config.rb` | `BBS::Config` value object. |
 | `bbs/flow.rb`, `bbs/flow_runner.rb` | Flow DSL + interpreter. |

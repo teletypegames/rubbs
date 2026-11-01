@@ -255,6 +255,36 @@ module BBS
       base.length == 1 && base.ascii_only? ? char : '?'
     end
 
+    # Letters and signs the C64 has no glyph for, spelled in ASCII by
+    # ::plain where the Encoder would show a question mark.
+    SPELLED = { 'æ' => 'ae', 'Æ' => 'Ae', 'œ' => 'oe', 'Œ' => 'Oe', 'ø' => 'o', 'Ø' => 'O', 'ł' => 'l', 'Ł' => 'L',
+                'đ' => 'd', 'Đ' => 'D', 'þ' => 'th', 'Þ' => 'Th', 'ð' => 'd', 'Ð' => 'D', 'ı' => 'i',
+                '″' => '"', '′' => "'", '¡' => '!', '¿' => '?', '§' => 'S.', '¶' => '' }.freeze
+
+    # A character ::plain converts: anything but printable ASCII and ESC, so
+    # ANSI colours pass through.
+    UNPLAIN = /[^ -~\e]/
+
+    # Returns +text+ in characters the C64 shows one to a cell, so that it
+    # wraps where it is counted: the typography of GLYPHS that has an ASCII
+    # form becomes it (an ellipsis three dots, a dash a hyphen), the box
+    # drawing and block glyphs of the Encoder stay, the letters of SPELLED
+    # are spelled out, accented letters lose the accent, and anything else
+    # is a question mark. ANSI escape sequences are kept.
+    #
+    #   BBS::Petscii.plain('Ærø – “café”…')   # => 'Aero - "cafe"...'
+    def self.plain(text)
+      text.to_s.gsub(UNPLAIN) do |c|
+        glyph = GLYPHS[c]
+        next glyph if glyph&.ascii_only?
+        next c if glyph
+        next SPELLED[c] if SPELLED.key?(c)
+
+        base = c.unicode_normalize(:nfkd).gsub(COMBINING_MARK, '')
+        base.length == 1 && base.ascii_only? ? base : '?'
+      end
+    end
+
     # Turns what a BBS writes into PETSCII. It keeps the cursor's column, so
     # a line of exactly 40 characters, which the C64 wraps by itself, is not
     # followed by an empty one, and it keeps the state of an escape sequence
