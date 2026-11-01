@@ -98,6 +98,9 @@ module BBS
     #           column
     # [height]  the rows a page shows; default all the items, shared out
     #           among the +columns+
+    # [fill]    true to keep +height+ rows even when the items take fewer:
+    #           the rows under the last item stay blank, so the about and
+    #           status rows stand where a full page puts them
     # [columns] the columns of cells side by side, each as wide as the
     #           +width+ shared out
     # [index]   the item lit first; default the first selectable one
@@ -110,14 +113,14 @@ module BBS
     # [back]    what #run returns for RUN/STOP, ← or Esc
     # [colors]  colours over COLORS
     def initialize(session, items, width:, height: nil, columns: 1, index: nil, numbers: false, across: false,
-                   hint: nil, exits: {}, back: nil, colors: {})
+                   hint: nil, exits: {}, back: nil, colors: {}, fill: false)
       raise ArgumentError, 'a selector needs an item to select' unless items.any?(&:selectable?)
 
       @session = session
       @items   = items
       @width   = [width, 4].max
       @columns = across ? 1 : columns.clamp(1, items.size)
-      @height  = across ? items.size : (height || ((items.size + @columns - 1) / @columns)).clamp(1, items.size)
+      @height  = across ? items.size : (height || ((items.size + @columns - 1) / @columns)).clamp(1, fill && height ? height : items.size)
       @numbers = numbers
       @across  = across
       @hint    = hint

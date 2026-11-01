@@ -1506,8 +1506,11 @@ page (`2/3`) and the number being typed. `S.list` numbers the items: the
 digits typed light the item of that number and RETURN takes it. With more
 items than `height:` the menu turns into pages: the cursor runs on from one to
 the next, left and right (`+` and `-`) turn them. `exits: { 'x' => :value }`
-adds keys that return a value without an item. It raises IOError when the
-caller hangs up.
+adds keys that return a value without an item. `fill: true` keeps the
+`height:` rows when the items take fewer, so a full-screen menu keeps its
+about and status rows at the bottom (a status row coloured
+`colors: { hint: "\e[0;36m\e[7m" }` makes a footer bar). It raises IOError
+when the caller hangs up.
 
 With `columns: 2` (and a `height:`) the items run down the first column, then
 down the next; CRSR left and right go to the item beside. An empty
