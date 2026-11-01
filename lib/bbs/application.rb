@@ -486,14 +486,13 @@ module BBS
     # runs it with its doors.
     class Builder
       # [init_block]      the #init block, or +nil+
-      # [theme]           the BBS::Theme set with #theme, or +nil+
       # [menubar_block]   the #menubar block, or +nil+
       # [statusbar_hints] the #status_hint entries, as
       #                   <tt>[key, label, block, hidden]</tt> Arrays
       # [helper_module]   the Module the #helpers blocks define methods in
       # [window_specs]    Hash of the #window specs by name
       # [doors]           Hash of the #door objects by name
-      attr_reader :init_block, :theme, :menubar_block, :statusbar_hints,
+      attr_reader :init_block, :menubar_block, :statusbar_hints,
                   :helper_module, :window_specs, :doors
 
       # Creates an empty Builder; Application.define makes one.
@@ -543,24 +542,16 @@ module BBS
       # <tt>theme :dosnavigator</tt>, or either with a block that overrides
       # roles (evaluated in a ThemeBuilder; a block alone starts from
       # <tt>BBS.config.theme</tt>, or BBS::Theme.synchronet). Without
-      # arguments it returns the theme set so far. With no #theme call at all
-      # the application gets <tt>BBS.config.theme</tt> (see Application.new).
+      # arguments it returns the theme set so far (+nil+ before any). With no
+      # #theme call at all the application gets <tt>BBS.config.theme</tt>
+      # (see Application.new). Raises ArgumentError for a name that is not
+      # one of BBS::Theme::PRESETS, NoMethodError for a role the block sets
+      # that no preset knows.
       def theme(base = nil, &block)
         return @theme if base.nil? && block.nil?
 
-        if block
-          starting = case base
-                     when Symbol then Theme.public_send(base)
-                     when Theme  then base
-                     when nil    then BBS.config.theme || Theme.synchronet
-                     else             base
-                     end
-          builder = ThemeBuilder.new(starting)
-          builder.instance_eval(&block)
-          @theme = builder.build
-        else
-          @theme = base.is_a?(Symbol) ? Theme.public_send(base) : base
-        end
+        starting = base.nil? ? BBS.config.theme || Theme.synchronet : Theme.fetch(base)
+        @theme   = block ? ThemeBuilder.new(starting).tap { |b| b.instance_eval(&block) }.build : starting
       end
 
       # Sets the block run on the new application (with +self+ the
@@ -611,7 +602,7 @@ module BBS
           session: session, session_id: session_id, context: context,
           theme: @theme,
           helpers: @helper_module,
-          services: @services,
+          services: @services.dup.freeze,
           window_specs: @window_specs,
           doors: @doors,
           on_tick: @tick_block && ->(a) { a.instance_exec(&@tick_block) },
@@ -735,8 +726,9 @@ module BBS
       def app         = @app
     end
 
-    # DSL inside `theme do ... end`. Any unknown method call with one argument
-    # is treated as a style override (e.g. <tt>screen "\e[0m"</tt>).
+    # DSL inside <tt>theme do ... end</tt>. A call named after a style role
+    # (one of BBS::Theme.roles) with one argument is a style override (e.g.
+    # <tt>screen "\e[0m"</tt>).
     class ThemeBuilder
       # Starts from +base+, a BBS::Theme, with no overrides.
       def initialize(base)
@@ -745,9 +737,10 @@ module BBS
       end
 
       # Replaces the base theme with +theme+, a BBS::Theme or the name of one
-      # of its presets (a Symbol such as +:dosnavigator+).
+      # of its presets (a Symbol such as +:dosnavigator+). Raises
+      # ArgumentError for an unknown name.
       def inherit(theme)
-        @base = theme.is_a?(Symbol) ? Theme.public_send(theme) : theme
+        @base = Theme.fetch(theme)
       end
 
       # Overrides the style of role +key+ with +value+, an SGR escape
@@ -761,13 +754,16 @@ module BBS
         @overrides.empty? ? @base : @base.merge(@overrides)
       end
 
-      # True for every name: any method can be a style override.
-      def respond_to_missing?(_name, _include_private = false) = true
+      # True for the style roles (BBS::Theme.roles), the names
+      # #method_missing takes.
+      def respond_to_missing?(name, include_private = false) = Theme.roles.include?(name) || super
 
-      # Treats <tt>role value</tt> as <tt>style(role, value)</tt>. Calls with
-      # another number of arguments raise NoMethodError.
+      # Treats <tt>role value</tt> as <tt>style(role, value)</tt> for a style
+      # role of BBS::Theme.roles. Any other name, or another number of
+      # arguments, raises NoMethodError.
       def method_missing(name, *args)
-        return @overrides[name] = args.first if args.size == 1
+        return @overrides[name] = args.first if args.size == 1 && Theme.roles.include?(name)
+
         super
       end
     end

@@ -20,8 +20,27 @@ module BBS
   #
   #   BBS::Theme.synchronet.merge(window_bg: "\e[41m")
   class Theme
+    # The names of the presets, each a class method returning its Theme.
+    PRESETS = %i[synchronet nortoncommander dosnavigator neumanntronics mono].freeze
+
     # The style Hash (role Symbol => SGR String) and the theme's name Symbol.
     attr_reader :styles, :name
+
+    # Returns the preset called +name+ (a Symbol or String from PRESETS), or
+    # +name+ itself when it is a Theme already. Raises ArgumentError
+    # ("unknown theme") for any other name.
+    #
+    #   BBS::Theme.fetch(:dosnavigator)   # => the DOS Navigator preset
+    def self.fetch(name)
+      return name if name.is_a?(Theme)
+      raise ArgumentError, "unknown theme: #{name.inspect}" unless PRESETS.include?(name.to_s.to_sym)
+
+      public_send(name.to_sym)
+    end
+
+    # Returns the names of the style roles any preset defines, an Array of
+    # Symbol.
+    def self.roles = @roles ||= PRESETS.flat_map { |preset| fetch(preset).styles.keys }.uniq.freeze
 
     # Creates a theme called +name+ from +styles+, a Hash of role Symbols to
     # SGR Strings.

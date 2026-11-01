@@ -73,7 +73,7 @@ module BBS
     private
 
     def field(prompt)
-      Field.ask(@session, prompt).to_s.strip
+      Field.ask(@session, prompt, max: Telnet::MAX_LINE).to_s.strip
     rescue IOError
       nil
     end
@@ -242,7 +242,7 @@ module BBS
       :halt
     rescue => e
       warn "BBS call error: #{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}"
-      write "#{Ansi::CRLF}  #{Ansi::BRIGHT_RED}Error: #{e.message}#{Ansi::RESET}#{Ansi::CRLF * 2}"
+      write "#{Ansi::CRLF}  #{STYLES[:error]}Something went wrong.#{Ansi::RESET}#{Ansi::CRLF * 2}"
       nil
     end
 

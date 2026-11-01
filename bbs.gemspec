@@ -8,7 +8,7 @@ Gem::Specification.new do |s|
   s.bindir      = 'bin'
   s.executables = ['art-preview']
   s.require_paths = ['lib']
-  s.required_ruby_version = '>= 3.0'
+  s.required_ruby_version = '>= 3.2'
   s.homepage    = 'https://wiki.teletypegames.org/engines/rubbs'
   s.metadata    = {
     'source_code_uri' => 'https://git.teletypegames.org/engines/rubbs',

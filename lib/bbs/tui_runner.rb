@@ -17,7 +17,9 @@ module BBS
 
     # Runs the TUI until it halts or the line drops. A key read times out
     # after the session's +idle_seconds+ (BBS.config.idle_seconds when the
-    # session has none) and dispatches an +:idle+ key like any other. Clears the screen and shows the cursor on the way out.
+    # session has none) and dispatches an +:idle+ key like any other. An error raised by
+    # a binding is logged on stderr and the page goes on. Clears the screen
+    # and shows the cursor on the way out.
     #
     # Returns +nil+.
     def run
@@ -30,17 +32,25 @@ module BBS
       loop do
         context.do_render
         key = @session.readkey(timeout: idle)
-        break if key.nil?
-        if key == :idle
-          break if context.dispatch_key(:idle) == :halt
-          next
-        end
-        break if context.dispatch_key(key) == :halt
+        break if key.nil? || dispatch(context, key) == :halt
       end
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       nil
     ensure
       @session.write("#{Ansi::SHOW_CURSOR}#{Ansi::CLEAR}")
+    end
+
+    private
+
+    # One binding's fault is logged and the page goes on; a dropped line
+    # ends the run.
+    def dispatch(context, key)
+      context.dispatch_key(key)
+    rescue IOError, SystemCallError
+      raise
+    rescue StandardError => e
+      warn "BBS TUI error: #{e.class}: #{e.message}\n#{e.backtrace.first(Application::BACKTRACE_LINES).join("\n")}"
+      nil
     end
 
     # The +self+ of every TUI block: holds the page state in instance
