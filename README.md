@@ -1579,6 +1579,191 @@ It posts in a background thread with mentions off, cuts the content at `max:`
 (600; `relay_max: nil` for no limit), times out after `timeout:` (10 s), and
 warns instead of raising. An empty URL turns it off (`enabled?`).
 
+### Graphics screens and art (`BBS::Petscii::Canvas`, `BBS::Art`, `BBS::Petscii::CanvasMenu`, `BBS::Widgets::Scene`, `BBS::Season`)
+
+The pieces of a picture-led board (the TTG Clubhouse): drawings kept as
+readable YAML, drawn in 256-colour ANSI on the modern face and as raw PETSCII
+in the C64's uppercase/graphics set on the other; a cursor menu on the C64
+picture; and the time of day and the season for choosing a picture's layers.
+
+**`BBS::Petscii::Canvas`** is the C64 screen as 40×25 cells in the
+uppercase/graphics set (the suits, balls, rounded corners, diagonals and
+quarter blocks live there). It turns into raw PETSCII — the whole screen once
+(`frame`), then only what changes (`span`, `patch`, `update`) — sent with
+`session.write_raw`, past the session's lowercase encoder. Cells are drawn
+from Unicode (`GLYPHS`, `GLYPHS_REVERSED`: `█ ▀ ▐ ◢ ◣` are reversed codes),
+colours are codes (`Canvas::GREEN`) or names (`:light_blue`).
+
+```ruby
+C = BBS::Petscii::Canvas
+canvas = C.new
+canvas.text(0, 1, 'TTG CLUBHOUSE', :yellow)
+canvas.text(2, 1, '╭──╮', :light_blue)
+canvas.text(3, 1, '█▀▀█', :orange)                 # reversed glyphs work too
+session.write_raw(canvas.frame)                    # the whole screen
+
+before = canvas.dup
+canvas.text(2, 2, '●', :red)
+session.write_raw(canvas.update(before))           # a patch: only the cell that changed
+```
+
+`patch(positions)` steps the cursor from cell to nearest cell; `update`
+takes the cheaper of that and a whole frame. Aim for about 1.2 KB a screen
+and under 200 bytes an animation step. `feed(bytes)` plays PETSCII onto a
+canvas the way the C64's screen editor prints it — for tests: what the caller
+sees after your bytes.
+
+**`BBS::Art`** loads a drawing from YAML. `chars` is the picture, `colors`
+a palette letter a cell (`.` = none), `reverse` optional `R`s, `background`
+optional (cp437 only: the second colour of a half block), `hotspots` the cells
+the board fills from its data, `layers` the files stacked on it (snow,
+pumpkin…). Every row is exactly `size[0]` wide; write the grids with `|2` so
+a row that starts with spaces keeps them. A PETSCII art for the C64:
+
+```yaml
+# art/house.yml
+size: [20, 6]
+charset: petscii-upper     # only glyphs the uppercase set shows
+palette:                   # C64 colour names, 256-colour indexes or '#rrggbb'
+  y: yellow
+  r: red
+  b: brown
+  g: dark grey
+  w: white
+chars: |2
+       ◢████◣    ●    
+      ◢██████◣        
+      │ ▒  ▒ │        
+      │ ▒  █ │  TTG   
+  ▁▁▁▁│▁▁▁▁█▁│▁▁▁▁▁▁▁ 
+                      
+colors: |2
+  .....rrrrrr....y....
+  ....rrrrrrrr........
+  ....b.y..y.b........
+  ....b.y..b.b..www...
+  ggggbggggbgbggggggg.
+  ....................
+hotspots:
+  window_1: [6, 2]         # [col, row], 0-based
+  window_2: [9, 2]
+  sign: [14, 3, 3, 1]      # [col, row, width, height]
+layers: [snow]             # art/snow.yml
+```
+
+```yaml
+# art/snow.yml: a layer; spaces are transparent, 'at' places it
+size: [10, 1]
+at: [4, 0]
+palette:
+  w: white
+chars: |2
+   ▄▄▄▄▄▄   
+colors: |2
+  .wwwwww...
+```
+
+And a cp437 sign for the modern face, with backgrounds:
+
+```yaml
+size: [24, 4]
+charset: cp437
+palette: { y: yellow, o: 208, n: '#203060', w: white }
+chars: |2
+  ╔══════════════════════╗
+  ║ ▄▀▀▄ TTG CLUBHOUSE ☼ ║
+  ║ ▀▄▄▀  open tonight   ║
+  ╚══════════════════════╝
+colors: |2
+  oooooooooooooooooooooooo
+  oyyyyywwwwwwwwwwwwwwwyyo
+  oyyyyyyyyyyyyyyyyyyyyyyo
+  oooooooooooooooooooooooo
+background: |2
+  ........................
+  .nnnnnnnnnnnnnnnnnnnnnn.
+  .nnnnnnnnnnnnnnnnnnnnnn.
+  ........................
+hotspots:
+  tonight: [8, 2, 13, 1]
+```
+
+```ruby
+house = BBS::Art.load('art/house.yml').with(*BBS::Season.now.layers)  # only the layers it lists
+session.write(house.ansi)                        # modern: 256-colour ANSI lines
+house.draw(frame, x: 1, y: 2)                    # … or into a BBS::FrameBuffer
+session.write_raw(house.petscii)                 # C64: a whole frame
+house.draw_canvas(canvas, row: 1, col: 10)       # … or onto a canvas
+house.hotspot(:window_1)                         # => Art::Hotspot col=6 row=2 …
+```
+
+A mistake raises `BBS::Art::Error` with the file, the grid, the row and the
+column: a row of the wrong width, a letter not in the palette, a glyph the
+charset cannot show (`Canvas.glyph?` for PETSCII, code page 437 for cp437), a
+hotspot outside the art.
+
+**`BBS::Petscii::CanvasMenu`** is `BBS::Selector` on a canvas: the same items
+and keys (CRSR, RETURN, an item's key, RUN/STOP or ← to go back, numbers,
+columns, pages, the about and hint rows), drawn in the uppercase set with the
+lit item a reversed bar in its own colour; each move goes out as a patch of
+the cells that changed (about 140 bytes for a 16-item, two-column menu).
+
+```ruby
+S = BBS::Selector
+items = [S.item('CORK BOARD', key: 'm', value: :boards, color: :light_blue, about: 'READ AND POST'),
+         S.item('GAMES ROOM', key: 'r', value: :doors, color: :orange),
+         S.item('LEAVE',      key: 'q', value: :quit)]
+menu = BBS::Petscii::CanvasMenu.new(session, items, canvas: canvas, row: 12, col: 1, width: 36,
+                                    columns: 2, hint: 'CRSR: CHOOSE  RETURN: OPEN', idle: 0.5) do
+  smoke.step(canvas)                 # bytes for an animation step while the caller thinks
+end
+menu.paint
+session.write_raw(canvas.frame)      # the picture with the menu on it
+choice = menu.run(drawn: true)       # without drawn: it paints and sends its rows itself
+```
+
+**`BBS::Widgets::Scene`** is an Art as a widget of the modern face: the art,
+then each hotspot filled by its block at every render (a String with ANSI
+colours, lines for a taller hotspot, or nil to leave the art). On a terminal
+smaller than the art it is cut to its bounds; `crop: false` draws nothing
+instead, `fits?` tells.
+
+```ruby
+scene = BBS::Widgets::Scene.new(art: house, align: :center)
+scene.fill(:window_1) { node_busy?(1) ? "\e[38;5;220m▓" : nil }
+scene.fill(:sign)     { |spot| "\e[1;37m#{inside_count}".ljust(spot.width) }
+```
+
+**`BBS::Season.now(tz: 'Europe/Budapest', at: Time.now, jam: nil)`** is the
+time of day (`:dawn`, `:day`, `:dusk`, `:night`, by the sun at `latitude:` /
+`longitude:`, Budapest by default) and the layers in effect: `:snow`
+(December–February), `:pumpkin` (24–31 October), `:fireworks` (31 December
+and New Year's Day until 06:00), `:bunting` (the days of `jam:`, a Range of
+Date). It is pure: pass `at:` in tests. EU time zones and fixed offsets
+(`'+01:00'`) work without gems; other IANA names need `tzinfo`.
+
+```ruby
+s = BBS::Season.now(jam: Date.new(2027, 1, 8)..Date.new(2027, 1, 10))
+s.time_of_day          # => :night
+s.layers               # => [:snow]
+art = BBS::Art.load("art/house_#{s.night? ? 'night' : 'day'}.yml").with(*s.layers)
+```
+
+**`art-preview`** (an executable of the gem; `bin/art-preview` in a checkout)
+checks a drawing and shows it while it is drawn:
+
+```
+art-preview art/house.yml                   # ANSI here, then size, palette, hotspots, PETSCII bytes
+art-preview art/house.yml -l snow -s        # a layer stacked, the hotspots marked
+art-preview art/house.yml --hex             # the PETSCII frame as a hex dump
+art-preview art/house.yml --petscii h.seq   # the raw frame, e.g. for a C64 terminal program
+art-preview art/house.yml --png h.png       # a C64 screenshot of the frame (VICE's character ROM)
+```
+
+`--png` plays the frame onto a canvas and draws it with the C64 character
+ROM VICE installs (or `--chargen FILE` / `$C64_CHARGEN`); the ROM is not
+shipped with the gem.
+
 ### Two faces on one port (`BBS::Terminal`)
 
 A board with a modern face and a PETSCII face (a C64) asks the caller first, with the
@@ -1662,6 +1847,10 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `bbs/telnet.rb` | Telnet protocol, full key parsing, xterm SGR mouse, PETSCII mode. |
 | `bbs/petscii.rb` | PETSCII: the C64's colours and controls, the UTF-8/ANSI → PETSCII encoder, the C64's keys. |
 | `bbs/petscii/colors.rb`, `bbs/petscii/screen.rb` | The ANSI colour constants and the 40×25 screen of a line-by-line C64 board. |
+| `bbs/petscii/canvas.rb`, `bbs/petscii/canvas_menu.rb` | The C64 screen as cells in the graphics set (raw PETSCII, patches) and a `Selector` drawn on it. |
+| `bbs/art.rb`, `bbs/widgets/scene.rb` | YAML drawings (ANSI and PETSCII, layers, hotspots) and the art as a modern-face widget. |
+| `bbs/season.rb` | Time of day, season and holiday layers. |
+| `bin/art-preview` | Checks and shows an art: ANSI, PETSCII bytes, a C64 PNG. |
 | `bbs/block_font.rb` | A 3×5 block font for logos: half blocks (modern) and reversed spaces (C64). |
 | `bbs/goodbye.rb` | The NO CARRIER screen of a call, modern and C64. |
 | `bbs/discord_webhook.rb` | Discord webhook posts, standalone: background thread, mentions off, relay limit. |

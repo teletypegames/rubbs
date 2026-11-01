@@ -1,10 +1,12 @@
 Gem::Specification.new do |s|
   s.name        = 'bbs'
-  s.version     = '0.29.1'
+  s.version     = '0.30.0'
   s.summary     = 'Universal telnet BBS server library'
   s.license     = 'MIT'
   s.author      = 'Zsolt Tasnadi'
-  s.files       = Dir['lib/**/*.rb']
+  s.files       = Dir['lib/**/*.rb'] + ['bin/art-preview']
+  s.bindir      = 'bin'
+  s.executables = ['art-preview']
   s.require_paths = ['lib']
   s.required_ruby_version = '>= 3.0'
   s.homepage    = 'https://wiki.teletypegames.org/engines/rubbs'

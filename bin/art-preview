@@ -1,0 +1,129 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# art-preview: checks and shows a BBS::Art YAML drawing while it is drawn.
+#
+#   art-preview art/house.yml                     # ANSI on this terminal + a summary
+#   art-preview art/house.yml -l snow,pumpkin     # with layers stacked
+#   art-preview art/house.yml --hex               # the PETSCII frame as a hex dump
+#   art-preview art/house.yml --petscii house.seq # the raw PETSCII frame to a file
+#   art-preview art/house.yml --png house.png     # a C64 screenshot of the PETSCII frame
+#
+# Run it from the gem (bundle exec art-preview) or straight from a rubbs
+# checkout (bin/art-preview). Exits 1 with the mistake when the art is wrong.
+
+$LOAD_PATH.unshift File.expand_path('../lib', __dir__)
+require 'bbs'
+require 'optparse'
+require 'zlib'
+
+# The C64 character ROMs that VICE installs, tried in order for --png.
+CHARGEN_PATHS = [
+  ENV.fetch('C64_CHARGEN', nil),
+  '/opt/homebrew/share/vice/C64/chargen-901225-01.bin',
+  '/usr/local/share/vice/C64/chargen-901225-01.bin',
+  '/usr/share/vice/C64/chargen-901225-01.bin',
+  '/usr/lib/vice/C64/chargen',
+  '/usr/share/vice/C64/chargen'
+].compact.freeze
+
+def screen_code(code)
+  case code
+  when 0x40..0x5f, 0xa0..0xbf then code - 0x40
+  when 0x60..0x7f then code - 0x20
+  when 0xc0..0xfe then code - 0x80
+  when 0xff then 0x5e
+  else code
+  end
+end
+
+def png(path, pixels, width, height)
+  chunk = lambda do |type, data|
+    [data.bytesize].pack('N') + type + data + [Zlib.crc32(type + data)].pack('N')
+  end
+  raw = pixels.each_slice(width).map { |row| "\0".b + row.flatten.pack('C*') }.join
+  File.binwrite(path, "\x89PNG\r\n\x1a\n".b + chunk.call('IHDR', [width, height, 8, 2, 0, 0, 0].pack('NNCCCCC')) +
+                      chunk.call('IDAT', Zlib::Deflate.deflate(raw)) + chunk.call('IEND', ''))
+end
+
+# A screenshot of what a C64 shows after +bytes+: the canvas the bytes
+# play onto, drawn with the character ROM at +scale+.
+def screenshot(bytes, path, chargen, scale)
+  rom = File.binread(chargen)
+  screen = BBS::Petscii::Canvas.new.feed(bytes)
+  base = screen.charset == :lower ? 2048 : 0
+  bg = [0, 0, 0]
+  w = 320 * scale
+  pixels = Array.new(200 * scale) { Array.new(w, bg) }
+  BBS::Petscii::Canvas::ROWS.times do |row|
+    BBS::Petscii::Canvas::COLS.times do |col|
+      cell = screen.cell(row, col)
+      fg = BBS::Petscii::Canvas::RGB.fetch(cell.color || BBS::Petscii::Canvas::LIGHT_BLUE)
+      glyph = rom.byteslice(base + ((screen_code(cell.code) + (cell.rvs ? 0x80 : 0)) * 8), 8).bytes
+      glyph.each_with_index do |bits, y|
+        8.times do |x|
+          next if bits[7 - x].zero?
+
+          scale.times { |sy| scale.times { |sx| pixels[(((row * 8) + y) * scale) + sy][(((col * 8) + x) * scale) + sx] = fg } }
+        end
+      end
+    end
+  end
+  png(path, pixels.flatten(1), w, 200 * scale)
+end
+
+options = { layers: [], scale: 2 }
+parser = OptionParser.new do |o|
+  o.banner = 'usage: art-preview ART.yml [options]'
+  o.on('-l', '--layers NAMES', 'stack these layers (comma separated)') { |v| options[:layers] = v.split(',') }
+  o.on('-a', '--all-layers', 'stack every layer the art lists') { options[:all] = true }
+  o.on('-s', '--hotspots', 'mark the hotspots in the ANSI picture') { options[:spots] = true }
+  o.on('-q', '--quiet', 'no ANSI picture, only the summary') { options[:quiet] = true }
+  o.on('--hex', 'hex dump of the PETSCII frame') { options[:hex] = true }
+  o.on('--petscii FILE', 'write the raw PETSCII frame to FILE') { |v| options[:seq] = v }
+  o.on('--png FILE', 'write a C64 screenshot of the PETSCII frame') { |v| options[:png] = v }
+  o.on('--chargen FILE', 'the C64 character ROM for --png (default: VICE\'s, or $C64_CHARGEN)') { |v| options[:chargen] = v }
+  o.on('--scale N', Integer, 'pixel scale of --png (default 2)') { |v| options[:scale] = v }
+end
+parser.parse!
+abort parser.banner unless ARGV.size == 1
+
+begin
+  art = BBS::Art.load(ARGV[0], layers: options[:all] ? :all : options[:layers])
+rescue BBS::Art::Error, SystemCallError => e
+  abort "art-preview: #{e.message}"
+end
+
+unless options[:quiet]
+  lines = art.ansi_lines
+  if options[:spots]
+    fb = BBS::FrameBuffer.new(art.cols, art.rows)
+    art.draw(fb)
+    art.hotspots.each_value do |h|
+      h.height.times { |r| fb.move(h.col + 1, h.row + r + 1); fb.write('*' * h.width, sgr: "\e[0;30;105m") }
+    end
+    lines = fb.diff(BBS::FrameBuffer.new(art.cols, art.rows)).then { |d| ["\e[2J#{d}\e[#{art.rows + 1};1H"] }
+  end
+  puts lines
+end
+
+puts "#{ARGV[0]}: #{art.cols}×#{art.rows} #{art.charset}, palette #{art.palette.keys.join}, " \
+     "layers #{art.layers.empty? ? '-' : art.layers.join(',')}" \
+     "#{art.stacked.empty? ? '' : " (stacked: #{art.stacked.join(',')})"}"
+art.hotspots.each_value { |h| puts "  hotspot #{h.name}: col #{h.col}, row #{h.row}, #{h.width}×#{h.height}" }
+
+if art.petscii?
+  frame = art.petscii
+  puts "  PETSCII frame: #{frame.bytesize} bytes"
+  frame.bytes.each_slice(16).with_index { |b, i| puts format('  %04x  %s', i * 16, b.map { |x| format('%02x', x) }.join(' ')) } if options[:hex]
+  File.binwrite(options[:seq], frame) && puts("  wrote #{options[:seq]}") if options[:seq]
+  if options[:png]
+    chargen = options[:chargen] || CHARGEN_PATHS.find { |p| File.file?(p) }
+    abort 'art-preview: no C64 character ROM: install VICE or pass --chargen' unless chargen
+
+    screenshot(frame, options[:png], chargen, options[:scale])
+    puts "  wrote #{options[:png]}"
+  end
+elsif options[:hex] || options[:seq] || options[:png]
+  warn 'art-preview: --hex, --petscii and --png are for petscii-upper art'
+end
