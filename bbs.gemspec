@@ -2,7 +2,7 @@
 
 Gem::Specification.new do |s|
   s.name        = 'bbs'
-  s.version     = '1.0.0'
+  s.version     = '1.0.1'
   s.summary     = 'Universal telnet BBS server library'
   s.license     = 'MIT'
   s.author      = 'Zsolt Tasnadi'
@@ -17,5 +17,6 @@ Gem::Specification.new do |s|
     'documentation_uri' => 'https://wiki.teletypegames.org/rdoc/bbs/latest/'
   }
   s.add_dependency 'artii', '~> 2.1'
+  s.add_dependency 'csv', '~> 3.3'
   s.add_dependency 'sqlite3', '~> 2.1'
 end
