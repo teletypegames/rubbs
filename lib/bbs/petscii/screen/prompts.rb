@@ -7,6 +7,8 @@ module BBS
       # (#ask), a text (#edit), and the menus, which are BBS::Selector
       # configurations (#pick, #menu, #actions).
       module Prompts
+        include Colors
+
         # Writes +prompt+ on a new line and waits for one of +keys+ (lowercase
         # letters, or key symbols); ← and RUN/STOP (Esc) give +back+. Echoes
         # the letter taken in capitals and ends the line.
