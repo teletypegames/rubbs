@@ -44,8 +44,9 @@ class AsciiBridgeTest < Minitest::Test
     session.define_singleton_method(:petscii?) { true }
     board, far = UNIXSocket.pair
     link = BBS::Gateway::Link.new(session, board, terminal: 'XTERM-256COLOR', bridge: BBS::Gateway::AsciiBridge.new)
-    assert_equal 'ANSI', link.instance_variable_get(:@terminal)
-    refute link.instance_variable_get(:@petscii)
+    negotiation = link.instance_variable_get(:@negotiation)
+    assert_equal 'ANSI', negotiation.instance_variable_get(:@terminal)
+    refute negotiation.instance_variable_get(:@petscii)
   ensure
     [board, far].each { |io| io&.close }
     session&.fake_line&.close
