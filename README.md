@@ -151,8 +151,9 @@ The `Server` reads it once at boot; per-session state lives on `BBS::Session`.
 | `mouse` | `false` | If true, sessions enable xterm SGR mouse reporting on negotiate. |
 | `mouse_on_connect` | `true` | With `mouse`, whether reporting starts on connect. `false` leaves it to the flow (`session.enable_mouse`), e.g. after asking whether the caller has a C64, which would print the escape sequence. Applications and doors still switch it on and off. |
 | `idle_seconds` | `nil` | Hard idle-timeout of the Application loop and the TUI. It is also each connection's socket read/write timeout (900 s when `nil`), so a line that stays silent at a login prompt or inside a door is dropped too. Every session starts with this value; `session.idle_seconds = 3600` changes it for one caller (the loop and the socket timeout alike). |
-| `max_sessions` | `ENV["BBS_MAX_SESSIONS"] \|\| 100` | Connections served at once; one more is told to try later and closed, and the server logs `BBS busy: …`. |
-| `max_sessions_per_ip` | `ENV["BBS_MAX_SESSIONS_PER_IP"] \|\| 6` | Connections served at once from one address; one more is told so and closed (`BBS crowded: …`). Private, loopback and link-local peers (bbs-web proxying many callers from the Docker network) are not limited. |
+| `max_sessions` | `ENV["BBS_MAX_SESSIONS"] \|\| 100` | Connections served at once; one more is told to try later and closed, and the server logs `<log_tag>: busy: …`. |
+| `max_sessions_per_ip` | `ENV["BBS_MAX_SESSIONS_PER_IP"] \|\| 6` | Connections served at once from one address; one more is told so and closed (`<log_tag>: crowded: …`). Private, loopback and link-local peers (bbs-web proxying many callers from the Docker network) are not limited. |
+| `log_tag` | `ENV["BBS_LOG_TAG"] \|\| "bbs"` | What every `BBS.log` line starts with: the board's technical name, `feedia-bbs`. |
 | `ai_concurrency` | `2` | `BBS::AI::Client` requests running at once in the process; the next waits up to 5 s, then gets `BBS::AI::Busy`. |
 | `user_agent` | `"rubbs/<version> (+https://teletypegames.org)"` | The `User-Agent` of `BBS::HTTP` requests. |
 | `theme` | `nil` | Default `BBS::Theme` for Applications. |
@@ -166,6 +167,32 @@ Boots a `BBS::Server` (one thread per client). Each thread:
 2. Performs Telnet negotiation (SGA, ECHO, NAWS — terminal size).
 3. Enables mouse reporting if `BBS.config.mouse` (and `mouse_on_connect`).
 4. Runs `FlowRunner.new(session, session_id, BBS.config.flow).run`.
+
+### Logging and background work: `BBS.log`, `BBS.background`
+
+Every line the library and the board write to the log goes through one
+method, so the lines of eleven boards in one log read the same:
+
+```ruby
+BBS.configure { |c| c.log_tag = 'feedia-bbs' }
+BBS.log('catalog refresh', 'done in 3.2 s')   # feedia-bbs: catalog refresh: done in 3.2 s
+BBS.log('catalog refresh', error)             # feedia-bbs: catalog refresh: SocketError: …
+```
+
+Work out of the callers' way (an index loaded at boot, a catalog refreshed
+every hour) runs in a `BBS::Background` thread: an error is logged and the
+block tried again after `retry_after` seconds, the pause doubling up to
+`max_retry`, so a service that is down costs a few log lines, not a crashed
+board or a busy loop.
+
+```ruby
+BBS.background('index') { wiki.load_index }                     # until it succeeds once
+BBS.background('catalog refresh', every: 3600) { library.refresh }
+BBS.background('canvas writer', every: 5, retry_after: 5) { canvas.flush }
+```
+
+Both return the `Thread`; `BBS::Background.new(…).run` runs the same work in
+the calling thread (a test, a command-line tool).
 
 ### `BBS::Server`
 
@@ -1193,6 +1220,10 @@ USERS.delete(sid)
 - A `.csv` path means the `.sqlite3` file beside it (`data/users.sqlite3`).
   The CSV file of an earlier version is imported on first use, when the table
   is empty, in one transaction, and renamed to `users.csv.imported`.
+  `USERS.open!` does it at once, at boot. A row that is not CSV, has more
+  fields than the header or no `session_id` does not stop the import: it is
+  skipped, written under the header to `users.csv.rejected` for the sysop,
+  and counted in the log line.
 - Headers `session_id` and `timestamp` are filled automatically when present;
   a header added later becomes a new column.
 - Values are cleaned with `BBS::Text.clean`; `find` / `all` return Hashes.
@@ -1200,7 +1231,9 @@ USERS.delete(sid)
 ### `BBS::HTTP`
 
 Bounded requests to the services a board shows. Every failure raises
-`BBS::HTTP::Error`, whose message names the address without its query string.
+`BBS::HTTP::Error`, whose message names the address without its query string;
+a body over `max_bytes` raises its subclass `BBS::HTTP::TooLarge`, before a
+byte is read when the `Content-Length` says so.
 
 ```ruby
 response = BBS::HTTP.get('https://en.wikipedia.org/w/api.php?action=query&…',
@@ -1222,6 +1255,11 @@ BBS::HTTP.post(SPARQL_URL, body: URI.encode_www_form(query: q),
 | `redirects` | 3 (`post`: 0) | followed to `http`/`https` only |
 | `public_only` | `true` | refuses hosts that resolve to loopback, private, link-local, CGNAT, ULA and other non-public ranges (`BBS::Address.public?`); the vetted address is the one connected to, Host and SNI kept |
 | `user_agent` | `BBS.config.user_agent` | |
+| `to` | `nil` | an IO a 2xx body is written to as it comes (`body` is `nil` then), for a download too big for the memory; still capped by `max_bytes` |
+
+```ruby
+File.open(path, 'wb') { |file| BBS::HTTP.get(url, to: file, max_bytes: 64 * 1024 * 1024) }
+```
 
 ### `BBS::Cache`
 
@@ -1233,7 +1271,13 @@ ARTICLES.fetch([lang, title]) { BBS::HTTP.get(url).body }
 TTL, least-recently-used eviction, a byte cap (`bytesize`, or `size: ->(v) { … }`),
 one computation per key (callers missing the same key at once wait for it and
 share its value or error), and the expired value served when the computation
-raises. `delete(key)`, `clear`, `size`.
+raises. `delete(key)`, `clear`, `size`. `refresh(key) { … }` computes the
+value anew and replaces the kept one only when the block succeeds, so a
+background refresh never empties the cache:
+
+```ruby
+BBS.background('catalog', every: 3600) { CATALOG.refresh(:all) { repository.load } }
+```
 
 ### `BBS::RateLimit`
 
@@ -1248,11 +1292,60 @@ A sliding window per key, thread-safe; quiet keys are forgotten.
 `caller_key(session)` is the caller's IP address on the internet, and
 `line:<session id>` behind a local proxy (bbs-web), whose address is shared.
 
+- Several limits at once (the caller's and the whole board's) are checked
+  with `BBS::RateLimit.allow_all?([[PER_CALLER, key], [PER_BOARD, :all]])`: the
+  event is counted in every limit or, when one has no room, in none.
+- `room?(key)` checks and `record(key)` counts apart, for an event counted
+  only when it went wrong:
+
+  ```ruby
+  return locked_out unless LOGINS.room?(key)
+  LOGINS.record(key) unless password_ok?(name, password)
+  ```
+
+- With a `BBS::SQLite` the events are kept in its `rate_limit_events` table
+  under the limit's name, so a lockout outlasts a restart:
+  `BBS::RateLimit.new(limit: 10, per: 600, store: DB, name: 'logins')`.
+
+### `BBS::Wikipedia`
+
+Wikipedia's Action API as a board asks it: through `BBS::HTTP`, with the
+board's User-Agent (Wikipedia may answer 403 without one), paced so that all
+callers together send at most `rate` requests a second (a request that would
+wait more than `max_wait`, 3 s, for its turn is not sent). The answer comes
+parsed; a failure raises `BBS::Wikipedia::Error`, a `BBS::HTTP::Error`.
+
+```ruby
+WIKIPEDIA = BBS::Wikipedia.new(user_agent: 'Alexandria BBS (+https://teletypegames.org)', rate: 5)
+WIKIPEDIA.get('en', action: 'query', list: 'search', srsearch: 'Commodore 64')
+# => { "query" => { "search" => [...] } }   (format=json, formatversion=2 added)
+```
+
+### Where an error is handled: repositories raise, services decide
+
+A board's layers handle a failure of a service in one place:
+
+- A **repository** (`lib/domain/repository`) talks to the outside world and
+  lets its failures go up: `BBS::HTTP::Error` (and `BBS::Wikipedia::Error`, its
+  subclass) as it comes, or a domain error of the board for what is wrong with
+  the answer itself. It does not rescue them into `nil` or an empty list, and
+  writes no text for the caller.
+- A **service** decides what the caller sees: it rescues those errors,
+  writes one `BBS.log` line, and returns what the UI shows (a cached answer, an
+  empty result, a message of its own).
+- The **UI** never rescues `BBS::HTTP::Error`; it shows what the service gave.
+
+So an error message with a URL or a token never reaches a caller, and each
+failure is logged once.
+
 ### `BBS::Text` and `BBS::Address`
 
 - `BBS::Text.clean(text, keep_newlines: true)`: valid UTF-8, without C0
-  controls (tab kept, LF kept unless `keep_newlines: false`), DEL, C1 and the
-  bidirectional override/isolate characters. `BBS::Text.printable?(char)` is
+  controls (tab kept, LF kept), DEL, C1 and the bidirectional
+  override/isolate characters; with `keep_newlines: false` each line end
+  becomes a space, so the words of two lines stay apart.
+  `BBS::Text.line(text)` is one clean line: whitespace runs (line ends and
+  tabs too) one space, no space at either end. `BBS::Text.printable?(char)` is
   the rule of every input (`Event#char?`, `TextBuffer`).
 - `BBS::Address.local?(ip)` (private, loopback, link-local) and
   `BBS::Address.public?(ip)` (on the public internet).
@@ -1379,9 +1472,18 @@ goes on to that board as it is, and comes back when it hangs up. The other
 board runs its own code on its own server; this one only carries the bytes.
 
 ```ruby
-FEEDIA = BBS::Gateway.new(host: 'host.docker.internal', port: 2327, name: 'Feedia')
+FEEDIA = BBS::Gateway.new(host: 'host.docker.internal', port: 2327, name: 'Feedia', public_only: false)
 door :feedia, FEEDIA, label: '&Feedia'
 ```
+
+- The host is resolved once (an IPv4 address when it has one) and the call
+  goes to that address, which must be on the public internet
+  (`BBS::Address.public?`) unless the gateway is made with
+  `public_only: false`. So a listing that names `127.0.0.1`, a private or a
+  link-local address cannot turn the board into a relay into its own network:
+  the caller is told the board may not be called from here, and the Report's
+  `error` is a `BBS::Gateway::Refused`. A board that dials its neighbours
+  (`host.docker.internal`, another container) says `public_only: false`.
 
 - Towards the other board the gateway is the telnet client: it answers the
   negotiation (DO for ECHO and SGA, WILL for SGA, NAWS and TTYPE, a refusal for
@@ -1402,6 +1504,7 @@ door :feedia, FEEDIA, label: '&Feedia'
   (`connect_timeout:` sets the wait, 5 s by default) and reads how it went from
   the `BBS::Gateway::Report` its block gets: `connected`, the `error` that kept
   it from connecting (`SocketError` for a name that does not resolve,
+  `BBS::Gateway::Refused` for an address that is not public,
   `Errno::ECONNREFUSED`, a timeout), the `address` called, `connect_seconds`,
   the bytes `received` from the other board and who `hung_up`. The block runs
   when the call is over, also when the caller hung up inside.
@@ -1494,13 +1597,13 @@ session.readkey(timeout: 1.0)
 session.write(bytes)
 session.write_raw(bytes)  # as they are, not PETSCII-encoded (file transfers)
 session.enable_mouse / disable_mouse
-session.settle(timeout: 1.5) # wait for the telnet answers (NAWS), drop typeahead
+session.settle(timeout: 1.5) # wait for the telnet answers (NAWS), drop typeahead; self or nil
 session.petscii!         # from here on the line speaks PETSCII to a C64
 session.petscii?
 ```
 
 Telnet options negotiated on connect: `SGA` (suppress go-ahead), `ECHO`
-(server-side echo), `NAWS` (terminal size, clamped to 20–500 × 8–200). A line
+(server-side echo), `NAWS` (terminal size, clamped to 20–255 × 8–100). A line
 end goes before them: the UltimateTerm of the C64 Ultimate takes a line that
 starts with a telnet command for ASCII with ANSI and translates every byte
 from ASCII to PETSCII (CLR becomes nothing, letters swap case both ways), and
@@ -1512,6 +1615,16 @@ and ends on CR, LF, CR LF or CR NUL. `readkey` returns one `:enter` for
 CR LF / CR NUL, a lone Esc after 0.15 s, and a UTF-8 character (`'á'`) as a
 one-character String. `read_raw_byte(timeout)` is for binary protocols
 (ZMODEM, XMODEM): one byte as an Integer, telnet commands taken out.
+
+Telnet commands are taken out of the byte stream by `BBS::Telnet::Parser`, a
+small state machine (a doubled IAC is a data 255, a subnegotiation keeps at
+most 64 bytes); the same parser reads both ways of a `BBS::Gateway`:
+
+```ruby
+parser = BBS::Telnet::Parser.new { |command, argument| … }   # WILL/WONT/DO/DONT + option, or SB + bytes
+parser.parse(chunk)   # => the data bytes of chunk
+parser.feed(byte)     # => byte, or nil when it belongs to a command
+```
 
 ### PETSCII: a Commodore 64 on the line (`BBS::Petscii`)
 
@@ -1971,7 +2084,7 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `lib/bbs.rb` | Public surface: `BBS.configure`, `BBS.config`, `BBS.start`. |
 | `bbs/server.rb` | TCP accept loop, one thread per client, on-session-end hook. |
 | `bbs/session.rb` | Telnet negotiation, mouse enable/disable, idle timer. |
-| `bbs/telnet.rb` | Telnet protocol, full key parsing, xterm SGR mouse, PETSCII mode. |
+| `bbs/telnet.rb`, `bbs/telnet/` | Telnet line I/O: `Codes`, the IAC `Parser`, `Keys` and `Escapes` (key parsing), `Mouse` (xterm SGR), `LineInput` (readline), PETSCII mode. |
 | `bbs/petscii.rb` | PETSCII: the C64's colours and controls, the UTF-8/ANSI → PETSCII encoder, the C64's keys. |
 | `bbs/petscii/colors.rb`, `bbs/petscii/screen.rb` | The ANSI colour constants and the 40×25 screen of a line-by-line C64 board. |
 | `bbs/petscii/canvas.rb`, `bbs/petscii/canvas_menu.rb` | The C64 screen as cells in the graphics set (raw PETSCII, patches) and a `Selector` drawn on it. |
@@ -2001,16 +2114,18 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `bbs/theme.rb` | Style palette (synchronet, nortoncommander, dosnavigator, neumanntronics, mono). |
 | `bbs/markdown.rb` | Markdown → ANSI line array renderer. |
 | `bbs/event.rb` | Unified key + mouse event objects. |
-| `bbs/store.rb` | Thread-safe upsert-by-session table on SQLite (imports the CSV file of earlier versions). |
+| `bbs/store.rb`, `bbs/store/csv_import.rb` | Thread-safe upsert-by-session table on SQLite (imports the CSV file of earlier versions, broken rows set aside). |
 | `bbs/sqlite.rb` | One shared SQLite connection: WAL, lock, query helpers, `user_version` migrations. |
 | `bbs/http.rb` | Bounded HTTP GET/POST: deadline, body cap, safe redirects, public addresses only. |
 | `bbs/cache.rb` | TTL + LRU + byte-capped cache with single-flight and stale-on-error. |
-| `bbs/rate_limit.rb` | Sliding-window rate limit per key; `caller_key(session)`. |
+| `bbs/rate_limit.rb` | Sliding-window rate limit per key, several at once, in memory or SQLite; `caller_key(session)`. |
+| `bbs/wikipedia.rb` | Wikipedia's Action API, paced, parsed. |
+| `bbs/background.rb` | `BBS.background`: work in a thread with log and retry. |
 | `bbs/text.rb`, `bbs/address.rb` | Control-free text; local / public IP addresses. |
 | `bbs/fake_os.rb` | Character-mode OS simulator: boot script + command shell. |
 | `bbs/door.rb` | Doors: hand the line to a program and take it back. |
-| `bbs/gateway.rb` | Telnet gateway doors: the line handed on to another board. |
-| `bbs/zmodem.rb` | ZMODEM send: file downloads to the caller's terminal. |
+| `bbs/gateway.rb`, `bbs/gateway/` | Telnet gateway doors: the line handed on to another board (`Link`, `Negotiation`, `AsciiBridge`), public addresses only by default. |
+| `bbs/zmodem.rb`, `bbs/zmodem/` | ZMODEM send: file downloads to the caller's terminal (`Frames`, `Input`, `Output`, `Stream`, `Sender`). |
 | `bbs/xmodem.rb` | XMODEM / XMODEM-CRC / XMODEM-1K send: file downloads for a Commodore 64. |
 | `bbs/ai.rb` | AI characters: persona file, OpenAI-compatible streaming client, chat with memory and fallback, typewriter output. |
 | `bbs/banner.rb`, `bbs/renderer.rb` | FIGlet + ERB. |
