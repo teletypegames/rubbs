@@ -2,6 +2,7 @@
 
 require_relative 'widget'
 require_relative 'container'
+require_relative 'hotkey'
 
 module BBS
   # The stock widgets: labels, buttons, text fields, check boxes, lists and

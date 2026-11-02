@@ -25,13 +25,10 @@ module BBS
 
       # The hotkey letter after the <tt>&</tt> in the label, downcased, or
       # +nil+ when the label has none.
-      def hotkey
-        idx = @label.index('&')
-        idx && idx + 1 < @label.length ? @label[idx + 1].downcase : nil
-      end
+      def hotkey = Hotkey.letter(@label)
 
       # The label without its <tt>&</tt> marker.
-      def display_label = @label.sub('&', '')
+      def display_label = Hotkey.plain(@label)
 
       # Draws the button as <tt>[ label ]</tt> centred on the first row of
       # the bounds into +frame+, in the focused, normal or disabled button
@@ -71,11 +68,7 @@ module BBS
         focused ? style(:button_focused) : style(:button)
       end
 
-      # The label split round its hotkey: [before, hotkey, after], or +nil+.
-      def hotkey_parts
-        idx = @label.index('&')
-        idx && [@label[0, idx], @label[idx + 1].to_s, @label[(idx + 2)..] || '']
-      end
+      def hotkey_parts = Hotkey.split(@label)
 
       def put_with_hotkey(frame, col)
         left, hot, right = hotkey_parts
