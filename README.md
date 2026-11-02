@@ -27,36 +27,38 @@ Connect with `telnet localhost 2323`.
 2. [Installation & quick start](#2-installation--quick-start)
 3. [Server lifecycle](#3-server-lifecycle)
 4. [The Flow layer](#4-the-flow-layer)
-5. [The TUI layer](#5-the-tui-layer)
-6. [The Application layer](#6-the-application-layer)
-7. [Widgets](#7-widgets)
-8. [Windows](#8-windows)
-9. [Pre-built window types (`BBS::Windows`)](#9-pre-built-window-types-bbswindows)
-10. [Dialogs](#10-dialogs)
-11. [Menubar, Statusbar, Focus](#11-menubar-statusbar-focus)
-12. [Theming](#12-theming)
-13. [FrameBuffer & drawing primitives](#13-framebuffer--drawing-primitives)
-14. [Markdown renderer](#14-markdown-renderer)
-15. [Banner, ASCII art & ERB screens](#15-banner-ascii-art--erb-screens)
-16. [Persistence and shared blocks (`Store`, `SQLite`, `HTTP`, `Cache`, `RateLimit`, `Text`)](#16-persistence-and-shared-blocks-store-sqlite-http-cache-ratelimit-text)
-17. [AI characters (`BBS::AI`)](#17-ai-characters-bbsai)
-18. [Doors (`BBS::Door`)](#18-doors-bbsdoor) — telnet gateways (`BBS::Gateway`) and file downloads (`BBS::Zmodem`, `BBS::Xmodem`)
-19. [Telnet, sessions & input model](#19-telnet-sessions--input-model)
-20. [Source layout](#20-source-layout)
+5. [The Application layer](#5-the-application-layer)
+6. [Widgets](#6-widgets)
+7. [Windows](#7-windows)
+8. [Pre-built window types (`BBS::Windows`)](#8-pre-built-window-types-bbswindows)
+9. [Dialogs](#9-dialogs)
+10. [Menubar, Statusbar, Focus](#10-menubar-statusbar-focus)
+11. [Theming and the palette](#11-theming-and-the-palette)
+12. [FrameBuffer & ANSI text](#12-framebuffer--ansi-text)
+13. [Markdown renderer](#13-markdown-renderer)
+14. [Banner & ERB screens](#14-banner--erb-screens)
+15. [Persistence and shared blocks (`Store`, `SQLite`, `HTTP`, `Cache`, `RateLimit`, `Text`)](#15-persistence-and-shared-blocks-store-sqlite-http-cache-ratelimit-text)
+16. [AI characters (`BBS::AI`)](#16-ai-characters-bbsai)
+17. [Doors (`BBS::Door`)](#17-doors-bbsdoor) — telnet gateways (`BBS::Gateway`) and file downloads (`BBS::Zmodem`, `BBS::Xmodem`)
+18. [Telnet, sessions & input model](#18-telnet-sessions--input-model)
+19. [Source layout](#19-source-layout)
+
+Upgrading from 0.x: see [UPGRADING.md](UPGRADING.md).
 
 ---
 
 ## 1. Concepts
 
-rubbs ships three interaction layers, from simplest to richest. Layers can be
-mixed in a single session — typically `Flow` for login, then `Application`
-for the main shell.
+rubbs ships one way to build each kind of screen. A `Flow` is the glue of a
+call (login, then the board, then the goodbye); a modern face is an
+`Application`, a line-by-line or C64 face a `Petscii::Screen` with its
+`Selector` menus.
 
 | Layer | What it is | When to use |
 |---|---|---|
 | `BBS::Flow` | Line-oriented declarative dialogue (ask / say / menu / persist) | Login, registration, simple wizards |
-| `BBS::TUI` | Single-screen page router with frame-buffer delta rendering | Single-purpose full-screen UIs |
 | `BBS::Application` | Widget framework: Menubar, Window, Button, TextInput, ListBox, … | Multi-window Synchronet-style BBSes |
+| `BBS::Petscii::Screen` + `BBS::Selector` | A line-by-line screen (a C64's 40×25, or a modern terminal) with cursor menus | The PETSCII face of a board |
 
 Four building blocks sit beside them:
 
@@ -69,11 +71,11 @@ Four building blocks sit beside them:
 | `BBS::Terminal` | The first question of a two-faced board: modern (ANSI/xterm) or PETSCII (a C64) | One port for both faces (`Terminal.flow`) |
 
 The server boots a Telnet TCP listener, hands each connection a `Session`,
-which runs the configured `Flow`. Inside that flow you can hand off to a
-`TUI` or `Application`, then return to the flow when the user exits.
+which runs the configured `Flow`. Inside that flow you hand off to an
+`Application` or a `Petscii::Screen`, then return to the flow when the user exits.
 
 ```
-TCPServer → Session → FlowRunner ─┬→ TUIRunner
+TCPServer → Session → FlowRunner ─┬→ Petscii::Screen + Selector
                                   ├→ Application#run ⇄ Door#run (FakeOS, …)
                                   └→ FlowRunner (sub-flow, e.g. confirm-block)
 ```
@@ -150,7 +152,7 @@ The `Server` reads it once at boot; per-session state lives on `BBS::Session`.
 | `port` | `ENV["BBS_PORT"] \|\| 2323` | TCP port for `BBS::Server`. |
 | `mouse` | `false` | If true, sessions enable xterm SGR mouse reporting on negotiate. |
 | `mouse_on_connect` | `true` | With `mouse`, whether reporting starts on connect. `false` leaves it to the flow (`session.enable_mouse`), e.g. after asking whether the caller has a C64, which would print the escape sequence. Applications and doors still switch it on and off. |
-| `idle_seconds` | `nil` | Hard idle-timeout of the Application loop and the TUI. It is also each connection's socket read/write timeout (900 s when `nil`), so a line that stays silent at a login prompt or inside a door is dropped too. Every session starts with this value; `session.idle_seconds = 3600` changes it for one caller (the loop and the socket timeout alike). |
+| `idle_seconds` | `nil` | Hard idle-timeout of the Application loop. It is also each connection's socket read/write timeout (900 s when `nil`), so a line that stays silent at a login prompt or inside a door is dropped too. Every session starts with this value; `session.idle_seconds = 3600` changes it for one caller (the loop and the socket timeout alike). |
 | `max_sessions` | `ENV["BBS_MAX_SESSIONS"] \|\| 100` | Connections served at once; one more is told to try later and closed, and the server logs `<log_tag>: BBS busy: …`. |
 | `max_sessions_per_ip` | `ENV["BBS_MAX_SESSIONS_PER_IP"] \|\| 6` | Connections served at once from one address; one more is told so and closed (`<log_tag>: BBS crowded: …`). Private, loopback and link-local peers (bbs-web proxying many callers from the Docker network) are not limited. |
 | `log_tag` | `ENV["BBS_LOG_TAG"] \|\| "bbs"` | What every `BBS.log` line starts with: the board's technical name, `feedia-bbs`. |
@@ -207,38 +209,28 @@ whatever ends it.
 ## 4. The Flow layer
 
 `BBS::Flow.define { … }` builds an immutable, line-oriented dialogue. Each
-step is interpreted by `BBS::FlowRunner` with access to a shared `@ctx` hash
-keyed by Symbol field names.
+step is a small object (`BBS::Flow::Steps`) that `BBS::FlowRunner` runs with
+a shared context hash keyed by Symbol field names. Most boards use a Flow as
+glue only: a `call` step that runs the board, then one for the goodbye.
 
 ### Step reference
 
 | Step | Signature | Effect |
 |---|---|---|
-| `screen` | `screen :name, **vars` | Render `<name>.erb` from the flow's `screens_dir`, or from `BBS.config.screens_dir` (vars resolved against `@ctx` if Symbols). |
+| `screen` | `screen :name, **vars` | Render `<name>.erb` from the flow's `screens_dir`, or from `BBS.config.screens_dir` (vars resolved against the context if Symbols). |
 | `banner` | `banner text, style: :success` | Box-drawing banner. |
 | `big_banner` | `big_banner text, style:, font:` | FIGlet (Artii) ASCII art header. `font:` defaults to `'slant'`. |
 | `say` | `say text, style: :muted` | Print one line, then blank line. |
-| `text` | `text content = nil, style:` / `text(style:) { ... }` | Print text; block receives `@ctx`. |
-| `line` | `line color: :muted` | Horizontal rule. |
-| `section` | `section title, color: :confirm` | "┌─ Title ─────┐" header. |
-| `body` | `body(width:, indent:) { ... }` | Word-wrapped paragraph body; block returns Markdown-ish text. |
-| `rows` | `rows(empty:) { ... }` | Block returns rows (strings or arrays) printed one per line. |
-| `table` | `table { ... }` | Block returns `[[label, value], …]`; printed as label/value pairs. |
-| `output` | `output { ... }` | Raw write; block returns a String written verbatim. |
-| `set` | `set :name, value` | Assign `@ctx[name]`. |
-| `ask` | `ask :name, prompt:, transform:, validate:` | Read line into `@ctx[:name]`. `transform` is `:upcase`/`:downcase`/`Proc`. `validate` is `:email`/`:non_empty`. |
+| `text` | `text content = nil, style:` / `text(style:) { \|ctx\| ... }` | Print one line; a block gets the context. |
+| `ask` | `ask :name, prompt:, transform:, validate:` | Read a line into the context. `transform` is `:upcase`/`:downcase`/`Proc`. `validate` is `:email`/`:non_empty`/`Proc`. On a C64 the answer is typed in a `BBS::Field`. |
 | `persist` | `persist :a, :b, store: STORE` | Upsert listed fields into a `BBS::Store`, keyed by `session_id`. |
 | `pause` | `pause msg, seconds: 1.0` | Print message and sleep. |
-| `wait_enter` | `wait_enter prompt:` | Block until ENTER. |
 | `gate` | `gate(denied:) { \|ctx\| ... }` | If block returns falsy, print denied msg and halt. |
 | `confirm` | `confirm msg, denied:` | Yes/No prompt; halt if "no". |
-| `confirm` | `confirm(msg, denied:) { ... }` | Yes/No prompt; on "yes" run sub-flow. |
-| `menu` | `menu(prompt, loop: false) { option … }` | Numbered options. Each option is a sub-flow; `loop: true` re-shows after each selection until `exit_menu`. |
-| `exit_menu` | `exit_menu` | Return to the enclosing menu's caller. |
-| `fetch` | `fetch :name, loading: 'Loading…' { \|ctx\| ... }` | Show spinner-style line, store block result into `@ctx[:name]`. |
-| `pick` | `pick from:, prompt:, empty:, item:, hint:` | Show numbered list of `@ctx[from]`; on selection, store as `@ctx[:picked]` and run sub-flow. |
-| `call` | `call { \|ctx, runner\| ... }` | Arbitrary code; runner exposes `write`/`readline(mask:)`/`session`. Return `:halt` to terminate. |
-| `tui` | `tui DEFINITION` | Hand off to a `BBS::TUI`. |
+| `confirm` | `confirm(msg, denied:) { ... }` | Yes/No prompt; on "yes" run the steps of the block. |
+| `menu` | `menu(prompt, loop: false) { option … }` | A numbered `BBS::Selector` of the options, `prompt` on its status row. Each option is a list of steps; `loop: true` re-shows after each selection until `exit_menu`; Esc leaves. |
+| `exit_menu` | `exit_menu` | Leave the enclosing menu. |
+| `call` | `call { \|ctx, runner\| ... }` | Arbitrary code; runner exposes `write`/`readline(mask:)`/`session`/`context`. Return `:halt` to terminate. |
 | `app` | `app DEFINITION` | Hand off to a `BBS::Application`. |
 
 ### A flow's own screens
@@ -253,17 +245,13 @@ context; a door uses it to pass the caller's name in.
 
 ### Available styles for `style:` arguments
 
-`:success :muted :error :info :prompt :confirm :cyan :magenta :blue :yellow :white :green :red`
+`:success :muted :error :info :prompt` (`BBS::FlowRunner::STYLES`, colours of
+the `BBS::Ansi` palette).
 
 ### Validation
 
 `ask … validate: :email` rejects with a built-in message and halts. `:non_empty`
 rejects empties. Pass a custom Proc for ad-hoc rules (must return truthy).
-
-### Sub-flows
-
-`menu`, `confirm { … }` and `pick { … }` open nested `Flow` blocks evaluated
-on a fresh `Flow` instance and executed with the same `@ctx`.
 
 ### Example — login + menu
 
@@ -276,136 +264,17 @@ BBS::Flow.define do
   gate(denied: 'Banned user.') { |ctx| !banned?(ctx[:user]) }
 
   menu 'Choose:', loop: true do
-    option 'Read messages' do
-      fetch(:msgs) { |ctx| MsgStore.for(ctx[:user]) }
-      pick from: :msgs, prompt: 'Pick #:', empty: 'No mail.',
-           item: ->(m, i) { "#{i}. #{m.subject}" } do
-        text { |ctx| ctx[:picked].body }
-        wait_enter
-      end
-    end
-    option 'Quit' do
-      call { :halt }
-    end
+    option('Read messages') { call { |ctx, runner| Messages.new(runner.session, ctx[:user]).run } }
+    option('Quit') { exit_menu }
   end
 end
 ```
 
 ---
 
-## 5. The TUI layer
+## 5. The Application layer
 
-A single-screen page router with frame-buffer delta rendering. Use it when
-you want a custom dashboard or interactive screen without the overhead of
-the full widget framework.
-
-```ruby
-DASH = BBS::TUI.define do
-  start :main
-
-  init do
-    @selection = 0
-  end
-
-  helpers do
-    def palette = %w[red yellow green]
-  end
-
-  chrome do
-    bar y: 1, content: ' my-bbs ', style: :info
-    bar y: term_rows, content: ' F10=quit ', style: :muted
-  end
-
-  page :main do
-    enter do
-      @items = fetch_items
-    end
-
-    nav :menu, size: -> { @items.size }
-
-    render do
-      list @items, x: 4, y: 3, selected: @selection
-    end
-
-    key(:enter) { @selected = @items[@selection]; go :detail }
-    key(:f10)   { :halt }
-  end
-
-  page :detail do
-    nav :scroll, content: -> { @body }, window: -> { term_rows - 4 }
-
-    enter { @scroll = 0; @body = render_body(@selected) }
-    render do
-      text @body.lines[@scroll, term_rows - 4]&.join, x: 2, y: 2
-    end
-    key(:escape) { go :main }
-  end
-end
-
-# Inside a Flow:
-BBS::Flow.define { tui DASH }
-```
-
-### `BBS::TUI.define`
-
-| DSL method | Purpose |
-|---|---|
-| `start :page` | Initial page (default `:idle`). |
-| `init { ... }` | Runs once before the first render, in the page context. |
-| `chrome { ... }` | Drawn on every render, before the active page. |
-| `helpers { ... }` | Module-eval'd; methods become callable inside pages. |
-| `page :name { ... }` | Define a page. |
-
-### `BBS::TUI::Page` DSL
-
-| Method | Purpose |
-|---|---|
-| `enter { ... }` | Runs when entering the page (`go :name`). |
-| `render { ... }` | Re-evaluated every paint. |
-| `key(k) { ... }` | Bind a single key (Symbol or 1-char String). |
-| `printable { \|ch\| ... }` | Catch printable chars without explicit binding. |
-| `mouse { \|m\| ... }` | Mouse event handler. |
-| `any_key { \|k\| ... }` | Catch-all fallback (after printable). |
-| `nav :menu, size:` | Install up/down on `@menu_selection` (wraps). |
-| `nav :cycle` | Up/down on `@item_selection` over `@items` (wraps). |
-| `nav :list, window:` | Up/down/page-up/page-down/home/end on `@item_selection` + `@scroll` over `@items`. |
-| `nav :scroll, content:, window:` | Same keys for `@scroll` over a content list (no selection). |
-
-Block arguments to `nav` are `Proc`s evaluated inside the page context, e.g.
-`window: -> { term_rows - 6 }`. Plain values are wrapped in a Proc.
-
-Returning `:halt` from any binding ends the TUI.
-
-### `BBS::TUIRunner::Context` — drawing primitives
-
-Inside `chrome`/`enter`/`render`/keybindings the `self` is a Context with:
-
-| Method | Purpose |
-|---|---|
-| `term_cols`, `term_rows` | Negotiated terminal size (NAWS). |
-| `clear` | Wipe next frame. |
-| `at(x, y)` | Position cursor. |
-| `text(content, x:, y:, style:)` | Write a string (ANSI passthrough). |
-| `bar(y:, content:, width:, style:)` | Full-width band of `style` with text. |
-| `box(x:, y:, width:, height:, title:, style:, background:) { \|ix, iy, iw, ih\| ... }` | Double-line frame; yields inner area. |
-| `float(title:, width:, height:, style:, background:) { ... }` | Centered `box`. |
-| `fill(x:, y:, width:, height:, background:)` | Solid block. |
-| `screen_fill(background:)` | Repaint whole screen background. |
-| `list(items, x:, y:, selected:, style:, highlight:)` | Bullet list with optional selection marker. |
-| `list_view(items, x:, y:, height:, scroll:, selected:, label:, hint:, hint_y:, empty:, style:, highlight:)` | Scrollable list with selected hint line. |
-| `wordwrap(text, width)` | Strip simple Markdown and wrap. |
-| `go(page)` | Switch page (calls its `enter`). |
-| `reload` | Re-enter the current page. |
-
-Both `style:` and `background:` accept either a `FlowRunner::STYLES` Symbol
-(`:success`, `:prompt`, …) or a raw ANSI sequence. Background colors map
-through `:black :red :green :yellow :blue :cyan :white`.
-
----
-
-## 6. The Application layer
-
-`BBS::Application` is the full TUI: a widget event loop with menubar, status
+`BBS::Application` is the windowed face: a widget event loop with menubar, status
 bar, a switchable window stack, mouse, focus traversal, themes and per-window ticks.
 
 ### Top-level build with `Application.define`
@@ -510,7 +379,7 @@ without one.
 
 ---
 
-## 7. Widgets
+## 6. Widgets
 
 All widgets inherit from `BBS::Widget` (see `bbs/widget.rb`). They have:
 
@@ -566,66 +435,13 @@ current row.
 Read-only scrollable text. `lines:` is `Array<String>` (ANSI passthrough).
 Up/Down/PgUp/PgDn/Home/End scrolls. Built-in right-side scrollbar.
 
-### `Widgets::ProgressBar`
-`value:`, `max:`, `label:`. Renders `██░░░` filled to ratio with optional
-centered label.
-
-### `Widgets::Spinner`
-`label:` — braille spinner. Call `tick` to advance frame.
-
 ### Containers
 
 `Container#add(child)`, `#remove`, `#clear`, `#find(id)`, `#walk { |w| … }`,
-`#focusable_descendants`, `#hit_test(x, y)`. Theme propagates to children.
+`#focusable_descendants`, `#hit_test(x, y)`. Theme propagates to children. A
+`BBS::Window` is the container a board lays its widgets out in.
 
-| Container | Purpose |
-|---|---|
-| `Widgets::HBox(gap: 1)` | Horizontal split. Equal widths, minus `gap` per child. |
-| `Widgets::VBox(gap: 0)` | Vertical split. |
-| `Widgets::Panel(title:, box_style: :single\|:double)` | Bordered container; `layout` gives each child the area inside the border; renders box first then children. |
-
-### `Widgets::AnsiArt`
-
-CP437 / ANSI-art viewer.
-
-```ruby
-art = BBS::Widgets::AnsiArt.from_file('art/welcome.ans',
-                                       align: :center, valign: :middle)
-art.layout(1, 2, 80, 22)
-panel.add(art)
-
-# Or a random pick from a directory:
-BBS::Widgets::AnsiArt.random('art/')
-BBS::Widgets::AnsiArt.from_string("hello", align: :left)
-```
-
-Constructors: `from_file(path, **opts)`, `from_string(text, **opts)`,
-`random(dir, **opts)` (falls back to a built-in card if the dir is missing),
-`default_lines` (the fallback card).
-
-Encoding:
-- `.ans` / `.asc` / `.nfo` → decoded as IBM437 → UTF-8.
-- `.ansi` / `.txt` → assumed UTF-8.
-- Anything else → UTF-8, falling back to IBM437.
-- Trailing SAUCE metadata (`\x1A SAUCE…`) is stripped.
-
-`AnsiArt.sauce(path)` reads that record: a `Sauce` struct with `title`,
-`author`, `group` and `date` (`YYYY-MM-DD`), or `nil` when the file has none.
-
-Options: `align: :left|:center|:right`, `valign: :top|:middle|:bottom`,
-`fill_parent: true` (default — re-bounds to parent each render). The art is
-placed as one block, by its widest line, so its lines keep their columns.
-
----
-
-`AnsiArt.view(session, lines, title: nil)` shows art on the whole screen, the
-way an art viewer of the old boards did: centred when it fits, scrolled with
-the arrows, PgUp/PgDn and Home/End when it is taller than the screen, and a
-status line with the title at the bottom; any other key or a click returns.
-Run it inside `app.with_line { |session| … }`, which repaints the
-application afterwards.
-
-## 8. Windows
+## 7. Windows
 
 `BBS::Window < Container` — a top-level container with title bar, shadow,
 close gadget, and its own `FocusManager`. Windows stack; the top one is the
@@ -721,7 +537,7 @@ order they were last used, Turbo Vision style:
 
 ---
 
-## 9. Pre-built window types (`BBS::Windows`)
+## 8. Pre-built window types (`BBS::Windows`)
 
 Higher-level windows you can open imperatively with `.open(app, …)`, or
 register declaratively with the window DSL.
@@ -929,7 +745,7 @@ Open with `app.open_window(:name, key: value, …)`. Extras flow into `ctx`.
 
 ---
 
-## 10. Dialogs
+## 9. Dialogs
 
 Quick imperative helpers in `BBS::Dialogs`:
 
@@ -952,7 +768,7 @@ described in [§9](#9-pre-built-window-types-bbswindows).
 
 ---
 
-## 11. Menubar, Statusbar, Focus
+## 10. Menubar, Statusbar, Focus
 
 ### `BBS::Menubar`
 
@@ -1016,9 +832,11 @@ Key behavior:
 
 ---
 
-## 12. Theming
+## 11. Theming and the palette
 
-A `BBS::Theme` is just a frozen Hash of role-name → ANSI SGR string.
+A `BBS::Theme` maps style roles to ANSI SGR strings. The presets are data,
+one Hash each in `BBS::Theme::PRESETS`, and `BBS::Theme.fetch(name)` builds
+one (`Theme.synchronet` and the others are shorthands for it).
 
 Built-in presets:
 
@@ -1032,8 +850,11 @@ Built-in presets:
 
 ### Style keys
 
+`BBS::Theme::ROLES`, the roles every preset defines (a theme with any other
+role is refused):
+
 `screen`, `text`, `text_dim`, `text_bright`, `label`, `accent`, `success`,
-`warning`, `error`,
+`error`,
 `window_bg`, `window_border`, `window_title`, `window_title_focused`,
 `window_text`, `window_shadow`,
 `menubar`, `menubar_hotkey`, `menubar_selected`, `menubar_sel_hot`,
@@ -1042,9 +863,8 @@ Built-in presets:
 `statusbar`, `statusbar_key`,
 `button`, `button_focused`, `button_hotkey`, `button_disabled`,
 `input`, `input_focused`, `input_label`,
-`listbox`, `listbox_selected`, `listbox_focused`, `listbox_header`,
-`scrollbar`, `scrollbar_thumb`,
-`check_on`, `check_off`, `reset`.
+`listbox`, `listbox_selected`, `listbox_focused`,
+`scrollbar`, `scrollbar_thumb`.
 
 ### Customising
 
@@ -1060,10 +880,8 @@ theme :nortoncommander do
   style :screen, "\e[40m"            # explicit form
 end
 
-# 3. Build from scratch
-theme BBS::Theme.new(:mine, {
-  screen: "\e[40m", text: "\e[0;37;40m", # …
-})
+# 3. Build from scratch (every role of BBS::Theme::ROLES)
+theme BBS::Theme.new(:mine, BBS::Theme::PRESETS[:mono].merge(screen: "\e[40m"))
 
 # 4. Merge in code
 custom = BBS::Theme.synchronet.merge(accent: "\e[1;36;40m")
@@ -1072,11 +890,23 @@ custom = BBS::Theme.synchronet.merge(accent: "\e[1;36;40m")
 `Theme#style(key)` / `Theme#[](key)` look up a SGR. Widgets call
 `style(:role)` which resolves through the widget's `theme` or its parent's.
 
+### The palette
+
+Every colour outside a theme comes from one palette, `BBS::Ansi`: `GREY`
+(plain text), `DIM_GREY`, `DARK_GREY`, `WHITE`, `BRIGHT_RED`, `GREEN`,
+`BRIGHT_GREEN`, `YELLOW`, `BRIGHT_YELLOW`, `BLUE`, `BRIGHT_BLUE`, `MAGENTA`,
+`CYAN`, `BRIGHT_CYAN`, plus `REVERSE`/`REVERSE_OFF` and `RESET`.
+`BBS::Petscii::Colors` are the C64 names of the same sequences (`WH YE CY LG
+GR DG LB BL GN RD PU OR`, `RV RO`), and a component takes a role Hash of
+them: `BBS::Selector::COLORS` (`text key bar heading about hint`), the
+Flow's `FlowRunner::STYLES`, a FakeOS's `colors`. On a canvas the same roles
+turn into C64 codes (`BBS::Petscii::Canvas.color(YE) == Canvas::YELLOW`).
+
 ---
 
-## 13. FrameBuffer & drawing primitives
+## 12. FrameBuffer & ANSI text
 
-`BBS::FrameBuffer` is the offscreen grid used by TUI and Application. Cells
+`BBS::FrameBuffer` is the offscreen grid an Application draws into. Cells
 hold `(char, sgr)` pairs; `diff` computes the minimal ANSI byte stream to
 transform one frame into another (only changed cells get redrawn).
 
@@ -1087,7 +917,6 @@ fb = BBS::FrameBuffer.new(cols, rows)
 fb.move(col, row)                              # 1-based
 fb.write('Hello', sgr: "\e[1;33m")
 fb.write_ansi("\e[1;33mbright\e[0m  normal")   # embedded SGR adds to base_sgr, a reset returns to it
-fb.write_ansi(text, cursor: true)              # also honours \e[row;colH (TUI pages only)
 fb.fill(x:, y:, width:, height:, sgr:, char: ' ')
 fb.hline(x:, y:, length:, char: '─', sgr:)
 fb.vline(x:, y:, length:, char: '│', sgr:)
@@ -1097,16 +926,18 @@ fb.shadow(x:, y:, width:, height:, sgr:)
 delta = fb.diff(prev_fb)                       # ANSI byte stream
 ```
 
-Class helpers for ANSI-aware string handling:
+The one set of ANSI text helpers of rubbs (all built on `BBS::Ansi::CSI_RE`):
 
+- `BBS::FrameBuffer.plain(text)` — the text without its escape sequences.
 - `BBS::FrameBuffer.visible_width(text)` — length ignoring SGR escapes.
 - `BBS::FrameBuffer.clip_ansi(text, max_width)` — truncate keeping styles intact.
 - `BBS::FrameBuffer.wrap_ansi(text, width)` — word-wrap with SGR state
-  carried across wrapped lines.
+  carried across wrapped lines: the one word-wrap (`Petscii::Screen#wrap`,
+  the dialogs and the Markdown renderer use it).
 
 ---
 
-## 14. Markdown renderer
+## 13. Markdown renderer
 
 `BBS::Markdown.to_lines(text, width:, theme:)` → Array of ANSI strings,
 one per terminal line. Feed it into a `BBS::Widgets::ScrollView` or an
@@ -1131,7 +962,7 @@ background.
 
 ---
 
-## 15. Banner, ASCII art & ERB screens
+## 14. Banner & ERB screens
 
 ### `BBS::Banner`
 
@@ -1161,20 +992,7 @@ The ERB context exposes color helpers (`green`, `yellow`, `cyan`, `white`,
 and `big_banner(text, font:)`. Instance variables are populated from
 `vars` (resolved against `@ctx` if the value is a Symbol).
 
-### `BBS::Color`
-
-Tiny helper for ad-hoc colorisation outside the theme system:
-
-```ruby
-include BBS::Color   # or BBS::Color.c(...)
-c(:cyan, 'hello')    # => "\e[0;36mhello\e[0m"
-```
-
-Available colors: `:reset :gray :yellow :white :blue :cyan :green :magenta :red`.
-
----
-
-## 16. Persistence and shared blocks (`Store`, `SQLite`, `HTTP`, `Cache`, `RateLimit`, `Text`)
+## 15. Persistence and shared blocks (`Store`, `SQLite`, `HTTP`, `Cache`, `RateLimit`, `Text`)
 
 The parts every content board needs, so a board writes none of them by hand.
 
@@ -1355,7 +1173,7 @@ cannot move or restyle the caller's screen.
 
 ---
 
-## 17. AI characters (`BBS::AI`)
+## 16. AI characters (`BBS::AI`)
 
 A character a caller can talk to: a persona read from a YAML file, a small
 model behind any OpenAI-compatible chat endpoint (llama.cpp's `llama-server`,
@@ -1413,7 +1231,7 @@ fallback:                  # canned replies, tried top to bottom
 
 ---
 
-## 18. Doors (`BBS::Door`)
+## 17. Doors (`BBS::Door`)
 
 A door is a program the caller steps into from the BBS, as in the doors of the
 old boards: the BBS hands the telnet line over, the program talks to the
@@ -1580,7 +1398,7 @@ end
 
 ---
 
-## 19. Telnet, sessions & input model
+## 18. Telnet, sessions & input model
 
 ### `BBS::Session`
 
@@ -1733,7 +1551,11 @@ the next, left and right (`+` and `-`) turn them. `exits: { 'x' => :value }`
 adds keys that return a value without an item. `fill: true` keeps the
 `height:` rows when the items take fewer, so a full-screen menu keeps its
 about and status rows at the bottom (a status row coloured
-`colors: { hint: "\e[0;36m\e[7m" }` makes a footer bar). It raises IOError
+`colors: { hint: "#{CY}#{RV}" }` makes a footer bar). The roles and their
+default colours are `BBS::Selector::COLORS` (the C64 palette); a
+`BBS::Petscii::CanvasMenu` takes the same roles. The layout is a strategy:
+`Selector::Columns` (one or more columns, pages) or `Selector::Row`
+(`across: true`). It raises IOError
 when the caller hangs up.
 
 With `columns: 2` (and a `height:`) the items run down the first column, then
@@ -1770,13 +1592,19 @@ end
 
 screen = UI::Petscii::Screen.new(runner.session)
 screen.title('the shelves', 'q: back')          # CLR + reversed title bar
-screen.say('A paragraph, wrapped to 38 columns.', GR)
+screen.say('A paragraph, wrapped to 38 columns.', color: GR)
 screen.page('chapter 1', lines, numbers: true)  # 20 lines a page, RETURN for more
 book = screen.pick('the shelves', books, &:title)   # numbered BBS::Selector.list
 key  = screen.actions(%w[r read], %w[q back])       # a row of keys, cursor menu
 name = screen.ask(' name> ', max: 20)               # BBS::Field
 text = screen.edit('', title: 'TIP', single_line: true, max: 200)   # BBS::Editor
+screen.choose(' sure? (y/n) ', %w[y n], back: 'n')  # one key of a few, a prompt
 ```
+
+The screen's menus are `BBS::Selector` configurations: `pick` a numbered
+list under a title, `menu` a selector at the cursor, `actions` a row of keys.
+`choose` is the one key prompt (no menu: the keys typed after it). The
+colour of `say` and `rule` is a keyword (`say(text, color: RD)`).
 
 `Colors.install(mod)` is needed for a namespace module because Ruby looks a
 bare constant up in the lexically enclosing modules, not in what they include;
@@ -2077,7 +1905,7 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 
 ---
 
-## 20. Source layout
+## 19. Source layout
 
 | File | Responsibility |
 |---|---|
@@ -2085,8 +1913,8 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `bbs/server.rb` | TCP accept loop, one thread per client, on-session-end hook. |
 | `bbs/session.rb` | Telnet negotiation, mouse enable/disable, idle timer. |
 | `bbs/telnet.rb`, `bbs/telnet/` | Telnet line I/O: `Codes`, the IAC `Parser`, `Keys` and `Escapes` (key parsing), `Mouse` (xterm SGR), `LineInput` (readline), PETSCII mode. |
-| `bbs/petscii.rb` | PETSCII: the C64's colours and controls, the UTF-8/ANSI → PETSCII encoder, the C64's keys. |
-| `bbs/petscii/colors.rb`, `bbs/petscii/screen.rb` | The ANSI colour constants and the 40×25 screen of a line-by-line C64 board. |
+| `bbs/petscii.rb`, `bbs/petscii/encoder*` | PETSCII: the C64's codes, the one glyph table (`GRAPHICS`, `ROUNDED_CORNERS`, `LOOK_ALIKES`), the C64's keys (`KEYS`), and the UTF-8/ANSI → PETSCII encoder. |
+| `bbs/petscii/colors.rb`, `bbs/petscii/screen*` | The C64 names of the palette and the 40×25 screen of a line-by-line C64 board. |
 | `bbs/petscii/canvas.rb`, `bbs/petscii/canvas_menu.rb` | The C64 screen as cells in the graphics set (raw PETSCII, patches) and a `Selector` drawn on it. |
 | `bbs/art.rb`, `bbs/widgets/scene.rb` | YAML drawings (ANSI and PETSCII, layers, hotspots) and the art as a modern-face widget. |
 | `bbs/season.rb` | Time of day, season and holiday layers. |
@@ -2096,13 +1924,12 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `bbs/discord_webhook.rb` | Discord webhook posts, standalone: background thread, mentions off, relay limit. |
 | `bbs/terminal.rb` | The terminal question of a two-faced board: modern (ANSI) or C64 (PETSCII). |
 | `bbs/config.rb` | `BBS::Config` value object. |
-| `bbs/flow.rb`, `bbs/flow_runner.rb` | Flow DSL + interpreter. |
-| `bbs/tui.rb`, `bbs/tui_runner.rb` | Page-router with frame-buffer rendering and the drawing-primitive context. |
-| `bbs/frame_buffer.rb` | Double-buffer, delta diff, drawing helpers, ANSI string utilities. |
+| `bbs/flow.rb`, `bbs/flow/`, `bbs/flow_runner.rb` | Flow DSL, its steps, the runner. |
+| `bbs/selector.rb`, `bbs/selector/` | The cursor menu of a line-by-line board: layouts, cells, keys. |
+| `bbs/frame_buffer.rb`, `bbs/frame_buffer/` | Double-buffer, delta diff, drawing helpers, the ANSI text tools (the one wrap). |
 | `bbs/application.rb` | Widget event loop, window stack, ticking, builder DSL. |
 | `bbs/widget.rb`, `bbs/container.rb` | Widget tree base. |
-| `bbs/widgets.rb` | Built-in widgets (Label, Button, TextInput, TextArea, Checkbox, ListBox, ScrollView, ProgressBar, Spinner, HBox, VBox, Panel). |
-| `bbs/widgets/ansi_art.rb` | CP437 / ANSI art widget with SAUCE stripping. |
+| `bbs/widgets.rb`, `bbs/widgets/` | Built-in widgets, one a file (Label, Button, TextInput, TextArea, Checkbox, ListBox, ScrollView, Scene). |
 | `bbs/window.rb`, `bbs/window_spec.rb` | `Window` + declarative window DSL. |
 | `bbs/windows/info.rb` | Centered info / message / kv / scroll dialog. |
 | `bbs/windows/form.rb` | Multi-field form with status line. |
@@ -2111,7 +1938,8 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `bbs/windows/button_bar.rb` | Bottom-row button layout helper. |
 | `bbs/menu.rb`, `bbs/statusbar.rb`, `bbs/dialogs.rb` | Chrome + ad-hoc dialogs. |
 | `bbs/focus_manager.rb` | Tab/Shift-Tab focus traversal. |
-| `bbs/theme.rb` | Style palette (synchronet, nortoncommander, dosnavigator, neumanntronics, mono). |
+| `bbs/theme.rb`, `bbs/theme/presets.rb` | Theme roles and the presets as data (synchronet, nortoncommander, dosnavigator, neumanntronics, mono). |
+| `bbs/ansi.rb` | The ANSI sequences and the one palette. |
 | `bbs/markdown.rb` | Markdown → ANSI line array renderer. |
 | `bbs/event.rb` | Unified key + mouse event objects. |
 | `bbs/store.rb`, `bbs/store/csv_import.rb` | Thread-safe upsert-by-session table on SQLite (imports the CSV file of earlier versions, broken rows set aside). |
@@ -2129,5 +1957,4 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `bbs/xmodem.rb` | XMODEM / XMODEM-CRC / XMODEM-1K send: file downloads for a Commodore 64. |
 | `bbs/ai.rb` | AI characters: persona file, OpenAI-compatible streaming client, chat with memory and fallback, typewriter output. |
 | `bbs/banner.rb`, `bbs/renderer.rb` | FIGlet + ERB. |
-| `bbs/color.rb` | Simple ANSI colour helper. |
 | `test/` | minitest suite: `bundle exec rake test`; style: `bundle exec rubocop`. |
