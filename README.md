@@ -603,7 +603,7 @@ Form methods callable from `on_submit`:
 - `form.values` — current field values as a Hash.
 - `form.error('msg')` — paint the status line red.
 - `form.info('msg')` — paint the status line cyan-ish (input_label color).
-- `form.clear_status` — wipe the status line.
+- `form.info('')` — wipe the status line.
 
 Returning `:keep` from `on_submit` leaves the window open; any other return
 closes it.
@@ -1859,8 +1859,8 @@ on a modern terminal when `config.mouse` is on) and runs that face's Flow. The q
 capitals, which both machines print alike. A key (`1`/`M`, `2`/`C`/`P`) only
 picks and RETURN takes it, so the RETURN of a line-mode telnet does not reach
 the first screen; no answer in 60 s takes the pick or the guess.
-`BBS::Terminal.choose(session, title:)` is the question alone: `:modern`,
-`:petscii`, or nil when the line drops.
+The question alone is private since 1.0 (`Terminal::Question`); a board uses
+`Terminal.flow`.
 
 ### `Session#readkey` return values
 
