@@ -86,8 +86,7 @@ module BBS
     # Returns the SGR style for +key+ from this widget's theme, or from the
     # parent's when none is set; +nil+ when neither has a theme.
     def style(key)
-      th = @theme || (parent && parent.theme)
-      th ? th.style(key) : nil
+      (@theme || parent&.theme)&.style(key)
     end
   end
 end

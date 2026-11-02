@@ -53,34 +53,12 @@ module BBS
     # whole bar, or else the shown hints from the left, as many as fit, and
     # the right text when there is room for it.
     def render(frame)
-      sgr = style(:statusbar)
-      key_sgr = style(:statusbar_key)
       frame.move(bounds.x, bounds.y)
-      frame.write(' ' * bounds.width, sgr: sgr)
+      frame.write(' ' * bounds.width, sgr: style(:statusbar))
+      return render_message(frame) if @message
 
-      cx = bounds.x + 1
-      if @message
-        frame.move(cx, bounds.y)
-        frame.write('▸ ', sgr: key_sgr)
-        frame.write(FrameBuffer.clip_ansi(@message.to_s, [bounds.width - 4, 0].max), sgr: sgr)
-        return
-      end
-      shown.each do |hint|
-        text_key = hint.key.to_s
-        text_lbl = " #{hint.label} "
-        break if cx + text_key.length + text_lbl.length > bounds.x + bounds.width - 1
-        frame.move(cx, bounds.y)
-        frame.write(text_key, sgr: key_sgr)
-        frame.write(text_lbl, sgr: sgr)
-        cx += text_key.length + text_lbl.length + 1
-      end
-
-      return unless @right_text
-      txt = @right_text.to_s
-      rx  = bounds.x + bounds.width - txt.length - 1
-      return unless rx >= cx
-      frame.move(rx, bounds.y)
-      frame.write(txt, sgr: sgr)
+      placed.each { |hint, x| render_hint(frame, hint, x) }
+      render_right_text(frame)
     end
 
     # Runs the hint whose key matches a key +event+, or the shown hint under
@@ -89,26 +67,65 @@ module BBS
     # Returns the hint block's result, or +:handled+ when it returns +nil+;
     # +nil+ when no hint matches.
     def handle_event(event)
-      if event.key?
-        hint = match_key(event.key)
-        return hint.on_activate&.call || :handled if hint
-        return nil
-      end
-
-      return nil unless event.mouse? && event.mouse.kind == :press &&
-                        event.mouse.button == :left && event.y == bounds.y
-      cx = bounds.x + 1
-      shown.each do |hint|
-        text_key = hint.key.to_s
-        text_lbl = " #{hint.label} "
-        width    = text_key.length + text_lbl.length
-        return hint.on_activate&.call || :handled if event.x >= cx && event.x < cx + width
-        cx += width + 1
-      end
-      nil
+      hint = event.key? ? match_key(event.key) : clicked(event)
+      hint && (hint.on_activate&.call || :handled)
     end
 
     private
+
+    # The text of +hint+ on the bar: its key, then its label between spaces.
+    def hint_text(hint) = [hint.key.to_s, " #{hint.label} "]
+
+    def hint_width(hint) = hint_text(hint).sum(&:length)
+
+    # The shown hints that fit, each with the column it starts at.
+    def placed
+      x = bounds.x + 1
+      shown.each_with_object([]) do |hint, list|
+        break list if x + hint_width(hint) > bounds.x + bounds.width - 1
+
+        list << [hint, x]
+        x += hint_width(hint) + 1
+      end
+    end
+
+    def render_message(frame)
+      frame.move(bounds.x + 1, bounds.y)
+      frame.write('▸ ', sgr: style(:statusbar_key))
+      frame.write(FrameBuffer.clip_ansi(@message.to_s, [bounds.width - 4, 0].max), sgr: style(:statusbar))
+    end
+
+    def render_hint(frame, hint, x)
+      key, label = hint_text(hint)
+      frame.move(x, bounds.y)
+      frame.write(key, sgr: style(:statusbar_key))
+      frame.write(label, sgr: style(:statusbar))
+    end
+
+    # The right text, when it fits right of the hints.
+    def render_right_text(frame)
+      return unless @right_text
+
+      text = @right_text.to_s
+      x    = bounds.x + bounds.width - text.length - 1
+      return if x < hints_end
+
+      frame.move(x, bounds.y)
+      frame.write(text, sgr: style(:statusbar))
+    end
+
+    # The first free column right of the placed hints.
+    def hints_end
+      hint, x = placed.last
+      hint ? x + hint_width(hint) + 1 : bounds.x + 1
+    end
+
+    # The shown hint under a left click +event+ on the bar, or +nil+.
+    def clicked(event)
+      return nil unless event.click? && event.y == bounds.y
+
+      placed.find { |hint, x| event.x >= x && event.x < x + hint_width(hint) }&.first
+    end
 
     def match_key(key)
       key_str = key.to_s
