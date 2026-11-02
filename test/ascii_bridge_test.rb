@@ -35,7 +35,7 @@ class AsciiBridgeTest < Minitest::Test
   end
 
   def test_the_c64_keys_go_up_as_an_ansi_terminal_sends_them
-    keys = [0x48, 0xC9, P::KEY_RETURN, P::DEL.ord, P::UP.ord, P::KEY_RUN_STOP, P::KEY_F1, P::KEY_POUND].pack('C*')
+    keys = [0x48, 0xC9, 0x0d, P::DEL.ord, P::UP.ord, 0x03, 0x85, 0x5c].pack('C*')
     assert_equal "hI\r\b\e[A\e#".b, bridge.up(keys)
   end
 

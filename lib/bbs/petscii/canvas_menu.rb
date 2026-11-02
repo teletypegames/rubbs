@@ -120,7 +120,7 @@ module BBS
         return if @drawn
 
         paint
-        send_rows(screen_rows((1..rows).to_a).map { |r| @canvas.span(r, @left, @width) }.join.b)
+        send_rows(spans(screen_rows((1..rows).to_a)))
       end
 
       # Paints menu lines +lines+ and sends what changed in them: the
@@ -129,13 +129,12 @@ module BBS
         before = @canvas.dup
         lines.each { |l| paint_line(l) }
         rows  = screen_rows(lines)
-        cells = @canvas.changes(before).select { |r, _| rows.include?(r) }
-        return send_rows(''.b) if cells.empty?
-
-        patch = @canvas.patch(cells)
-        spans = rows.map { |r| @canvas.span(r, @left, @width) }.join.b
-        send_rows(patch.bytesize < spans.bytesize ? patch : spans)
+        cells = @canvas.changes(before).select { |position| rows.include?(position.first) }
+        send_rows(cells.empty? ? ''.b : [@canvas.patch(cells), spans(rows)].min_by(&:bytesize))
       end
+
+      # The spans of screen rows +rows+, the menu's width each.
+      def spans(rows) = rows.map { |r| @canvas.span(r, @left, @width) }.join.b
 
       def finish(result) = result
 
@@ -143,7 +142,7 @@ module BBS
       def send_rows(bytes) = @session.write_raw(bytes + @canvas.cursor(*@rest))
 
       # The screen rows of menu lines +lines+ that are on the screen.
-      def screen_rows(lines) = lines.map { |l| @top + l - 1 }.select { |r| r.between?(0, Canvas::ROWS - 1) }
+      def screen_rows(lines) = lines.map { |l| @top + l - 1 }.grep(0..(Canvas::ROWS - 1))
 
       # Paints the segments of menu line +number+ onto the canvas.
       def paint_line(number)

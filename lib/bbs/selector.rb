@@ -132,12 +132,12 @@ module BBS
       @items   = items
       @width   = [width, 4].max
       @layout  = across ? Row.new(items.size) : Columns.new(items.size, height: height, columns: columns, fill: fill)
+      @index   = first_index(index)
       @numbers = numbers
       @hint    = hint
       @exits   = exits.transform_keys { |k| fold(k) }
       @back    = back
       @colors  = self.class::COLORS.merge(colors)
-      @index   = index && items[index]&.selectable? ? index : step(-1, 1)
       @typed   = +''
     end
 
@@ -181,35 +181,7 @@ module BBS
       jump(@items[first].selectable? ? first : step(first, 1))
     end
 
-    # Item +index+ as a cell +width+ wide, a list of segments (see
-    # #paint): blank past the last item, a heading in its colour, the lit
-    # one as a bar of plain text, the others as a key and a label.
-    def cell(index, width)
-      item = @items[index]
-      return [[' ' * width, :text]] unless item
-      return [[label(" #{item.label}", width), :heading]] if item.heading
-
-      prefix = key_width.positive? ? " #{key_text(index)} " : ' '
-      return [[fit(prefix + plain(item.label), width), item.color || :bar, true]] if index == @index
-
-      [[prefix, item.color || :key], [label(item.label.to_s, [width - prefix.length, 0].max), :text]]
-    end
-
-    # The items on one row as segments, each a key letter and its label,
-    # the lit one a bar; the items that do not fit are left off.
-    def across_cells
-      fitting = fitting_items
-      pad = @width - fitting.sum { |item, _| word(item).length + 2 }
-      fitting.flat_map { |item, i| across_cell(item, i) } << [' ' * pad, :text]
-    end
-
     private
-
-    # The items, with their indexes, that fit on one row.
-    def fitting_items
-      used = 0
-      @items.each_with_index.take_while { |item, _| (used += word(item).length + 2) <= @width }
-    end
 
     def per_page = @layout.per_page
 
@@ -228,38 +200,8 @@ module BBS
 
     def read_key = @cursor.key
 
-    # What +key+ takes, as a one-element Array (the value may be +nil+), or
-    # +nil+ when it takes nothing.
-    def take(key)
-      return [@back] if BACK_KEYS.include?(key)
-      return [@items[@index].value] if key == :enter
-      return [@exits[fold(key)]] if @exits.key?(fold(key))
-
-      item = hotkey(key)
-      return unless item
-
-      light(@items.index(item))
-      [item.value]
-    end
-
-    def hotkey(key)
-      return nil unless key.is_a?(String) && key.length == 1
-      return nil if @numbers && key.match?(DIGIT)
-
-      @items.find { |i| i.selectable? && i.key && i.key.to_s.downcase == key.downcase }
-    end
-
-    def react(key)
-      case key
-      when *STEP_KEYS.keys then move(STEP_KEYS[key])
-      when *SIDE_KEYS.keys then @layout.side(self, SIDE_KEYS[key])
-      when *PAGE_KEYS.keys then turn(PAGE_KEYS[key])
-      when :home then light(step(-1, 1))
-      when :end then light(step(@items.size, -1))
-      when :backspace then type(@typed.chop)
-      when DIGIT then type(@typed + key) if @numbers
-      end
-    end
+    # Item +index+ when it can be lit, else the first that can.
+    def first_index(index) = index && @items[index]&.selectable? ? index : step(-1, 1)
 
     # The next selectable item from +from+ in direction +dir+, round the end.
     def step(from, dir)
@@ -267,16 +209,6 @@ module BBS
         i = (from + (dir * n)) % @items.size
         return i if @items[i].selectable?
       end
-    end
-
-    # The digits typed so far as +digits+: the item of that number lit when
-    # there is one; a digit that would make no item's number is dropped.
-    def type(digits)
-      return if digits.length > MAX_DIGITS
-      return if !digits.empty? && !digits.to_i.between?(1, @items.size)
-
-      @typed = digits
-      @typed.empty? ? repaint([rows]) : light(@typed.to_i - 1)
     end
 
     # Lights item +index+, repainting what changed: the rows of the old and
@@ -291,93 +223,8 @@ module BBS
       lines << rows if status?
       repaint(lines)
     end
-
-    # The segments of menu line +number+ (1-based: the items' rows, then
-    # the about row, then the status row).
-    def line_segments(number)
-      return @layout.segments(number, self) if number <= item_rows
-      return about_segments if about? && number == item_rows + 1
-
-      status_segments
-    end
-
-    def about_segments = [[fit(" #{plain(@items[@index].about)}", @width), :about]]
-
-    def status_segments
-      right = if !@typed.empty? then "##{@typed}"
-              elsif pages > 1 then "#{page + 1}/#{pages}"
-              else ''
-              end
-      left = " #{plain(@hint)}"[0, [@width - right.length - 1, 0].max]
-      [["#{left}#{' ' * (@width - left.length - right.length)}#{right}", :hint]]
-    end
-
-    def word(item) = item.key ? "#{item.key.to_s.upcase} #{plain(item.label)}" : plain(item.label)
-
-    def across_cell(item, index)
-      return [[" #{word(item)} ", item.color || :bar, true]] if index == @index
-      return [[" #{word(item)} ", :text]] unless item.key
-
-      [[' ', :text], [item.key.to_s.upcase, item.color || :key], [" #{plain(item.label)} ", :text]]
-    end
-
-    def key_width
-      @key_width ||= @numbers ? @items.size.to_s.length : @items.map { |i| i.key.to_s.length }.max
-    end
-
-    def key_text(index)
-      key = @numbers ? (index + 1).to_s : @items[index].key.to_s.upcase
-      key.rjust(key_width)
-    end
-
-    def fit(text, width) = text.length > width ? text[0, width] : text.ljust(width)
-
-    # +text+ without its colours.
-    def plain(text) = FrameBuffer.plain(text)
-
-    # A label cut or padded to +width+ columns, its colours kept.
-    def label(text, width)
-      text = FrameBuffer.clip_ansi(text, width)
-      "#{text}#{' ' * (width - FrameBuffer.visible_width(text))}"
-    end
-
-    # ── Drawing on an ANSI line ───────────────────────────────────────────
-
-    def draw
-      lines = (1..rows).map { |l| paint(line_segments(l)) }
-      @session.write(lines.join(Ansi::CRLF))
-      @cursor = Cursor.new(@session, row: lines.size, col: @width + 1)
-      @session.write(park)
-    end
-
-    # +segments+ (<tt>[text, colour, reversed]</tt>, the colour a role of
-    # COLORS or an item's own) as ANSI text.
-    def paint(segments)
-      segments.map do |text, color, reversed|
-        sgr = color.is_a?(Symbol) ? @colors[color] : color
-        reversed ? "#{sgr}#{Ansi::REVERSE}#{text}#{Ansi::REVERSE_OFF}#{@colors[:text]}" : "#{sgr}#{text}"
-      end.join << @colors[:text]
-    end
-
-    def repaint(lines)
-      out = lines.map { |l| row_at(l, paint(line_segments(l))) }.join
-      @session.write(out << park)
-    end
-
-    # The cursor to the start of the lit item.
-    def park = @cursor.move(@layout.line_of(@index), @layout.column_of(@index, @width))
-
-    # The bytes that write +text+ (exactly #width columns) on row +row+.
-    def row_at(row, text)
-      out = @cursor.move(row, 1) << text
-      @cursor.wrote(@width)
-      out
-    end
-
-    def finish(result)
-      @session.write(@cursor.move(rows, 1) << Ansi::CRLF)
-      result
-    end
   end
 end
 require_relative 'selector/layouts'
+require_relative 'selector/cells'
+require_relative 'selector/keys'

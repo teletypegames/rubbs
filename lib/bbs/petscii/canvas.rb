@@ -150,43 +150,6 @@ module BBS
         @charset = :upper
       end
 
-      # The PETSCII code of +ch+ in the uppercase set, and whether it is a
-      # reversed glyph (GLYPHS_REVERSED): <tt>[code, reversed]</tt>. A
-      # character the set does not have is <tt>'?'</tt>.
-      def self.code(ch)
-        return [GLYPHS_REVERSED[ch], true] if GLYPHS_REVERSED.key?(ch)
-        return [GLYPHS[ch], false] if GLYPHS.key?(ch)
-
-        o = ch.upcase.ord
-        o.between?(0x20, 0x5d) ? [o, false] : ['?'.ord, false]
-      end
-
-      # Whether the uppercase set shows +ch+ as what it is: a glyph of
-      # GLYPHS or GLYPHS_REVERSED, or printable ASCII but the backslash (a
-      # lowercase letter shows as its capital).
-      def self.glyph?(ch)
-        return true if GLYPHS.key?(ch) || GLYPHS_REVERSED.key?(ch)
-
-        ch.length == 1 && ASCII_SHOWN.include?(ch.upcase.ord)
-      end
-
-      # The colour code of +color+: a code as it is (a key of RGB), an SGR
-      # colour of the palette (BBS::Petscii::Colors), a name
-      # of COLOR_NAMES as a Symbol or String (<tt>'light grey'</tt>,
-      # <tt>:dark_gray</tt> and <tt>'LIGHT-BLUE'</tt> all work), or +nil+.
-      # Raises ArgumentError for anything else.
-      def self.color(color)
-        return nil if color.nil?
-        return color if color.is_a?(Integer) && RGB.key?(color)
-        return Petscii.color_code(color) if color.to_s.start_with?(Ansi::ESC)
-
-        name = color.to_s.downcase.tr(' -', '__').sub('gray', 'grey').to_sym
-        COLOR_NAMES.fetch(name) { raise ArgumentError, "not a C64 colour: #{color.inspect}" }
-      end
-
-      # The code of the C64 colour nearest to +rgb+, [red, green, blue].
-      def self.nearest(rgb) = RGB.min_by { |_, c| c.zip(rgb).sum { |a, b| (a - b)**2 } }.first
-
       # A copy with its own cells, to compare with after drawing (#update).
       def initialize_copy(source)
         super
@@ -235,58 +198,6 @@ module BBS
         @cells[row][col]
       end
 
-      # The whole screen: the graphics set, a clear screen, then the rows,
-      # each cut after its last visible cell, as a binary String.
-      def frame
-        out = [UPPERCASE, CLEAR]
-        state = { color: nil, rvs: false }
-        last = ROWS - 1
-        last -= 1 while last.positive? && visible_end(last).zero?
-        (0..last).each do |row|
-          len = visible_end(row)
-          emit(out, @cells[row].first(len), state)
-          next if len == COLS || row == last
-
-          out << CR
-          state[:rvs] = false
-        end
-        out.pack('C*')
-      end
-
-      # The cells of +row+ from +col+, +width+ long, with the cursor moves
-      # that put them in place, as a binary String.
-      def span(row, col, width)
-        out = [HOME] + ([DOWN] * row) + ([RIGHT] * col)
-        state = { color: nil, rvs: false }
-        out << RVS_OFF
-        emit(out, @cells[row][col, width], state)
-        out << RVS_OFF if state[:rvs]
-        out.pack('C*')
-      end
-
-      # The cells at +positions+, [row, col] each, the cursor stepping to the
-      # nearest one left instead of from the top left each time: the cheap
-      # repaint of a few cells scattered over the screen. A binary String.
-      def patch(positions)
-        out = [HOME, RVS_OFF]
-        state = { color: nil, rvs: false }
-        at = [0, 0]
-        left = positions.uniq
-        until left.empty?
-          row, col = left.min_by { |r, c| [distance(at, r, c), r, c] }
-          left.delete([row, col])
-          if row + col < distance(at, row, col)
-            out << HOME
-            at = [0, 0]
-          end
-          out.concat(steps(at, row, col))
-          emit(out, [@cells[row][col]], state)
-          at = col == COLS - 1 ? [row + 1, 0] : [row, col + 1]
-        end
-        out << RVS_OFF if state[:rvs]
-        out.pack('C*')
-      end
-
       # The positions, [row, col] each, where this screen looks different
       # from +before+ (another Canvas): see Cell#looks_like?.
       def changes(before)
@@ -307,24 +218,6 @@ module BBS
         cheap.bytesize <= whole.bytesize ? cheap : whole
       end
 
-      # The cursor moves to +row+, +col+, with nothing printed: HOME, then
-      # down and right. A binary String.
-      def cursor(row, col) = ([HOME] + ([DOWN] * row) + ([RIGHT] * col)).pack('C*')
-
-      # Plays +bytes+ (PETSCII, a String) onto the screen the way the C64's
-      # screen editor prints them: colours, reverse video, CLR, HOME, the
-      # cursor keys, RETURN, the character set switches and printable codes;
-      # the cursor wraps at the end of a row and the screen scrolls at the
-      # bottom. Other codes are skipped. The cursor, colour and reverse state
-      # carry over to the next call. For tests and previews: what a C64 shows
-      # after a #frame, #span or #patch.
-      #
-      # Returns +self+.
-      def feed(bytes)
-        bytes.to_s.each_byte { |b| play(b) }
-        self
-      end
-
       # The screen as text, a line a row, each cell the Unicode character it
       # looks like (a reversed cell as it is printed, not inverted); for
       # tests and logs.
@@ -342,94 +235,11 @@ module BBS
 
       def blank = Cell.new(SPACE, nil, false)
 
-      def distance(from, row, col) = (row - from[0]).abs + (col - from[1]).abs
-
-      def steps(from, row, col)
-        dr = row - from[0]
-        dc = col - from[1]
-        (dr.negative? ? [UP] * -dr : [DOWN] * dr) + (dc.negative? ? [LEFT] * -dc : [RIGHT] * dc)
-      end
-
       def inside?(row, col) = row.between?(0, ROWS - 1) && col.between?(0, COLS - 1) && !(row == ROWS - 1 && col == COLS - 1)
-
-      def visible_end(row)
-        cells = @cells[row]
-        len = cells.size
-        len -= 1 while len.positive? && cells[len - 1].code == SPACE && !cells[len - 1].rvs
-        len
-      end
-
-      def emit(out, cells, state)
-        cells.each do |cell|
-          visible = cell.code != SPACE || cell.rvs
-          if visible && cell.color && cell.color != state[:color]
-            out << cell.color
-            state[:color] = cell.color
-          end
-          if cell.rvs != state[:rvs] && (visible || state[:rvs])
-            out << (cell.rvs ? RVS_ON : RVS_OFF)
-            state[:rvs] = cell.rvs
-          end
-          out << cell.code
-        end
-      end
-
-      # One byte of #feed.
-      def play(byte)
-        return @pen = byte if RGB.key?(byte)
-
-        case byte
-        when CLEAR then wipe
-        when HOME then @at = [0, 0]
-        when RVS_ON then @rvs = true
-        when RVS_OFF then @rvs = false
-        when CR then newline
-        when UPPERCASE then @charset = :upper
-        when LOWERCASE then @charset = :lower
-        when DOWN then @at[0] == ROWS - 1 ? scroll : @at[0] += 1
-        when UP then @at[0] -= 1 if @at[0].positive?
-        when RIGHT then advance
-        when LEFT then back
-        when 0x20..0x7f, 0xa0..0xff then print_code(byte)
-        end
-      end
-
-      def wipe
-        @cells = Array.new(ROWS) { Array.new(COLS) { blank } }
-        @at = [0, 0]
-      end
-
-      def newline
-        @rvs = false
-        @at[1] = 0
-        @at[0] == ROWS - 1 ? scroll : @at[0] += 1
-      end
-
-      def print_code(byte)
-        @cells[@at[0]][@at[1]] = Cell.new(byte, @pen, @rvs)
-        advance
-      end
-
-      def advance
-        @at[1] += 1
-        return if @at[1] < COLS
-
-        @at[1] = 0
-        @at[0] == ROWS - 1 ? scroll : @at[0] += 1
-      end
-
-      def back
-        if @at[1].positive?
-          @at[1] -= 1
-        elsif @at[0].positive?
-          @at = [@at[0] - 1, COLS - 1]
-        end
-      end
-
-      def scroll
-        @cells.shift
-        @cells << Array.new(COLS) { blank }
-      end
     end
   end
 end
+
+require_relative 'canvas/output'
+require_relative 'canvas/player'
+require_relative 'canvas/lookup'
