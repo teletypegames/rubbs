@@ -78,6 +78,14 @@ class WindowTest < Minitest::Test
     assert pressed
   end
 
+  def test_an_unhandled_mouse_or_resize_event_is_ignored
+    win = window
+    win.add(BBS::Widgets::Button.new(label: '&Yes').tap { |b| b.layout(12, 8, 8, 1) })
+    win.reset_focus
+    assert_nil win.handle_event(press(30, 12, kind: :release))
+    assert_nil win.handle_event(BBS::Event.resize(80, 25))
+  end
+
   def test_tab_moves_the_focus_between_buttons
     win = window
     a, b = %w[&A &B].map { |l| BBS::Widgets::Button.new(label: l).tap { |w| w.layout(12, 8, 6, 1) } }

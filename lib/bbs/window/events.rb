@@ -94,8 +94,7 @@ module BBS
       # A key the focused widget left alone presses the button it is the
       # hotkey of: "y" or Alt-Y for "&Yes".
       def hotkey_event(event)
-        button = event.key? && hotkey_button(event.key)
-        button&.fire
+        hotkey_button(event.key)&.fire if event.key?
       end
 
       def close_key_event(event) = event.key? && event.key == @close_key ? close : nil
