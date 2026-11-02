@@ -65,44 +65,54 @@ module BBS
       # BBS::FrameBuffer, inside the bounds.
       def render(frame)
         @bounds = parent.bounds.dup if @fill_parent && parent&.bounds
-        return if bounds.width <= 0 || bounds.height <= 0
-        return if !@crop && !fits?
+        return unless drawable?
 
-        x, y = origin
-        width  = [@art.cols, bounds.width].min
-        height = [@art.rows, bounds.height].min
-        @art.draw(frame, x: x, y: y, width: width, height: height)
+        view = self.view
+        @art.draw(frame, x: view.x, y: view.y, width: view.width, height: view.height)
         @fills.each do |name, block|
           spot = @art.hotspots[name]
-          paint(frame, spot, block.call(spot), x, y, width, height) if spot
+          paint(frame, spot, block.call(spot), view) if spot
         end
       end
 
       private
 
-      # The screen cell of the art's top left.
-      def origin
-        free_x = [bounds.width - @art.cols, 0].max
-        free_y = [bounds.height - @art.rows, 0].max
-        dx = { left: 0, right: free_x }.fetch(@align, free_x / 2)
-        dy = { top: 0, bottom: free_y }.fetch(@valign, free_y / 2)
-        [bounds.x + dx, bounds.y + dy]
+      def drawable? = bounds.width.positive? && bounds.height.positive? && (@crop || fits?)
+
+      # Where the art is drawn: a Rect at the screen cell of its top left,
+      # as large as the part of it that shows.
+      def view = Rect.new(*corner, [@art.cols, bounds.width].min, [@art.rows, bounds.height].min)
+
+      # The screen cell of the art's top left, [x, y].
+      def corner
+        [bounds.x + shift(bounds.width - @art.cols, @align, :left, :right),
+         bounds.y + shift(bounds.height - @art.rows, @valign, :top, :bottom)]
       end
 
-      # Writes +content+ into +spot+, cut to the spot and to the visible
-      # +width+ × +height+ of the art drawn at +x+, +y+.
-      def paint(frame, spot, content, x, y, width, height)
-        return if content.nil?
-
-        content.to_s.split("\n").first(spot.height).each_with_index do |line, i|
-          row = spot.row + i
-          next if row >= height || spot.col >= width
-
-          room = [spot.width, width - spot.col].min
-          frame.move(x + spot.col, y + row)
-          frame.write_ansi(FrameBuffer.clip_ansi(line, room))
-        end
+      # The cells the art moves along an axis with +free+ cells to spare,
+      # by +align+: none at +start+, all at +finish+, half otherwise.
+      def shift(free, align, start, finish)
+        free = [free, 0].max
+        { start => 0, finish => free }.fetch(align, free / 2)
       end
+
+      # Writes +content+ into +spot+, cut to the spot and to the +view+ of
+      # the art.
+      def paint(frame, spot, content, view)
+        return if content.nil? || spot.col >= view.width
+
+        lines = content.to_s.split("\n").first(rows_shown(spot, view))
+        lines.each_with_index { |line, i| paint_line(frame, line, spot, view, i) }
+      end
+
+      # Writes +line+ on row +index+ of +spot+, cut to the spot and the view.
+      def paint_line(frame, line, spot, view, index)
+        frame.move(view.x + spot.col, view.y + spot.row + index)
+        frame.write_ansi(FrameBuffer.clip_ansi(line, [spot.width, view.width - spot.col].min))
+      end
+
+      # The rows of +spot+ inside the +view+.
+      def rows_shown(spot, view) = (view.height - spot.row).clamp(0, spot.height)
     end
   end
 end
