@@ -5,6 +5,7 @@ require 'bbs'
 require 'minitest/autorun'
 require 'socket'
 require 'tmpdir'
+require 'stringio'
 
 # A caller's line: a connected pair of sockets, the board's end and the
 # caller's.

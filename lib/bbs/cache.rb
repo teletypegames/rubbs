@@ -60,6 +60,17 @@ module BBS
       flight.outcome
     end
 
+    # Computes the value of +key+ anew with the block, fresh or not, keeps
+    # it and returns it. When the block raises, the value kept so far stays
+    # and the error goes on: a background refresh never empties the cache.
+    #
+    #   CATALOG.refresh(:all) { repository.load }
+    def refresh(key)
+      value = yield
+      @mu.synchronize { store(key, value) }
+      value
+    end
+
     # Forgets the value of +key+. Returns +nil+.
     def delete(key) = @mu.synchronize { drop(key) && nil }
 

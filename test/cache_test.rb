@@ -88,4 +88,12 @@ class CacheTest < Minitest::Test
     cache.clear
     assert_equal 0, cache.size
   end
+
+  def test_refresh_replaces_only_on_success
+    cache = BBS::Cache.new(ttl: 60, max_entries: 10)
+    cache.fetch(:k) { 'old' }
+    assert_equal 'new', cache.refresh(:k) { 'new' }
+    assert_raises(RuntimeError) { cache.refresh(:k) { raise 'down' } }
+    assert_equal('new', cache.fetch(:k) { flunk 'still fresh' })
+  end
 end
