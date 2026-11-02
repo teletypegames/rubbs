@@ -76,11 +76,8 @@ module BBS
       # an invalid +match+.
       def initialize(system: '', examples: [], options: {}, deflect: [], fallback: {})
         @system   = system.to_s.strip
-        @examples = Array(examples).flat_map do |turn|
-          [{ role: 'user', content: turn.fetch('user').to_s.strip },
-           { role: 'assistant', content: turn.fetch('assistant').to_s.strip }]
-        end.freeze
-        @options = (options || {}).transform_keys(&:to_sym).freeze
+        @examples = turns(examples)
+        @options  = (options || {}).transform_keys(&:to_sym).freeze
         fallback ||= {}
         @deflect  = rules(deflect)
         @replies  = rules(fallback['replies'])
@@ -114,6 +111,13 @@ module BBS
       end
 
       private
+
+      def turns(examples)
+        Array(examples).flat_map do |turn|
+          [{ role: 'user', content: turn.fetch('user').to_s.strip },
+           { role: 'assistant', content: turn.fetch('assistant').to_s.strip }]
+        end.freeze
+      end
 
       def rules(list)
         Array(list).map do |rule|
@@ -349,20 +353,26 @@ module BBS
 
       # nil when the model gave nothing, so the caller falls back; a reply
       # cut short mid-way is kept as it is.
-      def think(text, ctx, facts, &on_text)
+      def think(text, ctx, facts, &)
         history = ctx.is_a?(Hash) ? (ctx[@key] ||= []) : []
         reply   = +''
-        @client.stream([*@persona.messages(facts), *history, { role: 'user', content: text }], **@options) do |piece|
+        listen([*@persona.messages(facts), *history, { role: 'user', content: text }], reply, &)
+        remember(history, text, reply.strip)
+      rescue StandardError => e
+        BBS.log('ai', "model unavailable (#{e.class}: #{e.message})")
+        reply.to_s.strip.empty? ? nil : reply.strip
+      end
+
+      # Streams the model's answer to +messages+ into +reply+, filtered,
+      # each piece also to +on_text+.
+      def listen(messages, reply, &on_text)
+        @client.stream(messages, **@options) do |piece|
           piece = piece.gsub(@filter, '') if @filter
           next if piece.empty?
 
           reply << piece
           on_text&.call(piece)
         end
-        remember(history, text, reply.strip)
-      rescue StandardError => e
-        warn "BBS::AI: model unavailable (#{e.class}: #{e.message})"
-        reply.to_s.strip.empty? ? nil : reply.strip
       end
 
       def remember(history, text, reply)
@@ -404,7 +414,7 @@ module BBS
       # and keeping the unfinished one back.
       def write(piece)
         @pending << piece
-        while (m = @pending.match(Patterns::WHITESPACE))
+        while (m = @pending.match(Text::WHITESPACE))
           word(m.pre_match)
           @gap = "#{@gap}#{m[0]}"
           @pending = m.post_match
@@ -423,16 +433,22 @@ module BBS
       def word(text)
         return if text.empty?
 
-        if @col.positive? && (@gap&.include?("\n") || @col + 1 + text.size > @width)
-          out("#{Ansi::CRLF}#{@indent}")
-          @col = 0
-        elsif @col.positive? && @gap
-          out(' ')
-          @col += 1
-        end
+        space_before(text) if @col.positive?
         out(text)
         @col += text.size
         @gap = nil
+      end
+
+      # A line break before +text+ when the gap had one or the line is full,
+      # else one space when there was a gap.
+      def space_before(text)
+        if @gap&.include?("\n") || @col + 1 + text.size > @width
+          out("#{Ansi::CRLF}#{@indent}")
+          @col = 0
+        elsif @gap
+          out(' ')
+          @col += 1
+        end
       end
 
       def out(text) = @io.print(text, style: @style, newline: 0)

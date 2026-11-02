@@ -151,27 +151,38 @@ module BBS
       # Returns +:ok+, +:cancelled+, +:timeout+ or +:hangup+.
       def run(data, one_k:, wait:)
         @session.write_raw(BINARY_ON) if @telnet
-        crc = handshake(wait)
-        size = crc && one_k ? BLOCK_1K : BLOCK
-        Xmodem.blocks(data, size).each.with_index(1) do |chunk, number|
-          deliver(Xmodem.frame(number % BLOCK_NUMBERS, chunk, crc: crc))
-        end
-        deliver(EOT.chr)
+        send_blocks(data, one_k, wait)
+        settled(:ok)
       rescue Cancelled
-        emit(ABORT)
-        quiet ? :cancelled : :hangup
+        abort_with(:cancelled)
       rescue Timeout
-        emit(ABORT)
-        quiet ? :timeout : :hangup
+        abort_with(:timeout)
       rescue Hangup, IOError, SystemCallError
         :hangup
-      else
-        quiet ? :ok : :hangup
       ensure
         @session.write_raw(BINARY_OFF) if @telnet
       end
 
       private
+
+      # The blocks of +data+ (1 KiB ones when +one_k+ and the receiver asks
+      # for a CRC), then EOT.
+      def send_blocks(data, one_k, wait)
+        crc  = handshake(wait)
+        size = crc && one_k ? BLOCK_1K : BLOCK
+        Xmodem.blocks(data, size).each.with_index(1) do |chunk, number|
+          deliver(Xmodem.frame(number % BLOCK_NUMBERS, chunk, crc: crc))
+        end
+        deliver(EOT.chr)
+      end
+
+      def abort_with(outcome)
+        emit(ABORT)
+        settled(outcome)
+      end
+
+      # +outcome+, or +:hangup+ when the line dropped while it went quiet.
+      def settled(outcome) = quiet ? outcome : :hangup
 
       def handshake(wait)
         deadline = monotonic + wait

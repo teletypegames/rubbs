@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'monitor'
+
 module BBS
   # At most +limit+ events per +per+ seconds for each key (a caller, an
   # address, a whole board), over a sliding window; thread-safe.
@@ -9,8 +11,23 @@ module BBS
   #   else say("Again in #{TIPS.wait(key).ceil} seconds.")
   #   end
   #
-  # Keys that have been quiet for +per+ seconds are forgotten.
+  # Several limits at once (a caller's and the whole board's) are checked
+  # with ::allow_all?, which counts the event in every limit or in none.
+  # #room? and #record check and count apart, for an event counted only
+  # when it went wrong (a failed login):
+  #
+  #   return locked_out unless LOGINS.room?(key)
+  #   LOGINS.record(key) unless password_ok?
+  #
+  # By default the events live in memory and a restart forgets them; with
+  # a BBS::SQLite +store+ they are kept in its +rate_limit_events+ table
+  # under the limit's +name+, so a lockout outlasts a restart. Keys that
+  # have been quiet for +per+ seconds are forgotten either way.
   class RateLimit
+    # The one lock of every limit, so ::allow_all? can check several at
+    # once; reentrant.
+    LOCK = Monitor.new
+
     # Returns the key a caller's events are counted by: the IP address of a
     # caller on the internet (an IPv4-mapped one as IPv4), or
     # <tt>line:<session id></tt> for one behind a local proxy such as
@@ -28,54 +45,118 @@ module BBS
       nil
     end
 
-    # Creates a limit of +limit+ events per +per+ seconds.
-    def initialize(limit:, per:)
+    # Returns whether every limit has room for its key, and then counts the
+    # event in each; when one has no room, nothing is counted. +checks+ is
+    # an Array of <tt>[limit, key]</tt> pairs.
+    #
+    #   BBS::RateLimit.allow_all?([[PER_CALLER, key], [PER_BOARD, :all]])
+    def self.allow_all?(checks)
+      LOCK.synchronize do
+        next false unless checks.all? { |limit, key| limit.room?(key) }
+
+        checks.each { |limit, key| limit.record(key) }
+        true
+      end
+    end
+
+    # Creates a limit of +limit+ events per +per+ seconds. With a +store+
+    # (a BBS::SQLite) the events are kept there under +name+ (a String,
+    # required then); without one, in memory.
+    def initialize(limit:, per:, store: nil, name: nil)
+      raise ArgumentError, 'a stored RateLimit needs a name' if store && name.to_s.empty?
+
       @limit  = limit
       @per    = per
-      @events = {}
-      @pruned = monotonic
-      @mu     = Mutex.new
+      @events = store ? Table.new(store, name.to_s) : Memory.new
     end
 
     # Returns whether +key+ may have one more event now, and counts it when
     # it may.
-    def allow?(key)
-      @mu.synchronize do
-        events = recent(key)
-        next false if events.size >= @limit
+    def allow?(key) = RateLimit.allow_all?([[self, key]])
 
-        events << monotonic
-        true
-      end
+    # Returns whether +key+ may have one more event now. Counts nothing.
+    def room?(key) = LOCK.synchronize { recent(key).size < @limit }
+
+    # Counts one event of +key+ now, room or not. Returns +nil+.
+    def record(key)
+      LOCK.synchronize { @events.add(key, @events.now) }
+      nil
     end
 
     # Returns the seconds until +key+ may have an event, a Float; 0.0 when
     # it may now. Counts nothing.
     def wait(key)
-      @mu.synchronize do
-        events = recent(key)
-        events.size < @limit ? 0.0 : [events.first + @per - monotonic, 0.0].max
+      LOCK.synchronize do
+        times = recent(key)
+        times.size < @limit ? 0.0 : [times[-@limit] + @per - @events.now, 0.0].max
       end
     end
 
     private
 
     # The times of +key+'s events in the window, oldest first.
-    def recent(key)
-      now = monotonic
-      prune(now)
-      events = (@events[key] ||= [])
-      events.shift while events.any? && events.first <= now - @per
-      events
+    def recent(key) = @events.since(key, @events.now - @per)
+
+    # The events of a limit in memory, by monotonic time.
+    class Memory
+      # Creates an empty store.
+      def initialize
+        @times  = {}
+        @pruned = now
+      end
+
+      # The current time of this store: monotonic seconds.
+      def now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+      # The times of +key+'s events after +start+, oldest first; older ones
+      # are dropped.
+      def since(key, start)
+        prune(start)
+        times = @times[key] or return []
+        times.shift while times.any? && times.first <= start
+        times
+      end
+
+      # Keeps an event of +key+ at +time+.
+      def add(key, time) = (@times[key] ||= []) << time
+
+      private
+
+      # Forgets the keys whose last event is before +start+, once a window.
+      def prune(start)
+        return if start < @pruned
+
+        @times.delete_if { |_, times| times.empty? || times.last <= start }
+        @pruned = now
+      end
     end
 
-    def prune(now)
-      return if now - @pruned < @per
+    # The events of a limit in a BBS::SQLite table, by wall-clock time, so
+    # they outlast a restart.
+    class Table
+      # The table every stored limit keeps its events in.
+      NAME = 'rate_limit_events'
 
-      @events.delete_if { |_, events| events.empty? || events.last <= now - @per }
-      @pruned = now
+      # Uses (and creates) the table in +db+ for the limit called +name+.
+      def initialize(db, name)
+        @db   = db
+        @name = name
+        @db.query("CREATE TABLE IF NOT EXISTS #{NAME} (name TEXT NOT NULL, key TEXT NOT NULL, at REAL NOT NULL)")
+        @db.query("CREATE INDEX IF NOT EXISTS #{NAME}_by_key ON #{NAME} (name, key, at)")
+      end
+
+      # The current time of this store: Unix seconds.
+      def now = Time.now.to_f
+
+      # The times of +key+'s events after +start+, oldest first; the older
+      # events of the limit are deleted.
+      def since(key, start)
+        @db.change("DELETE FROM #{NAME} WHERE name = ? AND at <= ?", @name, start)
+        @db.query("SELECT at FROM #{NAME} WHERE name = ? AND key = ? ORDER BY at", @name, key.to_s).map { |row| row['at'] }
+      end
+
+      # Keeps an event of +key+ at +time+.
+      def add(key, time) = @db.insert("INSERT INTO #{NAME} (name, key, at) VALUES (?, ?, ?)", @name, key.to_s, time)
     end
-
-    def monotonic = Process.clock_gettime(Process::CLOCK_MONOTONIC)
   end
 end

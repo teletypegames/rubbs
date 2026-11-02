@@ -11,8 +11,13 @@ class TextTest < Minitest::Test
     assert_equal 'Bob', BBS::Text.clean("Bo\xFFb".b)
   end
 
-  def test_clean_without_newlines
-    assert_equal "ab\tc", BBS::Text.clean("a\nb\tc", keep_newlines: false)
+  def test_clean_without_newlines_keeps_the_words_apart
+    assert_equal "a b\tc d e", BBS::Text.clean("a\nb\tc\r\nd\re", keep_newlines: false)
+  end
+
+  def test_line
+    assert_equal 'Ada Lovelace [2J', BBS::Text.line("  Ada\r\n\tLovelace  \e[2J\n")
+    assert_equal '', BBS::Text.line(nil)
   end
 
   def test_clean_takes_anything

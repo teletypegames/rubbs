@@ -19,16 +19,26 @@ module BBS
   # Every failure (no answer, a timeout, a body over the cap, a refused
   # address, a bad redirect) raises BBS::HTTP::Error, with a message that
   # names the address without its query string, so no key or search term
-  # lands in a log.
+  # lands in a log. A body over the cap raises its subclass TooLarge, as
+  # soon as the Content-Length says so.
+  #
+  # A big download goes to an IO instead of the memory:
+  #
+  #   File.open('book.txt', 'wb') { |file| BBS::HTTP.get(url, to: file, max_bytes: 64 * 1024 * 1024) }
   module HTTP
     # Raised when a request fails; see the module description.
     class Error < StandardError; end
+
+    # Raised when the body is over the cap (+max_bytes+).
+    class TooLarge < Error; end
 
     # The answer to a request.
     #
     # [status]  the HTTP status code, an Integer
     # [body]    the body, a binary String (+force_encoding+ it as needed)
     # [headers] the header fields, a Hash of lowercase name => value String
+    #
+    # The body is +nil+ when a 2xx body went to the +to+ IO of HTTP.get.
     Response = Struct.new(:status, :body, :headers, keyword_init: true) do
       # Returns whether the status is 2xx.
       def ok? = (200..299).cover?(status)
@@ -53,7 +63,11 @@ module BBS
     # [open_timeout] seconds to wait for the connection
     # [read_timeout] seconds to wait for each read
     # [deadline]     seconds the whole request may take, redirects included
-    # [max_bytes]    the most bytes of body read; more is an Error
+    # [max_bytes]    the most bytes of body read; more is a TooLarge
+    # [to]           an IO the body of a 2xx answer is written to as it
+    #                comes, instead of the Response's +body+ (+nil+ then);
+    #                still capped by +max_bytes+, and a failure halfway
+    #                leaves what came in the IO
     # [redirects]    the most redirects followed (to http or https only)
     # [user_agent]   the User-Agent field; default
     #                <tt>BBS.config.user_agent</tt>
@@ -75,7 +89,7 @@ module BBS
       # Prepares a request; the options are those of HTTP.get, +method+ is
       # +:get+ or +:post+ and +body+ the body of a POST.
       def initialize(method, url, body: nil, headers: {}, open_timeout: 5, read_timeout: 15, deadline: 30,
-                     max_bytes: MAX_BYTES, redirects: 3, user_agent: BBS.config.user_agent, public_only: true)
+                     max_bytes: MAX_BYTES, redirects: 3, user_agent: BBS.config.user_agent, public_only: true, to: nil)
         @method      = method
         @url         = url.to_s
         @body        = body
@@ -84,6 +98,7 @@ module BBS
         @max_bytes   = max_bytes
         @redirects   = redirects
         @public_only = public_only
+        @to          = to
         @deadline    = monotonic + deadline
       end
 
@@ -135,19 +150,35 @@ module BBS
       end
 
       def answer(uri, response)
-        Response.new(status: response.code.to_i, body: read(uri, response),
-                     headers: response.each_header.to_h)
+        status = response.code.to_i
+        too_large!(uri) if response['content-length'].to_i > @max_bytes
+        body = @to && (200..299).cover?(status) ? stream(uri, response) : read(uri, response)
+        Response.new(status: status, body: body, headers: response.each_header.to_h)
       end
 
       def read(uri, response)
         body = +''.b
-        response.read_body do |chunk|
-          body << chunk
-          fail!(uri, "the body is over #{@max_bytes} bytes") if body.bytesize > @max_bytes
-          left(uri, 1)
-        end
+        each_chunk(uri, response) { |chunk| body << chunk }
         body
       end
+
+      def stream(uri, response)
+        each_chunk(uri, response) { |chunk| @to.write(chunk) }
+        nil
+      end
+
+      # Yields the chunks of the body, within the cap and the deadline.
+      def each_chunk(uri, response)
+        bytes = 0
+        response.read_body do |chunk|
+          bytes += chunk.bytesize
+          too_large!(uri) if bytes > @max_bytes
+          left(uri, 1)
+          yield chunk
+        end
+      end
+
+      def too_large!(uri) = fail!(uri, "the body is over #{@max_bytes} bytes", TooLarge)
 
       # The address connected to, resolved once and checked.
       def ip(uri)
@@ -164,8 +195,8 @@ module BBS
         [seconds, limit].min
       end
 
-      def fail!(uri, reason)
-        raise Error, "#{@method.upcase} #{uri.scheme}://#{uri.host}#{uri.path}: #{reason}"
+      def fail!(uri, reason, error = Error)
+        raise error, "#{@method.upcase} #{uri.scheme}://#{uri.host}#{uri.path}: #{reason}"
       end
 
       def monotonic = Process.clock_gettime(Process::CLOCK_MONOTONIC)

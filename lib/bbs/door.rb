@@ -58,24 +58,24 @@ module BBS
     def run(session, context = {})
       session.disable_mouse
       session.write("#{Ansi::RESET}#{Ansi::CLEAR}")
-      case @program
-      when FakeOS::Definition
-        FakeOS::Runner.new(session, @program, context: context).run
-      when Flow
-        run_flow(session, context)
-      else
-        @program.call(session, context)
-      end
+      start(session, context)
     rescue IOError, SystemCallError
       raise
     rescue StandardError => e
-      # A door's fault must not end the caller's call: back to the board.
-      warn "BBS door #{@name}: #{e.class}: #{e.message}\n#{e.backtrace&.first(3)&.join("\n")}"
+      BBS.log("door #{@name}", "#{e.class}: #{e.message}\n#{e.backtrace&.first(3)&.join("\n")}")
     ensure
       (session.enable_mouse if BBS.config.mouse) rescue nil
     end
 
     private
+
+    def start(session, context)
+      case @program
+      when FakeOS::Definition then FakeOS::Runner.new(session, @program, context: context).run
+      when Flow then run_flow(session, context)
+      else @program.call(session, context)
+      end
+    end
 
     def run_flow(session, context)
       FlowRunner.new(session, context[:session_id], @program, context: context.dup).run
