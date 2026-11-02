@@ -79,9 +79,7 @@ require_relative 'bbs/server'
 module BBS
   # Yields the global BBS::Config (created on first use) so the block can set
   # its fields. Returns the block's value.
-  def self.configure
-    yield(@config ||= Config.new)
-  end
+  def self.configure = yield(config)
 
   # The global BBS::Config, created with its defaults on first use.
   def self.config

@@ -86,7 +86,7 @@ module BBS
         rescue IOError, Errno::EPIPE, Errno::ECONNRESET
           :halt
         rescue StandardError => e
-          warn "BBS call error: #{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}"
+          BBS.log('flow call', "#{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
           runner.write Ansi::CRLF
           runner.line('Something went wrong.', style: :error)
           nil

@@ -106,7 +106,7 @@ module BBS
       rescue IOError, SystemCallError
         raise
       rescue StandardError => e
-        warn "BBS event error: #{e.class}: #{e.message}\n#{e.backtrace.first(BACKTRACE_LINES).join("\n")}"
+        BBS.log('event', "#{e.class}: #{e.message}\n#{e.backtrace.first(BACKTRACE_LINES).join("\n")}")
         nil
       end
 

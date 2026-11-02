@@ -253,7 +253,7 @@ module BBS
       rescue IOError, SystemCallError
         raise
       rescue StandardError => e
-        warn "FakeOS command error: #{e.class}: #{e.message}"
+        BBS.log('fake os command', e)
         puts "Error: #{e.message}", style: :error
       end
 
