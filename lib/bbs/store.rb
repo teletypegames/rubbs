@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'time'
+require_relative 'store/csv_import'
 
 module BBS
   # A small thread-safe table keyed by session id, for keeping what callers
@@ -12,17 +13,15 @@ module BBS
   #
   # A +path+ ending in <tt>.csv</tt> names the CSV file of earlier versions:
   # the database is the <tt>.sqlite3</tt> file beside it, and on first use
-  # the rows of the CSV file (when it exists and the table is empty) are
-  # imported in one transaction and the CSV file is renamed to
-  # <tt><name>.csv.imported</tt>.
+  # (or at boot, with #open!) the rows of the CSV file (when it exists and
+  # the table is empty) are imported in one transaction and the CSV file is
+  # renamed to <tt><name>.csv.imported</tt>. A row that is not CSV, has more
+  # fields than the header or no +session_id+ is skipped and set aside in
+  # <tt><name>.csv.rejected</tt> (see Store::CsvImport).
   #
   # The +session_id+ column is the key; a +timestamp+ column, when present,
   # is filled with the UTC time a row is created.
   class Store
-    # The control characters removed from a value before it is written:
-    # C0 except tab and LF, DEL, C1 and the bidirectional controls
-    # (BBS::Text::CONTROLS).
-    CONTROL_CHARS = Text::CONTROLS
     # The table that holds the rows.
     TABLE = 'store'
     # The key column, kept even when +headers+ leave it out.
@@ -38,6 +37,14 @@ module BBS
       @path    = path.to_s
       @headers = headers.map(&:to_s)
       @mutex   = Mutex.new
+    end
+
+    # Opens the database now (creating the file and the table, importing a
+    # CSV file) instead of on first use, so a board can do it at boot.
+    # Returns +self+.
+    def open!
+      db
+      self
     end
 
     # The path of the SQLite file: +path+, or the <tt>.sqlite3</tt> file
@@ -105,19 +112,9 @@ module BBS
     def import(db)
       return unless db.get("SELECT COUNT(*) AS n FROM #{TABLE}")['n'].zero?
 
-      rows = csv_rows.reject(&:empty?)
-      db.transaction { rows.each { |row| insert(db, row) } }
-      File.rename(@path, "#{@path}.imported")
-      warn "BBS::Store: #{rows.size} rows of #{@path} imported into #{database_path}"
-    end
-
-    # Bytes, not text: a line with invalid UTF-8 must not stop the import.
-    def csv_rows
-      require 'csv'
-      columns = [KEY, *@headers]
-      CSV.parse(Text.utf8(File.binread(@path)), headers: true).map do |row|
-        row.to_h.slice(*columns).transform_values { |value| value && clean(value) }
-      end
+      csv = CsvImport.new(@path, [KEY, *@headers])
+      db.transaction { csv.rows.each { |row| insert(db, row.transform_values { |value| value && clean(value) }) } }
+      BBS.log('store', csv.finish(database_path))
     end
 
     def project(row) = @headers.to_h { |name| [name, row[name]] }
