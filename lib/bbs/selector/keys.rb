@@ -13,6 +13,7 @@ module BBS
         return [@back] if BACK_KEYS.include?(key)
         return [@items[@index].value] if key == :enter
         return [@exits[fold(key)]] if @exits.key?(fold(key))
+        return [[@item_exits[fold(key)], @items[@index].value]] if @item_exits.key?(fold(key))
 
         item = hotkey(key)
         return unless item

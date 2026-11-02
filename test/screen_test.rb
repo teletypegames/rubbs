@@ -33,6 +33,12 @@ class ScreenTest < Minitest::Test
     assert_equal 'b', Timeout.timeout(5) { @screen.pick('letters', %w[a b c]) }
   end
 
+  def test_pick_item_commands_return_the_key_and_the_lit_item
+    keys('3d')
+    assert_equal %w[d c], Timeout.timeout(5) { @screen.pick('letters', %w[a b c], item_commands: { 'd' => 'discard' }) }
+    assert_includes @session.received, 'd: discard'
+  end
+
   def test_pick_of_nothing_says_so
     keys("\r")
     assert_nil Timeout.timeout(5) { @screen.pick('letters', []) }

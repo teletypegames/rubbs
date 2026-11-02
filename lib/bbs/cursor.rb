@@ -30,10 +30,11 @@ module BBS
     # True when the session is a PETSCII line (a C64).
     def petscii? = @petscii
 
-    # Reads a key from the session (see BBS::Telnet#readkey). Raises
-    # IOError when the caller hangs up.
-    def key
-      key = @session.readkey
+    # Reads a key from the session (see BBS::Telnet#readkey): +:idle+ when
+    # +timeout+ seconds pass without one, when given. Raises IOError when
+    # the caller hangs up.
+    def key(timeout: nil)
+      key = @session.readkey(timeout: timeout)
       raise IOError, 'the caller hung up' if key.nil?
 
       key

@@ -1515,6 +1515,20 @@ help). With `single_line: true` it edits one paragraph and RETURN saves; with
 screen row, PgUp and PgDn a screenful. Both raise IOError when the caller
 hangs up.
 
+The editor can autosave, so a hang-up does not lose what was typed. It is off
+unless asked for, and it knows nothing about where the text goes: with
+`autosave:` seconds and a block, the block gets the text (lines joined by LF)
+every that many seconds while it changes, whether the caller is typing or
+thinking, and once more when the caller hangs up; never when it did not
+change, and not on save or quit, which `run` returns anyway. An exception in
+the block is logged and the editing goes on. The editor then reads the keys
+with a timeout, so it keeps the session's idle limit itself and raises
+`IO::TimeoutError` (an IOError) past it, as the line would.
+
+```ruby
+body = screen.edit(post.body, title: 'BODY', autosave: 15) { |text| drafts.save(draft_id, body: text) }
+```
+
 ### A cursor menu for a line-by-line board (`BBS::Selector`)
 
 A menu drawn at the cursor, for a board that talks line by line rather than
@@ -1603,7 +1617,11 @@ screen.choose(' sure? (y/n) ', %w[y n], back: 'n')  # one key of a few, a prompt
 
 The screen's menus are `BBS::Selector` configurations: `pick` a numbered
 list under a title, `menu` a selector at the cursor, `actions` a row of keys.
-`choose` is the one key prompt (no menu: the keys typed after it). The
+`choose` is the one key prompt (no menu: the keys typed after it). `pick`
+takes `commands:` (`{ 's' => 'search' }`, the key returned) and
+`item_commands:` (`{ 'd' => 'discard' }`, `[key, item]` returned for the lit
+item); both are listed on the hint row. Underneath, `BBS::Selector.new` takes
+`exits:` and `item_exits:` the same way. The
 colour of `say` and `rule` is a keyword (`say(text, color: RD)`).
 
 `Colors.install(mod)` is needed for a namespace module because Ruby looks a

@@ -2,6 +2,7 @@
 
 require_relative 'editor/layout'
 require_relative 'editor/chrome'
+require_relative 'editor/autosave'
 
 module BBS
   # A full-screen text editor on a telnet line, for a modern terminal and a
@@ -32,7 +33,17 @@ module BBS
   #
   #   text = BBS::Editor.new(session, text: post.body, title: 'BODY').run
   #   post.body = text if text
+  #
+  # With +autosave+ the text is handed to a block now and then while it is
+  # edited, so the caller can keep it where a hang-up does not lose it. The
+  # editor does not know where it goes:
+  #
+  #   BBS::Editor.new(session, text: body, title: 'BODY', autosave: 15) do |text|
+  #     drafts.save(id, text)
+  #   end.run
   class Editor
+    include Autosave
+
     # The keys that save the text at once.
     SAVE_KEYS = %i[f1 ctrl_s].freeze
     # The keys that ask whether to save or quit.
@@ -53,7 +64,22 @@ module BBS
     #               the title bar counts them when it is given
     # [cols]        the screen width; default the session's
     # [rows]        the screen height; default the session's
-    def initialize(session, text: '', title: '', single_line: false, max: nil, cols: nil, rows: nil)
+    # [autosave]    seconds between autosaves, or +nil+ (the default) for
+    #               none; it needs the block
+    #
+    # The block, with +autosave+, is called with the text (lines joined by
+    # LF) every +autosave+ seconds while the caller types or thinks, and
+    # once more when the caller hangs up, each time only when the text
+    # changed since the last call; not when the caller saves or quits,
+    # since #run returns then. An exception it raises is logged with
+    # BBS.log and the editing goes on.
+    #
+    # The editor reads the keys with a timeout then, so it keeps the
+    # session's idle limit itself: after <tt>session.idle_seconds</tt>
+    # (Server::DEFAULT_TIMEOUT when unset) without a key it raises
+    # IO::TimeoutError, as the line would.
+    def initialize(session, text: '', title: '', single_line: false, max: nil, cols: nil, rows: nil,
+                   autosave: nil, &on_autosave)
       @session = session
       @screen  = Cursor.new(session)
       @buffer  = TextBuffer.new(text, max: max, single_line: single_line)
@@ -65,23 +91,33 @@ module BBS
       @goal    = nil
       @top     = 0
       @chrome  = Chrome.new(@screen, title: title.to_s, single_line: single_line, max: max, cols: @cols, rows: @rows)
+      @autosave    = on_autosave && autosave&.positive? ? autosave : nil
+      @on_autosave = on_autosave
+      @saved_text  = @buffer.text
     end
 
     # Runs the editor until the caller saves or quits, then leaves the
     # screen as it is; the caller draws the next one.
     #
     # Returns the text, lines joined by LF, when saved, and +nil+ when the
-    # caller quit. Raises IOError when the caller hangs up.
+    # caller quit. Raises IOError when the caller hangs up (after the last
+    # autosave) and IO::TimeoutError, an IOError, when an autosaving editor
+    # sat idle past the session's limit.
     def run
       first_paint
+      start_clock
       loop do
-        key  = @screen.key
+        key  = next_key
         done = finish(key)
         return done == :quit ? nil : @buffer.text if done
 
         handle(key)
         paint
+        autosave if due?
       end
+    rescue IOError
+      autosave
+      raise
     end
 
     private

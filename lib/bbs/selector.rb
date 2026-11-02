@@ -120,12 +120,15 @@ module BBS
     # [hint]    a line for the status row, or +nil+
     # [exits]   more keys and what #run returns for them, e.g.
     #           <tt>{ 'q' => :quit }</tt>
+    # [item_exits] keys that act on the lit item: #run returns
+    #           <tt>[value, item value]</tt> for them, e.g.
+    #           <tt>{ 'd' => :delete }</tt> gives <tt>[:delete, post]</tt>
     # [back]    what #run returns for RUN/STOP, ← or Esc
     # [colors]  colours of the roles over COLORS
     #
     # Raises ArgumentError when no item can be selected.
     def initialize(session, items, width:, height: nil, columns: 1, index: nil, numbers: false, across: false,
-                   hint: nil, exits: {}, back: nil, colors: {}, fill: false)
+                   hint: nil, exits: {}, item_exits: {}, back: nil, colors: {}, fill: false)
       raise ArgumentError, 'a selector needs an item to select' unless items.any?(&:selectable?)
 
       @session = session
@@ -135,7 +138,8 @@ module BBS
       @index   = first_index(index)
       @numbers = numbers
       @hint    = hint
-      @exits   = exits.transform_keys { |k| fold(k) }
+      @exits   = fold_keys(exits)
+      @item_exits = fold_keys(item_exits)
       @back    = back
       @colors  = self.class::COLORS.merge(colors)
       @typed   = +''
@@ -144,7 +148,8 @@ module BBS
     # Draws the menu, then reads keys until an item is taken or the caller
     # goes back; the cursor ends on the line under the menu.
     #
-    # Returns the taken item's +value+, an +exits+ value, or +back+. Raises
+    # Returns the taken item's +value+, an +exits+ value, an
+    # <tt>[item_exits value, lit item's value]</tt> pair, or +back+. Raises
     # IOError when the caller hangs up.
     def run
       draw
@@ -197,6 +202,8 @@ module BBS
     def rows = item_rows + (about? ? 1 : 0) + (status? ? 1 : 0)
 
     def fold(key) = key.is_a?(String) ? key.downcase : key
+
+    def fold_keys(keys) = keys.transform_keys { |k| fold(k) }
 
     def read_key = @cursor.key
 

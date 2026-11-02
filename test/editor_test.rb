@@ -49,3 +49,88 @@ class EditorTest < Minitest::Test
     assert_equal "one\nZtwo three", edit("\e[5~\e[6~\e[H\Z\eOP", text: "one\ntwo three")
   end
 end
+
+class EditorAutosaveTest < Minitest::Test
+  def setup
+    @session = FakeSession.new
+    @saves   = []
+  end
+
+  def teardown = @session.fake_line.close
+
+  def caller = @session.fake_line.caller
+
+  def editor(text: '', every: 0.1, &block)
+    block ||= ->(t) { @saves << t }
+    BBS::Editor.new(@session, text: text, cols: 20, rows: 8, autosave: every, &block)
+  end
+
+  def run_with(editor)
+    Timeout.timeout(5) { editor.run }
+  end
+
+  def test_hands_the_changed_text_over_while_the_caller_thinks
+    caller.write('ab')
+    Thread.new do
+      sleep 0.3
+      caller.write("\eOP")
+    end
+    assert_equal 'ab', run_with(editor)
+    assert_equal ['ab'], @saves
+  end
+
+  def test_saves_while_the_caller_types_without_a_pause
+    writer = Thread.new do
+      8.times do |i|
+        caller.write(i.to_s)
+        sleep 0.03
+      end
+      caller.write("\eOP")
+    end
+    assert_equal '01234567', run_with(editor)
+    writer.join
+    refute_empty @saves
+    assert(@saves.all? { |t| '01234567'.start_with?(t) })
+  end
+
+  def test_an_unchanged_text_is_not_handed_over
+    Thread.new do
+      sleep 0.3
+      caller.write("\eOP")
+    end
+    assert_equal 'same', run_with(editor(text: 'same'))
+    assert_empty @saves
+  end
+
+  def test_a_hang_up_hands_over_the_last_text
+    caller.write('xy')
+    Thread.new do
+      sleep 0.05
+      caller.close
+    end
+    assert_raises(IOError) { run_with(editor(every: 10)) }
+    assert_equal ['xy'], @saves
+  end
+
+  def test_keeps_the_idle_limit_of_the_session
+    @session.idle_seconds = 0.2
+    caller.write('z')
+    assert_raises(IO::TimeoutError) { run_with(editor(every: 0.05)) }
+    assert_equal ['z'], @saves
+  end
+
+  def test_a_failing_block_does_not_stop_the_editing
+    Thread.new do
+      caller.write('k')
+      sleep 0.3
+      caller.write("\eOP")
+    end
+    _, err = capture_io { assert_equal 'k', run_with(editor { raise 'disk full' }) }
+    assert_includes err, 'editor autosave'
+  end
+
+  def test_no_block_means_no_autosave
+    caller.write("q\eOP")
+    assert_equal 'q', Timeout.timeout(5) { BBS::Editor.new(@session, cols: 20, rows: 8, autosave: 0.01).run }
+  end
+end

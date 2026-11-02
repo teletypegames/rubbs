@@ -53,7 +53,8 @@ module BBS
       #          or +nil+
       #
       # The other options (+width+, +height+, +columns+, +index+,
-      # +numbers+, +across+, +hint+, +exits+, +back+, +colors+) are those of
+      # +numbers+, +across+, +hint+, +exits+, +item_exits+, +back+,
+      # +colors+) are those of
       # BBS::Selector.new. Raises ArgumentError for a menu with nothing to
       # select or an unknown colour.
       def initialize(session, items, canvas:, row:, col:, rest: [Canvas::ROWS - 1, 0], idle: nil, **, &on_idle)

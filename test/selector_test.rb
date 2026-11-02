@@ -36,6 +36,10 @@ class SelectorTest < Minitest::Test
     assert_equal :quit, pick('q', exits: { 'q' => :quit })
   end
 
+  def test_item_exits_return_their_value_with_the_lit_item
+    assert_equal %i[delete banana], pick("\e[BD", item_exits: { 'd' => :delete })
+  end
+
   def test_across_moves_sideways
     assert_equal :banana, pick("\e[C\r", across: true)
   end

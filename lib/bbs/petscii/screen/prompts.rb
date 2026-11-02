@@ -39,13 +39,15 @@ module BBS
 
         # +text+ edited in the full-screen BBS::Editor at this screen's size,
         # titled +title+; +single_line+ makes it one paragraph that RETURN
-        # saves, +max+ limits its length. The screen is left as the editor
-        # leaves it.
+        # saves, +max+ limits its length. With +autosave+ seconds and a block
+        # the block gets the text whenever it changed, every +autosave+
+        # seconds and when the caller hangs up (see BBS::Editor.new). The
+        # screen is left as the editor leaves it.
         #
         # Returns the text when saved, +nil+ when the caller quit.
-        def edit(text = '', title:, single_line: false, max: nil)
+        def edit(text = '', title:, single_line: false, max: nil, autosave: nil, &on_autosave)
           Editor.new(@session, text: text, title: title, single_line: single_line, max: max,
-                               cols: @cols, rows: @rows).run
+                               cols: @cols, rows: @rows, autosave: autosave, &on_autosave).run
         end
 
         # Writes +text+ dim on a new line and waits for a key.
@@ -66,10 +68,14 @@ module BBS
         # [empty]    shown, with a #pause, when +items+ is empty
         # [commands] single-key commands, <tt>{ 's' => 'search' }</tt>: the
         #            hint row lists them, and pressing one returns its key
+        # [item_commands] single-key commands on the lit item,
+        #            <tt>{ 'd' => 'discard' }</tt>: the hint row lists them,
+        #            and pressing one returns <tt>[key, item]</tt>
         #
-        # Returns the item picked, a +commands+ key, or +nil+ for q, ← or
+        # Returns the item picked, a +commands+ key, an
+        # <tt>[item_commands key, item]</tt> pair, or +nil+ for q, ← or
         # RUN/STOP (and for no items).
-        def pick(heading, items, empty: EMPTY, right: '', commands: {}, &label)
+        def pick(heading, items, empty: EMPTY, right: '', commands: {}, item_commands: {}, &label)
           label ||= :to_s.to_proc
           title(heading, right)
           if items.empty?
@@ -77,9 +83,9 @@ module BBS
             pause
             return nil
           end
-          hint = commands.empty? ? PICK_HINT : "#{commands.map { |k, v| "#{k}: #{v}" }.join('  ')}  q: back"
-          Selector.list(@session, items, width: @cols - 1, height: page_size, hint: hint,
-                                         exits: commands.keys.to_h { |k| [k, k] }.merge('q' => nil)) do |item|
+          Selector.list(@session, items, width: @cols - 1, height: page_size, hint: pick_hint(commands.merge(item_commands)),
+                                         exits: commands.keys.to_h { |k| [k, k] }.merge('q' => nil),
+                                         item_exits: item_commands.keys.to_h { |k| [k, k] }) do |item|
             plain(label.call(item))
           end
         end
@@ -108,6 +114,11 @@ module BBS
         end
 
         private
+
+        # The hint row of #pick: its commands, or PICK_HINT.
+        def pick_hint(commands)
+          commands.empty? ? PICK_HINT : "#{commands.map { |k, v| "#{k}: #{v}" }.join('  ')}  q: back"
+        end
 
         # Waits under a page of #page: whether to show the next one. The last
         # page waits only with +wait+; q, ← or RUN/STOP leave early.
