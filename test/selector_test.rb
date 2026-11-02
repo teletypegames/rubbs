@@ -79,7 +79,7 @@ class CanvasMenuTest < Minitest::Test
 
   def test_paints_the_menu_on_the_canvas_and_takes_a_key
     canvas  = BBS::Petscii::Canvas.new
-    session = RawSession.new([:down, :enter], [])
+    session = RawSession.new(%i[down enter], [])
     items   = [BBS::Selector.item('ONE', key: '1', value: 1), BBS::Selector.item('TWO', key: '2', value: 2)]
     menu    = BBS::Petscii::CanvasMenu.new(session, items, canvas: canvas, row: 2, col: 1, width: 20)
     assert_equal 2, menu.run
@@ -91,7 +91,7 @@ class CanvasMenuTest < Minitest::Test
   def test_the_idle_block_animates_while_waiting
     session = RawSession.new([], [])
     ticks = 0
-    session.define_singleton_method(:readkey) { |timeout: nil| (ticks += 1) < 3 ? :idle : :enter }
+    session.define_singleton_method(:readkey) { |**| (ticks += 1) < 3 ? :idle : :enter }
     menu = BBS::Petscii::CanvasMenu.new(session, [BBS::Selector.item('GO', value: :go)],
                                         canvas: BBS::Petscii::Canvas.new, row: 0, col: 0, width: 10, idle: 0.1) { 'x' }
     assert_equal :go, menu.run

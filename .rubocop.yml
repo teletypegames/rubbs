@@ -1,10 +1,3 @@
-inherit_from: .rubocop_todo.yml
-
-# The files listed in .rubocop_todo.yml add to the Exclude lists here.
-inherit_mode:
-  merge:
-    - Exclude
-
 AllCops:
   NewCops: enable
   TargetRubyVersion: 3.2
@@ -54,8 +47,7 @@ Style/FetchEnvVar:
 Style/Documentation:
   Enabled: false
 
-# Small methods: new code is held to these; today's offenders are listed in
-# .rubocop_todo.yml.
+# Small methods.
 Metrics/MethodLength:
   Max: 15
   CountAsOne: [array, hash, heredoc]

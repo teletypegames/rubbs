@@ -7,7 +7,7 @@ class SeasonTest < Minitest::Test
 
   def test_budapest_noon_in_july_is_a_summer_day
     s = season(Time.utc(2026, 7, 1, 10))
-    assert_equal [:summer, :day], [s.season, s.time_of_day]
+    assert_equal %i[summer day], [s.season, s.time_of_day]
     assert_equal 7200, s.time.utc_offset
     assert s.sunrise < s.time && s.time < s.sunset
   end

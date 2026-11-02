@@ -5,7 +5,7 @@ require 'test_helper'
 class TerminalTest < Minitest::Test
   def setup
     @session = FakeSession.new
-    @session.define_singleton_method(:settle) { |timeout:| true }
+    @session.define_singleton_method(:settle) { |**| true }
   end
 
   def teardown = @session.fake_line.close

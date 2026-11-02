@@ -41,7 +41,7 @@ class ArtTest < Minitest::Test
     lines = art.ansi_lines
     assert_equal 2, lines.size
     assert lines.first.start_with?("\e[0;38;5;")
-    assert lines.all? { |l| l.end_with?(BBS::Ansi::RESET) }
+    assert(lines.all? { |l| l.end_with?(BBS::Ansi::RESET) })
   end
 
   def test_mistakes_name_the_cell
