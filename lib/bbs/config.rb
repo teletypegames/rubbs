@@ -39,15 +39,19 @@ module BBS
     #                    the process; default 2
     # [user_agent]       the User-Agent header of BBS::HTTP requests;
     #                    default <tt>rubbs/<version> (+https://teletypegames.org)</tt>
+    # [log_tag]          what every BBS.log line starts with, the board's
+    #                    technical name such as <tt>feedia-bbs</tt>; default
+    #                    the +BBS_LOG_TAG+ environment variable or +bbs+
     attr_accessor :screens_dir, :flow, :on_session_end,
                   :port, :theme, :mouse, :mouse_on_connect, :idle_seconds, :max_sessions,
-                  :max_sessions_per_ip, :ai_concurrency, :user_agent
+                  :max_sessions_per_ip, :ai_concurrency, :user_agent, :log_tag
 
     # The User-Agent of BBS::HTTP when none is configured.
     DEFAULT_USER_AGENT = "rubbs/#{Gem.loaded_specs['bbs']&.version || 'dev'} (+https://teletypegames.org)".freeze
 
     # Creates a Config with the defaults, reading +BBS_PORT+,
-    # +BBS_MAX_SESSIONS+ and +BBS_MAX_SESSIONS_PER_IP+ from the environment.
+    # +BBS_MAX_SESSIONS+, +BBS_MAX_SESSIONS_PER_IP+ and +BBS_LOG_TAG+ from
+    # the environment.
     def initialize
       @port         = (ENV['BBS_PORT'] || 2323).to_i
       @mouse        = false
@@ -57,6 +61,7 @@ module BBS
       @max_sessions_per_ip = (ENV['BBS_MAX_SESSIONS_PER_IP'] || 6).to_i
       @ai_concurrency      = 2
       @user_agent          = DEFAULT_USER_AGENT
+      @log_tag             = ENV['BBS_LOG_TAG'] || 'bbs'
     end
   end
 end

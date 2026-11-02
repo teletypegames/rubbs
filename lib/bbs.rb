@@ -40,6 +40,8 @@ require_relative 'bbs/store'
 require_relative 'bbs/http'
 require_relative 'bbs/cache'
 require_relative 'bbs/rate_limit'
+require_relative 'bbs/background'
+require_relative 'bbs/wikipedia'
 require_relative 'bbs/frame_buffer'
 require_relative 'bbs/event'
 require_relative 'bbs/theme'
@@ -95,5 +97,31 @@ module BBS
   # Blocks; returns +nil+ after Ctrl-C.
   def self.start(port: config.port)
     Server.new(port: port).run
+  end
+
+  # Writes one line to the log (stderr): the board's
+  # <tt>BBS.config.log_tag</tt>, +tag+ (what the line is about) and
+  # +message+, a String or an exception (its class and message).
+  #
+  #   BBS.log('catalog refresh', error)   # "feedia-bbs: catalog refresh: SocketError: …"
+  #
+  # Returns +nil+.
+  def self.log(tag, message)
+    message = "#{message.class}: #{message.message}" if message.is_a?(Exception)
+    warn "#{config.log_tag}: #{tag}: #{message}"
+  end
+
+  # Runs the block in a BBS::Background thread named +name+ and returns the
+  # Thread. An error is logged with BBS.log and the block run again after
+  # +retry_after+ seconds, doubled after each failure up to +max_retry+.
+  #
+  # [every]       +nil+ (the default) runs the block until it succeeds once;
+  #               a number of seconds runs it forever, that long apart
+  # [retry_after] seconds before the first retry (Background::RETRY_AFTER)
+  # [max_retry]   the longest pause between retries (Background::MAX_RETRY)
+  #
+  #   BBS.background('catalog refresh', every: 3600) { library.refresh }
+  def self.background(name, every: nil, retry_after: Background::RETRY_AFTER, max_retry: Background::MAX_RETRY, &)
+    Background.new(name, every: every, retry_after: retry_after, max_retry: max_retry, &).start
   end
 end
