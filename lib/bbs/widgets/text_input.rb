@@ -56,7 +56,7 @@ module BBS
         return if no_room?
 
         blank(frame, 0, sgr)
-        placeholder? ? put(frame, 0, 0, @placeholder[0, bounds.width - 1].to_s, style(:text_dim)) : put(frame, 0, 0, visible, sgr)
+        placeholder? ? put(frame, 0, 0, @placeholder[0, bounds.width - 1].to_s, style(:text_dim)) : put(frame, 0, 0, shown_text, sgr)
         draw_cursor(frame) if focused
       end
 
@@ -76,9 +76,9 @@ module BBS
 
       def sgr = focused ? style(:input_focused) : style(:input)
 
-      def visible = (@password ? '*' * @value.length : @value)[@scroll, bounds.width - 1] || ''
+      def shown_text = (@password ? '*' * @value.length : @value)[@scroll, bounds.width - 1] || ''
 
-      def placeholder? = visible.empty? && !focused && !@placeholder.empty?
+      def placeholder? = shown_text.empty? && !focused && !@placeholder.empty?
 
       def draw_cursor(frame)
         put(frame, [@cursor - @scroll, bounds.width - 1].min, 0, '_', sgr)

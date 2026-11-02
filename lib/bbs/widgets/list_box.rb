@@ -52,7 +52,7 @@ module BBS
         return click(event.y - bounds.y) if Widgets.click_in?(event, bounds)
 
         rows = Widgets.wheel(event, bounds)
-        rows && select(@selected + rows)
+        rows && select_index(@selected + rows)
       end
 
       private
@@ -61,7 +61,7 @@ module BBS
         return @on_activate&.call(selected_item, self) || :handled if name == :enter
 
         target = target_of(name)
-        target && select(target)
+        target && select_index(target)
       end
 
       # The index key +name+ moves the selection to, or +nil+.
@@ -89,7 +89,7 @@ module BBS
 
       # Selects item +index+ (kept in the list), scrolls to it and calls
       # +on_select+ when the selection changed. Returns :handled.
-      def select(index)
+      def select_index(index)
         return :handled if @items.empty?
 
         before    = @selected
