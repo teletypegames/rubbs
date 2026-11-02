@@ -56,7 +56,11 @@ module BBS
         return if no_room?
 
         blank(frame, 0, sgr)
-        placeholder? ? put(frame, 0, 0, @placeholder[0, bounds.width - 1].to_s, style(:text_dim)) : put(frame, 0, 0, shown_text, sgr)
+        if placeholder?
+          put(frame, 0, 0, @placeholder[0, bounds.width - 1].to_s, style(:text_dim))
+        else
+          put(frame, 0, 0, shown_text, sgr)
+        end
         draw_cursor(frame) if focused
       end
 
