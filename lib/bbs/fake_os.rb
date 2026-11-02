@@ -105,7 +105,7 @@ module BBS
       def boot(&block)  = (@boot_block = block)
       # Sets the block run in the Console once after boot, before the first
       # prompt.
-      def ready(&block) = (@ready_block = block) # runs once after boot, before the first prompt
+      def ready(&block) = (@ready_block = block)
 
       # Registers a command under one or more names (the first is the
       # canonical one shown in help); names match case-insensitively. The

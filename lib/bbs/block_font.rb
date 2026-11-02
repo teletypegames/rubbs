@@ -81,13 +81,20 @@ module BBS
     #
     # Returns the rows, an Array of three Strings.
     def self.half_blocks(word, glyphs: {}, colors: nil, reset: Ansi::RESET)
-      bits = rows(word, glyphs: glyphs).map { |r| r.chars.map { |c| c == SET } }
-      bits << Array.new(bits.first.size, false)
-      lines = bits.each_slice(2).map { |top, bottom| top.zip(bottom).map { |pair| HALF[pair] }.join }
+      lines = pixel_pairs(rows(word, glyphs: glyphs)).map { |pairs| pairs.map { |pair| HALF[pair] }.join }
       return lines if colors.nil?
 
       lines.each_with_index.map { |line, i| "#{color_of(colors, i)}#{line}#{reset}" }
     end
+
+    # The pixel +rows+ two by two, each pair of rows as the [upper, lower]
+    # pixels of its columns; the fifth row pairs with a clear one.
+    def self.pixel_pairs(rows)
+      bits = rows.map { |r| r.chars.map { |c| c == SET } }
+      bits << Array.new(bits.first.size, false)
+      bits.each_slice(2).map { |top, bottom| top.zip(bottom) }
+    end
+    private_class_method :pixel_pairs
 
     # One pixel row, a String of <tt>#</tt> and <tt>.</tt> (or spaces), as
     # reversed spaces: every run of set pixels between +reverse+ and

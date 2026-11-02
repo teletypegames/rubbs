@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative 'frame_buffer/wrap'
-
 module BBS
   # An off-screen grid of character cells, each holding one character and
   # the SGR escape sequence that styles it. Widgets and windows draw into a
@@ -40,61 +38,6 @@ module BBS
       single: { tl: '┌', tr: '┐', bl: '└', br: '┘', h: '─', v: '│' },
       double: { tl: '╔', tr: '╗', bl: '╚', br: '╝', h: '═', v: '║' }
     }.freeze
-
-    # Returns +value+ as a UTF-8 String a regexp can read: a binary String
-    # is taken as UTF-8, another encoding is converted, and invalid bytes
-    # become <tt>?</tt>.
-    def self.text(value)
-      s = value.to_s
-      s = utf8(s) unless s.encoding == Encoding::UTF_8
-      s.valid_encoding? ? s : s.scrub('?')
-    end
-
-    # Returns +s+ in UTF-8: bytes of a binary String as they are, another
-    # encoding converted (what does not convert becomes <tt>?</tt>).
-    def self.utf8(s)
-      return s.dup.force_encoding(Encoding::UTF_8) if s.encoding == Encoding::BINARY
-
-      s.encode(Encoding::UTF_8, invalid: :replace, undef: :replace, replace: '?')
-    end
-
-    # Returns +text+ (anything with +to_s+) as UTF-8 without its ANSI
-    # escape sequences: the one way rubbs strips colours from text.
-    def self.plain(text) = self.text(text).gsub(Ansi::CSI_RE, '')
-
-    # Returns the number of characters of +text+ left once its ANSI escape
-    # sequences are removed.
-    def self.visible_width(text) = plain(text).length
-
-    # Returns +text+ cut so that at most +max_width+ characters are visible.
-    # Escape sequences up to the cut are kept (they take no width); an
-    # escape sequence the text cuts off ends it. An empty String when
-    # +max_width+ is zero or less.
-    def self.clip_ansi(text, max_width)
-      out     = +''
-      visible = 0
-      self.text(text).scan(ANSI_TOKEN) do |seq, cut, char|
-        break if cut || (char && visible >= max_width)
-
-        out << (seq || char)
-        visible += 1 if char
-      end
-      out
-    end
-
-    # Word-wraps the ANSI-styled +text+ to lines of at most +width+ visible
-    # characters and returns them as an Array of Strings, with trailing
-    # spaces removed. A word longer than +width+ stays on a line of its own.
-    #
-    # The style is carried across wrapped lines: when an SGR sequence is
-    # active at a wrap point, the next line starts with that sequence again.
-    # Returns <tt>['']</tt> when +width+ is zero or less.
-    def self.wrap_ansi(text, width)
-      return [''] if width <= 0
-
-      s = self.text(text)
-      visible_width(s) <= width ? [s] : Wrap.new(width).lines(s)
-    end
 
     # The width (+cols+) and height (+rows+) of the grid in cells.
     attr_reader :cols, :rows
@@ -150,62 +93,6 @@ module BBS
       end
     end
 
-    # ── Drawing helpers (1-based coordinates) ────────────────────────────────
-
-    # Fills the rectangle at +x+, +y+ of +width+ by +height+ cells with
-    # +char+ in style +sgr+.
-    def fill(x:, y:, width:, height:, sgr: nil, char: ' ')
-      height.times { |r| hline(x: x, y: y + r, length: width, char: char, sgr: sgr) }
-    end
-
-    # Draws a horizontal line of +length+ +char+ characters from +x+, +y+
-    # in style +sgr+.
-    def hline(x:, y:, length:, char: '─', sgr: nil)
-      move(x, y)
-      write(char * [length, 0].max, sgr: sgr)
-    end
-
-    # Draws a vertical line of +length+ +char+ characters down from +x+, +y+
-    # in style +sgr+.
-    def vline(x:, y:, length:, char: '│', sgr: nil)
-      length.times do |r|
-        move(x, y + r)
-        write(char, sgr: sgr)
-      end
-    end
-
-    # Draws a frame of +width+ by +height+ cells with its top left at +x+,
-    # +y+. Does nothing when either side is under 2.
-    #
-    # [sgr]          style of the frame
-    # [fill_sgr]     when given, the inside is cleared with spaces in this style
-    # [style]        a BOX_CHARS key; an unknown one draws +:single+
-    # [title]        text set into the top edge, clipped to fit
-    # [title_sgr]    style of the title (defaults to +sgr+)
-    # [title_indent] edge characters drawn before the title
-    def box(x:, y:, width:, height:, sgr: nil, fill_sgr: nil, style: :single, title: nil, title_sgr: nil,
-            title_indent: 0)
-      return if width < 2 || height < 2
-
-      g = BOX_CHARS[style] || BOX_CHARS[:single]
-      top_edge(x, y, width, g, sgr, [title, title_sgr || sgr, [title_indent, 0].max])
-      (1...height - 1).each { |r| box_side(x, y + r, width, g, sgr, fill_sgr) }
-      hline(x: x, y: y + height - 1, length: 1, char: g[:bl], sgr: sgr)
-      write(g[:h] * (width - 2), sgr: sgr)
-      write(g[:br], sgr: sgr)
-    end
-
-    # Draws the drop shadow of a +width+ by +height+ rectangle at +x+, +y+:
-    # two columns down its right side and one row under it, offset by one
-    # row and two columns, in style +sgr+ (black background by default).
-    def shadow(x:, y:, width:, height:, sgr: nil)
-      sgr ||= Ansi::BG_BLACK
-      if x + width < @cols
-        height.times { |r| hline(x: x + width, y: y + 1 + r, length: 2, char: ' ', sgr: sgr) }
-      end
-      hline(x: x + 2, y: y + height, length: width, char: ' ', sgr: sgr) if y + height <= @rows
-    end
-
     # Returns the ANSI byte String that turns a screen showing the frame
     # buffer +from+ into this one: only changed cells are written, with a
     # cursor move only where the next changed cell is not adjacent. Each
@@ -248,28 +135,6 @@ module BBS
       end
     end
 
-    # The top edge of a box: the corners, and the title when there is one.
-    def top_edge(x, y, width, g, sgr, (title, title_sgr, indent))
-      inner = width - 2
-      hline(x: x, y: y, length: 1, char: g[:tl], sgr: sgr)
-      if title.to_s.empty?
-        write(g[:h] * inner, sgr: sgr)
-      else
-        clipped = title[0, [inner - 2 - indent, 0].max]
-        write("#{g[:h] * indent}#{g[:h]} ", sgr: sgr)
-        write(clipped, sgr: title_sgr)
-        write(g[:h] * [inner - indent - 2 - clipped.length, 0].max, sgr: sgr)
-      end
-      write(g[:tr], sgr: sgr)
-    end
-
-    # One row of a box's sides, its inside cleared with +fill_sgr+.
-    def box_side(x, y, width, g, sgr, fill_sgr)
-      hline(x: x, y: y, length: 1, char: g[:v], sgr: sgr)
-      write(' ' * (width - 2), sgr: fill_sgr) if fill_sgr
-      hline(x: x + width - 1, y: y, length: 1, char: g[:v], sgr: sgr)
-    end
-
     # The cells that differ from +from+: [row, col, cell], 0-based.
     def changes(from)
       (0...@rows).flat_map do |r|
@@ -289,3 +154,7 @@ module BBS
     end
   end
 end
+
+require_relative 'frame_buffer/wrap'
+require_relative 'frame_buffer/ansi_text'
+require_relative 'frame_buffer/drawing'

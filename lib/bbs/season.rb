@@ -90,65 +90,6 @@ module BBS
       new(at.getlocal(offset(tz, at.getutc)), jam: jam, latitude: latitude, longitude: longitude)
     end
 
-    # The offset from UTC in seconds of time zone +tz+ (see ::now) at
-    # +utc+, a Time. Raises ArgumentError for a zone it does not know.
-    def self.offset(tz, utc)
-      return tz.utc_offset_at(utc) if tz.respond_to?(:utc_offset_at)
-      return tz.period_for_utc(utc).utc_total_offset if tz.respond_to?(:period_for_utc)
-
-      name = tz.to_s
-      if (m = OFFSET_RE.match(name))
-        return (m[1] == '-' ? -1 : 1) * ((m[2].to_i * 3600) + (m[3].to_i * 60))
-      end
-      if ZONES.key?(name)
-        standard, summer = ZONES[name]
-        return standard + (summer && eu_summer?(utc) ? 3600 : 0)
-      end
-      tzinfo(name).period_for_utc(utc).utc_total_offset
-    end
-
-    # Whether EU summer time is in force at +utc+: from 01:00 UTC on the
-    # last Sunday of March to 01:00 UTC on the last Sunday of October.
-    def self.eu_summer?(utc)
-      year = utc.year
-      utc >= Time.utc(year, 3, last_sunday(year, 3), 1) && utc < Time.utc(year, 10, last_sunday(year, 10), 1)
-    end
-
-    # The day of the month of the last Sunday of +month+ in +year+.
-    def self.last_sunday(year, month)
-      last = Date.new(year, month, -1)
-      last.day - last.wday
-    end
-
-    # Sunrise and sunset on +date+ (a Date) at +latitude+, +longitude+, in
-    # minutes after midnight UTC (Floats): <tt>[rise, set]</tt>, or
-    # <tt>[nil, nil]</tt> for polar day or night. The NOAA approximation.
-    def self.sun(date, latitude, longitude)
-      g = 2 * Math::PI / 365 * (date.yday - 1)
-      eqtime = 229.18 * (0.000075 + (0.001868 * Math.cos(g)) - (0.032077 * Math.sin(g)) -
-                         (0.014615 * Math.cos(2 * g)) - (0.040849 * Math.sin(2 * g)))
-      decl = 0.006918 - (0.399912 * Math.cos(g)) + (0.070257 * Math.sin(g)) - (0.006758 * Math.cos(2 * g)) +
-             (0.000907 * Math.sin(2 * g)) - (0.002697 * Math.cos(3 * g)) + (0.00148 * Math.sin(3 * g))
-      lat = latitude * Math::PI / 180
-      cos_ha = (Math.cos(90.833 * Math::PI / 180) / (Math.cos(lat) * Math.cos(decl))) - (Math.tan(lat) * Math.tan(decl))
-      return [nil, nil] unless cos_ha.between?(-1, 1)
-
-      ha = Math.acos(cos_ha) * 180 / Math::PI
-      [720 - (4 * (longitude + ha)) - eqtime, 720 - (4 * (longitude - ha)) - eqtime]
-    end
-
-    # The TZInfo::Timezone named +name+. Raises ArgumentError when the
-    # +tzinfo+ gem is missing or does not know the name.
-    def self.tzinfo(name)
-      require 'tzinfo'
-      TZInfo::Timezone.get(name)
-    rescue LoadError
-      raise ArgumentError, "time zone #{name} needs the tzinfo gem (known without it: #{ZONES.keys.join(', ')})"
-    rescue StandardError => e
-      raise ArgumentError, "unknown time zone #{name}: #{e.message}"
-    end
-    private_class_method :tzinfo
-
     # The Season of +time+, a Time in the local zone already (see ::now for
     # the arguments).
     def initialize(time, jam: nil, latitude: LATITUDE, longitude: LONGITUDE)
@@ -205,21 +146,22 @@ module BBS
 
     def find_layers(jam)
       date = @time.to_date
-      layers = []
-      layers << :snow if SNOW.include?(date.month)
-      layers << :pumpkin if date.month == PUMPKIN[0] && PUMPKIN[1].cover?(date.day)
-      layers << :fireworks if (date.month == 12 && date.day == 31) ||
-                              (date.month == 1 && date.day == 1 && @time.hour < FIREWORKS_UNTIL)
-      layers << :bunting if jam_day?(jam, date)
-      layers
+      { snow: SNOW.include?(date.month), pumpkin: pumpkin?(date), fireworks: fireworks?(date),
+        bunting: jam_day?(jam, date) }.select { |_, on| on }.keys
+    end
+
+    def pumpkin?(date) = date.month == PUMPKIN[0] && PUMPKIN[1].cover?(date.day)
+
+    def fireworks?(date)
+      (date.month == 12 && date.day == 31) || (date.month == 1 && date.day == 1 && @time.hour < FIREWORKS_UNTIL)
     end
 
     def jam_day?(jam, date)
       return false unless jam
 
-      first = jam.first.is_a?(Date) ? jam.first : Date.parse(jam.first.to_s)
-      last  = jam.last.is_a?(Date) ? jam.last : Date.parse(jam.last.to_s)
-      date.between?(first, last)
+      date.between?(*[jam.first, jam.last].map { |d| d.is_a?(Date) ? d : Date.parse(d.to_s) })
     end
   end
 end
+
+require_relative 'season/clock'

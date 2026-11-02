@@ -37,39 +37,47 @@ def screen_code(code)
   end
 end
 
+# One PNG chunk: its length, type, data and CRC.
+def png_chunk(type, data) = [data.bytesize].pack('N') + type + data + [Zlib.crc32(type + data)].pack('N')
+
+# Writes +pixels+ (rows of [r, g, b]) as an RGB PNG at +path+.
 def png(path, pixels, width, height)
-  chunk = lambda do |type, data|
-    [data.bytesize].pack('N') + type + data + [Zlib.crc32(type + data)].pack('N')
-  end
   raw = pixels.each_slice(width).map { |row| "\0".b + row.flatten.pack('C*') }.join
-  File.binwrite(path, "\x89PNG\r\n\x1a\n".b + chunk.call('IHDR', [width, height, 8, 2, 0, 0, 0].pack('NNCCCCC')) +
-                      chunk.call('IDAT', Zlib::Deflate.deflate(raw)) + chunk.call('IEND', ''))
+  File.binwrite(path, "\x89PNG\r\n\x1a\n".b + png_chunk('IHDR', [width, height, 8, 2, 0, 0, 0].pack('NNCCCCC')) +
+                      png_chunk('IDAT', Zlib::Deflate.deflate(raw)) + png_chunk('IEND', ''))
+end
+
+# The 8 bytes of the glyph of +cell+ in the character ROM +rom+ from
+# +base+.
+def glyph_of(rom, base, cell) = rom.byteslice(base + ((screen_code(cell.code) + (cell.rvs ? 0x80 : 0)) * 8), 8).bytes
+
+# Paints the glyph of +cell+ at +row+, +col+ into +pixels+ at +scale+.
+def paint_cell(pixels, glyph, cell, (row, col), scale)
+  fg = BBS::Petscii::Canvas::RGB.fetch(cell.color || BBS::Petscii::Canvas::LIGHT_BLUE)
+  glyph.each_with_index do |bits, y|
+    8.times { |x| dot(pixels, ((row * 8) + y) * scale, ((col * 8) + x) * scale, scale, fg) unless bits[7 - x].zero? }
+  end
+end
+
+# A +scale+ × +scale+ dot of +color+ at +top+, +left+.
+def dot(pixels, top, left, scale, color)
+  scale.times { |sy| scale.times { |sx| pixels[top + sy][left + sx] = color } }
 end
 
 # A screenshot of what a C64 shows after +bytes+: the canvas the bytes
 # play onto, drawn with the character ROM at +scale+.
 def screenshot(bytes, path, chargen, scale)
-  rom = File.binread(chargen)
+  rom    = File.binread(chargen)
   screen = BBS::Petscii::Canvas.new.feed(bytes)
-  base = screen.charset == :lower ? 2048 : 0
-  bg = [0, 0, 0]
-  w = 320 * scale
-  pixels = Array.new(200 * scale) { Array.new(w, bg) }
+  base   = screen.charset == :lower ? 2048 : 0
+  pixels = Array.new(200 * scale) { Array.new(320 * scale, [0, 0, 0]) }
   BBS::Petscii::Canvas::ROWS.times do |row|
     BBS::Petscii::Canvas::COLS.times do |col|
       cell = screen.cell(row, col)
-      fg = BBS::Petscii::Canvas::RGB.fetch(cell.color || BBS::Petscii::Canvas::LIGHT_BLUE)
-      glyph = rom.byteslice(base + ((screen_code(cell.code) + (cell.rvs ? 0x80 : 0)) * 8), 8).bytes
-      glyph.each_with_index do |bits, y|
-        8.times do |x|
-          next if bits[7 - x].zero?
-
-          scale.times { |sy| scale.times { |sx| pixels[(((row * 8) + y) * scale) + sy][(((col * 8) + x) * scale) + sx] = fg } }
-        end
-      end
+      paint_cell(pixels, glyph_of(rom, base, cell), cell, [row, col], scale)
     end
   end
-  png(path, pixels.flatten(1), w, 200 * scale)
+  png(path, pixels.flatten(1), 320 * scale, 200 * scale)
 end
 
 options = { layers: [], scale: 2 }
@@ -116,7 +124,9 @@ if art.petscii?
   frame = art.petscii
   puts "  PETSCII frame: #{frame.bytesize} bytes"
   if options[:hex]
-    frame.bytes.each_slice(16).with_index { |b, i| puts format('  %04x  %s', i * 16, b.map { |x| format('%02x', x) }.join(' ')) }
+    frame.bytes.each_slice(16).with_index do |b, i|
+      puts format('  %<at>04x  %<bytes>s', at: i * 16, bytes: b.map { |x| format('%02x', x) }.join(' '))
+    end
   end
   File.binwrite(options[:seq], frame) && puts("  wrote #{options[:seq]}") if options[:seq]
   if options[:png]

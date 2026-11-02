@@ -34,33 +34,6 @@ module BBS
       session.settle(timeout: SETTLE) && session.term_cols > Petscii::COLS ? :modern : :petscii
     end
 
-    # Asks the caller which face the terminal gets, with +title+ printed in
-    # capitals above the choices and the guess as the default.
-    #
-    # Returns +:modern+ or +:petscii+; +nil+ when the line drops.
-    def self.choose(session, title:)
-      default = guess(session)
-      prompt  = "YOUR TERMINAL [#{FACES[default][:digit]}]: "
-      session.write "#{Ansi::CRLF * 2}#{title.upcase}#{Ansi::CRLF * 2}" \
-                    "#{FACES.values.map { |f| "#{f[:digit]} - #{f[:label]}#{Ansi::CRLF}" }.join}#{Ansi::CRLF}#{prompt}"
-      picked = nil
-      loop do
-        key = session.readkey(timeout: WAIT)
-        return nil if key.nil?
-        break if %i[enter idle].include?(key)
-
-        choice = FACES.find { |_, f| f[:keys].include?(key) }&.first
-        choice = :none if choice.nil? && %i[backspace ctrl_t].include?(key)
-        next if choice.nil? || (choice == :none && picked.nil?) || choice == picked
-
-        session.write "#{Ansi::CRLF}#{prompt}" unless picked.nil?
-        picked = choice == :none ? nil : choice
-        session.write FACES[picked][:digit] if picked
-      end
-      session.write picked ? Ansi::CRLF : "#{FACES[default][:digit]}#{Ansi::CRLF}"
-      picked || default
-    end
-
     # The whole first step as a Flow: ask, switch the line (PETSCII on a C64,
     # mouse reporting on a modern terminal when config.mouse is on), then run
     # that face's Flow. The board keeps config.mouse_on_connect off: the
@@ -77,17 +50,83 @@ module BBS
       faces = { modern: modern, petscii: petscii }
       Flow.define do
         call do |ctx, runner|
-          face = Terminal.choose(runner.session, title: title)
+          face = Question.new(runner.session, title).ask
           next :halt if face.nil?
 
-          if face == :petscii
-            runner.session.petscii!
-          elsif BBS.config.mouse
-            runner.session.enable_mouse
-          end
+          Terminal.switch(runner.session, face)
           FlowRunner.new(runner.session, ctx[:session_id], faces[face], context: ctx).run
           nil
         end
+      end
+    end
+
+    # Switches the line of +session+ to +face+: PETSCII on a C64, mouse
+    # reporting on a modern terminal when <tt>BBS.config.mouse</tt> is on.
+    def self.switch(session, face)
+      if face == :petscii
+        session.petscii!
+      elsif BBS.config.mouse
+        session.enable_mouse
+      end
+    end
+
+    # The question itself, in plain ASCII capitals: the faces, a digit
+    # each, and the guess as the default. A key only picks, RETURN takes
+    # it; a changed pick prints the prompt again on a new line.
+    class Question
+      # The keys that take the pick.
+      TAKE_KEYS = %i[enter idle].freeze
+      # The keys that take the pick back.
+      UNPICK_KEYS = %i[backspace ctrl_t].freeze
+
+      # The question of +title+ for +session+.
+      def initialize(session, title)
+        @session = session
+        @title   = title
+        @default = Terminal.guess(session)
+        @picked  = nil
+      end
+
+      # Asks, and returns +:modern+ or +:petscii+; +nil+ when the line
+      # drops.
+      def ask
+        @session.write question
+        loop do
+          key = @session.readkey(timeout: WAIT)
+          return nil if key.nil?
+          break if TAKE_KEYS.include?(key)
+
+          pick(choice(key))
+        end
+        @session.write @picked ? Ansi::CRLF : "#{FACES[@default][:digit]}#{Ansi::CRLF}"
+        @picked || @default
+      end
+
+      private
+
+      # Whether +choice+ changes the pick: a face not picked yet, or
+      # +:none+ while one is.
+      def changes?(choice) = choice && choice != @picked && !(choice == :none && @picked.nil?)
+
+      def prompt = "YOUR TERMINAL [#{FACES[@default][:digit]}]: "
+
+      def question
+        faces = FACES.values.map { |f| "#{f[:digit]} - #{f[:label]}#{Ansi::CRLF}" }.join
+        "#{Ansi::CRLF * 2}#{@title.upcase}#{Ansi::CRLF * 2}#{faces}#{Ansi::CRLF}#{prompt}"
+      end
+
+      # The face +key+ picks, +:none+ for a key that takes the pick back,
+      # +nil+ for any other.
+      def choice(key)
+        FACES.find { |_, f| f[:keys].include?(key) }&.first || (:none if UNPICK_KEYS.include?(key))
+      end
+
+      def pick(choice)
+        return unless changes?(choice)
+
+        @session.write "#{Ansi::CRLF}#{prompt}" if @picked
+        @picked = choice == :none ? nil : choice
+        @session.write FACES[@picked][:digit] if @picked
       end
     end
   end

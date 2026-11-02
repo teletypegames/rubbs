@@ -64,19 +64,20 @@ module BBS
     def self.petscii(screen, title: nil, bar: nil, note: nil, url: URL, color: Petscii::Colors::CY, width: nil)
       screen = Petscii::Screen.new(screen) unless screen.respond_to?(:say)
       width ||= screen.respond_to?(:cols) ? screen.cols - 1 : Petscii::COLS - 1
-      c = Petscii::Colors
       screen.cls
       screen.puts
-      screen.puts " #{color}#{c::RV}#{" #{bar || "thanks for calling #{title}"}".ljust(width)[0, width]}#{c::RO}#{c::LG}"
+      screen.puts bar_line(bar || "thanks for calling #{title}", color, width)
       screen.puts
-      if block_given?
-        yield screen
-      else
-        screen.say([note, "More of us: #{url}"].compact.join(' '), color: c::GR)
-      end
+      block_given? ? yield(screen) : screen.say([note, "More of us: #{url}"].compact.join(' '), color: Petscii::Colors::GR)
       screen.puts
       hang_up(screen)
       nil
+    end
+
+    # +text+ on a reversed bar in +color+, +width+ columns.
+    def self.bar_line(text, color, width)
+      c = Petscii::Colors
+      " #{color}#{c::RV}#{" #{text}".ljust(width)[0, width]}#{c::RO}#{c::LG}"
     end
 
     # +++, ATH0 and NO CARRIER on +screen+, PAUSES apart.
@@ -90,6 +91,6 @@ module BBS
       screen.puts " #{c::RD}NO CARRIER#{c::LG}"
       screen.puts
     end
-    private_class_method :hang_up
+    private_class_method :hang_up, :bar_line
   end
 end
