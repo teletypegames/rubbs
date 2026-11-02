@@ -99,7 +99,7 @@ module BBS
     def accept(server)
       server.accept
     rescue SystemCallError, IOError => e
-      warn "BBS accept error: #{e.class}: #{e.message}"
+      BBS.log('accept', e)
       sleep ACCEPT_PAUSE
       nil
     end
@@ -129,8 +129,8 @@ module BBS
 
     # One line per turned-away caller, so a log pipeline can count them.
     def refuse(client, address, verdict)
-      warn "BBS #{verdict}: #{BBS.config.max_sessions} callers at most, " \
-           "#{BBS.config.max_sessions_per_ip} from one address; turned #{address} away"
+      BBS.log(verdict, "#{BBS.config.max_sessions} callers at most, " \
+                       "#{BBS.config.max_sessions_per_ip} from one address; turned #{address} away")
       client.write("#{REFUSALS.fetch(verdict)}#{Ansi::CRLF}") rescue nil
       client.close rescue nil
     end
@@ -139,9 +139,9 @@ module BBS
       session = Session.new(timed(client))
       session.run
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET, Errno::ETIMEDOUT => e
-      puts "BBS session dropped by the client (#{e.message})"
+      BBS.log('session', "dropped by the client (#{e.message})")
     rescue StandardError => e
-      warn "BBS session error: #{e.class}: #{e.message}\n#{e.backtrace.first(BACKTRACE_LINES).join("\n")}"
+      BBS.log('session', "#{e.class}: #{e.message}\n#{e.backtrace.first(BACKTRACE_LINES).join("\n")}")
     ensure
       client.close
       release(address)
