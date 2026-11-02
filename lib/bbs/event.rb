@@ -32,6 +32,8 @@ module BBS
     def key? = kind == :key
     # True for a :mouse event.
     def mouse? = kind == :mouse
+    # True for a press of the left mouse button.
+    def click? = mouse? && mouse.kind == :press && mouse.button == :left
     # True for a key event whose key is an Alt combination (<tt>:alt_x</tt>).
     def alt? = key? && key.to_s.start_with?('alt_')
     # The key name after the +alt_+ prefix as a String (<tt>"x"</tt> for

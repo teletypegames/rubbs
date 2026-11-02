@@ -2,6 +2,9 @@
 
 require_relative 'container'
 require_relative 'focus_manager'
+require_relative 'window/frame'
+require_relative 'window/placement'
+require_relative 'window/events'
 
 module BBS
   # A Window is a top-level Container with its own border, title, and focus
@@ -104,6 +107,10 @@ module BBS
     # opens the window. Moving, sizing and zooming need it.
     attr_writer :app
 
+    include Frame
+    include Placement
+    include Events
+
     # Creates a window. +title+, +modal+, +shadow+, +on_close+,
     # +close_key+, +maximizable+ and +movable+ set the attributes of the same
     # name; +kw+ (+id+, +bounds+, +theme+) go to Container.new. The window
@@ -119,11 +126,7 @@ module BBS
       @maximizable = maximizable
       @movable     = movable
       @maximized   = false
-      @placed      = nil
-      @drag        = nil
-      @kbd_mode    = nil
-      @focus_mgr   = nil
-      @number      = nil
+      @placed = @drag = @kbd_mode = @focus_manager = @number = nil
     end
 
     # Returns the SGR for the style role +key+: the #accent's when it has
@@ -144,19 +147,6 @@ module BBS
     # #resizable? and shown in an Application.
     def zoomable? = @maximizable && resizable? && !@app.nil?
 
-    # Maximizes the window to the desktop, or puts it back to its normal
-    # place, ending any move or size in progress. Does nothing unless
-    # #zoomable?. Returns +:handled+.
-    def toggle_maximize
-      return :handled unless zoomable?
-
-      @maximized = !@maximized
-      @kbd_mode  = nil
-      @drag      = nil
-      relayout(@app)
-      :handled
-    end
-
     # Returns whether the window can be moved now: +movable+, not maximized
     # and shown in an Application.
     def movable? = @movable && !@maximized && !@app.nil?
@@ -164,263 +154,30 @@ module BBS
     # #resizable?.
     def sizable? = movable? && resizable?
 
-    # Moves (and, when resizable?, sizes) the window to the rect, kept on
-    # the desktop; the window keeps it through later relayouts. A resizable
-    # window is clamped to MIN_WIDTH by MIN_HEIGHT and the desktop size; any
-    # other keeps its size. Does nothing unless #movable?.
-    def move_to(x, y, width = bounds.width, height = bounds.height)
-      return unless movable?
-
-      dx, dy, dw, dh = @app.desktop_rect
-      width  = resizable? ? width.clamp([MIN_WIDTH, dw].min, dw) : bounds.width
-      height = resizable? ? height.clamp([MIN_HEIGHT, dh].min, dh) : bounds.height
-      x = x.clamp(dx, [dx + dw - width, dx].max)
-      y = y.clamp(dy, [dy + dh - height, dy].max)
-      @placed = [x, y, width, height]
-      if resizable?
-        place(x, y, width, height)
-      else
-        shift(x - bounds.x, y - bounds.y)
-      end
-    end
-
     # Returns the window's FocusManager, created on first use.
     def focus_manager
-      @focus_mgr ||= FocusManager.new(self)
+      @focus_manager ||= FocusManager.new(self)
     end
 
     # Replaces the FocusManager with a new one, so the focus starts over
     # from the window's current widgets.
     def reset_focus
-      @focus_mgr = FocusManager.new(self)
-    end
-
-    # Draws the window into the BBS::FrameBuffer +frame+: the shadow (unless
-    # maximized), the frame (double when focused or modal) with the title,
-    # the close gadget <tt>[■]</tt>, the window number, the zoom gadget and
-    # the size corner as they apply and fit, then the visible children.
-    # While moving or sizing from the keyboard the title shows KBD_TITLES.
-    def render(frame)
-      if @shadow && !@maximized
-        frame.shadow(x: bounds.x, y: bounds.y, width: bounds.width,
-                     height: bounds.height, sgr: style(:window_shadow))
-      end
-      show_close  = @on_close != false && bounds.width >= CLOSE_MIN_WIDTH
-      show_zoom   = zoomable? && bounds.width >= ZOOM_MIN_WIDTH
-      show_number = @number && bounds.width >= NUMBER_MIN_WIDTH
-      title       = @title
-      room        = (show_zoom ? TITLE_ROOM_ZOOM : TITLE_ROOM) + (show_number ? NUMBER_ROOM : 0)
-      title       = title.to_s[0, [bounds.width - room, 0].max] if show_zoom || show_number
-      title = KBD_TITLES[@kbd_mode] if @kbd_mode
-      frame.box(
-        x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height,
-        sgr: @kbd_mode || @drag ? style(:window_title_focused) : style(:window_border),
-        fill_sgr: style(:window_bg), style: focused || @modal ? :double : :single, title: title,
-        title_sgr: focused ? style(:window_title_focused) : style(:window_title),
-        title_indent: show_close ? TITLE_INDENT : 0
-      )
-      # Close gadget — Turbo Vision style "[■]"
-      if show_close
-        frame.move(bounds.x + CLOSE_X, bounds.y)
-        frame.write('[■]', sgr: style(:window_title))
-      end
-      if show_number
-        frame.move(show_zoom ? zoom_x - NUMBER_BEFORE_ZOOM : bounds.x + bounds.width - NUMBER_FROM_RIGHT, bounds.y)
-        frame.write(@number.to_s, sgr: focused ? style(:window_title_focused) : style(:window_title))
-      end
-      if show_zoom
-        frame.move(zoom_x, bounds.y)
-        frame.write(@maximized ? '[↕]' : '[↑]', sgr: style(:window_title))
-      end
-      if sizable? && bounds.width >= CORNER_MIN_WIDTH
-        frame.move(bounds.x + bounds.width - 1, bounds.y + bounds.height - 1)
-        frame.write('┘', sgr: style(:window_title))
-      end
-      @children.each { |c| c.render(frame) if c.visible }
+      @focus_manager = FocusManager.new(self)
     end
 
     # Returns +self+ for the close gadget area on the top border, otherwise
     # the deepest widget at +x+, +y+ as Container#hit_test does.
     def hit_test(x, y)
-      # close gadget area
-      if @on_close != false && y == bounds.y &&
-         x >= bounds.x + CLOSE_X && x <= bounds.x + CLOSE_X + GADGET_WIDTH - 1
-        return self
-      end
-      super
-    end
-
-    # Handles a keyboard or mouse event for the window, in this order:
-    # keyboard move/size mode, an ongoing mouse drag, the ZOOM_KEYS and
-    # MOVE_KEYS, left clicks on the gadgets, title bar and size corner (a
-    # click elsewhere focuses the focusable widget under it), wheel events
-    # for the widget under the pointer, focus keys and the focused widget
-    # (a modified arrow or paging key nothing took is retried plain), a
-    # button hotkey, and finally +close_key+.
-    #
-    # Returns +:close_window+ when the window should close, +:halt+ or
-    # +:handled+ as the widgets return them, or +nil+ when nothing used the
-    # event.
-    def handle_event(event)
-      return keyboard_move(event) if @kbd_mode
-      return drag(event) if @drag && event.mouse?
-      return toggle_maximize if event.key? && zoomable? && ZOOM_KEYS.include?(event.key)
-      if event.key? && MOVE_KEYS.include?(event.key) && movable?
-        @kbd_mode = :move
-        return :handled
-      end
-
-      if event.mouse? && event.mouse.kind == :press && event.mouse.button == :left
-        if @on_close != false && event.y == bounds.y && event.x >= bounds.x + CLOSE_X &&
-           event.x <= bounds.x + CLOSE_X + GADGET_WIDTH - 1
-          return close
-        end
-        return toggle_maximize if zoomable? && title_click?(event)
-        return start_drag(:size, event) if sizable? && corner?(event)
-        return start_drag(:move, event) if movable? && event.y == bounds.y
-        if event.mouse.button == :left
-          hit = hit_test(event.x, event.y)
-          focus_manager.focus(hit) if hit&.focusable?
-        end
-      end
-
-      # Route wheel scrolling to whatever widget is under the cursor, so a
-      # scrollable pane responds even when keyboard focus is elsewhere.
-      if event.mouse? && event.mouse.kind == :wheel
-        hit = hit_test(event.x, event.y)
-        if hit && hit != self && hit != focus_manager.focused
-          res = hit.handle_event(event)
-          return res if res
-        end
-      end
-
-      result = focus_manager.handle_focus_key(event) ? :handled : nil
-      result ||= focus_manager.dispatch(event)
-      # A modified key nothing takes (Shift-Down in a list) acts as the key.
-      if result.nil? && event.key? && (plain = event.key.to_s[MODIFIED_MOVE_KEY, 1])
-        result = focus_manager.dispatch(Event.key(plain.to_sym))
-      end
-      return result if result
-
-      # A key the focused widget left alone presses the button it is the
-      # hotkey of: "y" or Alt-Y for "&Yes".
-      if event.key? && (button = hotkey_button(event.key))
-        return button.fire
-      end
-
-      return close if event.key? && event.key == @close_key
-      nil
+      close_gadget_at?(x, y) ? self : super
     end
 
     # The Application closes the window and calls on_close (see
     # Application#close_window), so the callback runs once.
     def close = :close_window
 
-    # Returns the column where the zoom gadget is drawn.
-    def zoom_x = bounds.x + bounds.width - ZOOM_FROM_RIGHT
-
-    # The zoom gadget, or a second click on the title bar soon after a first.
-    def title_click?(event)
-      return false unless event.y == bounds.y && event.x.between?(bounds.x, bounds.x + bounds.width - 1)
-      return true if event.x.between?(zoom_x, zoom_x + GADGET_WIDTH - 1)
-
-      now    = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      double = @title_clicked_at && now - @title_clicked_at < DOUBLE_CLICK
-      @title_clicked_at = double ? nil : now
-      double
-    end
-
-    # Returns whether the mouse +event+ is on the bottom right size corner.
-    def corner?(event)
-      event.y == bounds.y + bounds.height - 1 && event.x >= bounds.x + bounds.width - CORNER_HIT &&
-        event.x <= bounds.x + bounds.width - 1
-    end
-
-    # Starts a mouse drag in +mode+ (+:move+ or +:size+) from the position
-    # of +event+, remembering the current bounds. Returns +:handled+.
-    def start_drag(mode, event)
-      @drag = { mode: mode, x: event.x, y: event.y, rect: [bounds.x, bounds.y, bounds.width, bounds.height] }
-      :handled
-    end
-
-    # Follows the mouse while the button is held, moving or sizing the
-    # window through #move_to; the release ends it. Returns +:handled+.
-    def drag(event)
-      x, y, w, h = @drag[:rect]
-      dx = event.x - @drag[:x]
-      dy = event.y - @drag[:y]
-      if dx.zero? && dy.zero?
-        nil
-      elsif @drag[:mode] == :move
-        move_to(x + dx, y + dy, w, h)
-      else
-        move_to(x, y, w + dx, h + dy)
-      end
-      @drag = nil if event.mouse.kind == :release
-      :handled
-    end
-
-    # Handles +event+ in keyboard move/size mode: the arrows move or (with
-    # Shift, or in size mode) size the window by one cell, Tab switches
-    # between moving and sizing when #sizable?, and Enter, Esc or a
-    # MOVE_KEYS key ends the mode. Every key is swallowed: returns
-    # +:handled+.
-    def keyboard_move(event)
-      return :handled unless event.key?
-
-      key = event.key
-      if %i[enter escape].include?(key) || MOVE_KEYS.include?(key)
-        @kbd_mode = nil
-      elsif key == :tab && sizable?
-        @kbd_mode = @kbd_mode == :move ? :size : :move
-      elsif (step = ARROWS[key.to_s.delete_prefix('shift_').to_sym])
-        size = (@kbd_mode == :size || key.to_s.start_with?('shift_')) && sizable?
-        x = bounds.x
-        y = bounds.y
-        w = bounds.width
-        h = bounds.height
-        size ? move_to(x, y, w + step[0], h + step[1]) : move_to(x + step[0], y + step[1], w, h)
-      end
-      :handled
-    end
-
-    # Returns the enabled Widgets::Button in the window whose hotkey matches
-    # +key+ (a single character or an +alt_+ letter Symbol), or +nil+.
-    def hotkey_button(key)
-      letter = key.is_a?(String) && key.length == 1 ? key.downcase : key.to_s[ALT_KEY, 1]
-      return nil unless letter
-
-      focusable_descendants.find { |w| w.is_a?(Widgets::Button) && w.enabled && w.hotkey == letter }
-    end
-
     # Called once per Application idle tick (about a second) with the
     # Application. Does nothing; subclasses that poll for asynchronous
     # updates override it (such as BBS::Windows::Stream).
     def tick(app); end
-
-    # Called by the Application when the terminal is resized. The default
-    # keeps the window's size and re-centers it, shifting every descendant
-    # along. Subclasses whose geometry depends on the terminal size override
-    # this (such as BBS::Windows::MasterDetail). A window moved or sized by
-    # the user goes back to its place, a resizable one is placed at the
-    # desktop (maximized) or its +normal_rect+.
-    def relayout(app)
-      return move_to(*@placed) if @placed && !@maximized
-      return place(*(@maximized ? app.desktop_rect : normal_rect)) if resizable?
-
-      dx = [((app.cols - bounds.width) / 2) + 1, 1].max - bounds.x
-      dy = [((app.rows - bounds.height) / 2) + 1, 1].max - bounds.y
-      shift(dx, dy)
-    end
-
-    # Moves the window and all its descendants by +dx+ columns and +dy+
-    # rows.
-    def shift(dx, dy)
-      return if dx.zero? && dy.zero?
-      walk do |w|
-        b = w.bounds
-        w.bounds = Widget::Rect.new(b.x + dx, b.y + dy, b.width, b.height)
-      end
-    end
   end
 end
