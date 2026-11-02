@@ -66,25 +66,11 @@ module BBS
     #
     # Returns the Window.
     def self.message(app, text, title: ' Message ', width: nil)
-      lines  = FrameBuffer.wrap_ansi(text.to_s.split.join(' '), width ? width - TEXT_CHROME : WRAP_WIDTH)
-      w      = width || [(lines.map(&:length).max || 0) + TEXT_CHROME, MESSAGE_MIN_WIDTH].max
-      h      = lines.size + CHROME_ROWS
-      window = centred_window(app, width: w, height: h, title: title)
-      w      = window.bounds.width
-      h      = window.bounds.height
-
-      lines.each_with_index do |line, i|
-        label = Widgets::Label.new(text: line, style_key: :window_text)
-        label.layout(window.bounds.x + PADDING, window.bounds.y + TEXT_TOP + i, w - (2 * PADDING), 1)
-        window.add(label)
-      end
-
-      btn = Widgets::Button.new(label: '&OK', on_click: ->(_) { app.close_window(window) })
-      btn.layout(window.bounds.x + ((w - BUTTON_WIDTH) / 2), window.bounds.y + h - BUTTON_ROW, BUTTON_WIDTH, 1)
-      window.add(btn)
-      window.reset_focus
-      app.open_window(window)
-      window
+      lines  = wrap(text, width ? width - TEXT_CHROME : WRAP_WIDTH)
+      window = text_box(app, lines, width || fit(lines, MESSAGE_MIN_WIDTH), title)
+      ok     = Widgets::Button.new(label: '&OK', on_click: closer(app, window))
+      place(window, ok, (window.bounds.width - BUTTON_WIDTH) / 2, button_row(window), BUTTON_WIDTH)
+      show(app, window)
     end
 
     # Opens a Yes/No box with +text+. Each button closes the box, then calls
@@ -92,30 +78,11 @@ module BBS
     #
     # Returns the Window.
     def self.confirm(app, text, title: ' Confirm ', on_yes: nil, on_no: nil)
-      lines = FrameBuffer.wrap_ansi(text.to_s.split.join(' '), WRAP_WIDTH)
-      w     = [(lines.map(&:length).max || 0) + TEXT_CHROME, CONFIRM_MIN_WIDTH].max
-      h     = lines.size + CHROME_ROWS
-      window = centred_window(app, width: w, height: h, title: title)
-      w      = window.bounds.width
-      h      = window.bounds.height
-
-      lines.each_with_index do |line, i|
-        label = Widgets::Label.new(text: line, style_key: :window_text)
-        label.layout(window.bounds.x + PADDING, window.bounds.y + TEXT_TOP + i, w - (2 * PADDING), 1)
-        window.add(label)
-      end
-
-      yes = Widgets::Button.new(label: '&Yes',
-                                on_click: ->(_) { app.close_window(window); on_yes&.call })
-      no  = Widgets::Button.new(label: '&No',
-                                on_click: ->(_) { app.close_window(window); on_no&.call })
-      yes.layout(window.bounds.x + (w / 2) - HALF_GAP - BUTTON_WIDTH, window.bounds.y + h - BUTTON_ROW, BUTTON_WIDTH, 1)
-      no.layout(window.bounds.x + (w / 2) + HALF_GAP, window.bounds.y + h - BUTTON_ROW, BUTTON_WIDTH, 1)
-      window.add(yes)
-      window.add(no)
-      window.reset_focus
-      app.open_window(window)
-      window
+      lines  = wrap(text, WRAP_WIDTH)
+      window = text_box(app, lines, fit(lines, CONFIRM_MIN_WIDTH), title)
+      pair(window, Widgets::Button.new(label: '&Yes', on_click: closer(app, window) { on_yes&.call }),
+           Widgets::Button.new(label: '&No', on_click: closer(app, window) { on_no&.call }), BUTTON_WIDTH)
+      show(app, window)
     end
 
     # Opens a box with +prompt+, a text field holding +value+, and OK and
@@ -125,38 +92,73 @@ module BBS
     #
     # Returns the Window.
     def self.input(app, prompt:, title: ' Input ', value: '', width: INPUT_WIDTH, on_submit: nil)
-      w      = width
-      h      = INPUT_HEIGHT
-      window = centred_window(app, width: w, height: h, title: title)
-      w      = window.bounds.width
-      h      = window.bounds.height
+      window = centred_window(app, width: width, height: INPUT_HEIGHT, title: title)
+      inner  = window.bounds.width - (2 * PADDING)
+      place(window, Widgets::Label.new(text: prompt, style_key: :window_text), PADDING, TEXT_TOP, inner)
+      field = Widgets::TextInput.new(value: value)
+      field.on_submit = closer(app, window) { on_submit&.call(field.value) }
+      place(window, field, PADDING, INPUT_ROW, inner)
+      pair(window, Widgets::Button.new(label: '&OK', on_click: field.on_submit),
+           Widgets::Button.new(label: '&Cancel', on_click: closer(app, window)), CANCEL_WIDTH)
+      show(app, window, focus: field)
+    end
 
-      label = Widgets::Label.new(text: prompt, style_key: :window_text)
-      label.layout(window.bounds.x + PADDING, window.bounds.y + TEXT_TOP, w - (2 * PADDING), 1)
-      window.add(label)
-
-      # Enter in the field is the OK button.
-      input  = nil
-      submit = lambda do |_|
+    # A callable for a button or a field: it closes +window+ on +app+,
+    # then calls the block. It returns +:handled+.
+    def self.closer(app, window, &after)
+      lambda do |*|
         app.close_window(window)
-        on_submit&.call(input.value)
+        after&.call
         :handled
       end
-      input = Widgets::TextInput.new(value: value, on_submit: ->(_text, _field) { submit.call(nil) })
-      input.layout(window.bounds.x + PADDING, window.bounds.y + INPUT_ROW, w - (2 * PADDING), 1)
-      window.add(input)
+    end
 
-      ok = Widgets::Button.new(label: '&OK', on_click: submit)
-      cancel = Widgets::Button.new(label: '&Cancel',
-                                   on_click: ->(_) { app.close_window(window) })
-      ok.layout(window.bounds.x + (w / 2) - HALF_GAP - BUTTON_WIDTH, window.bounds.y + h - BUTTON_ROW, BUTTON_WIDTH, 1)
-      cancel.layout(window.bounds.x + (w / 2) + HALF_GAP, window.bounds.y + h - BUTTON_ROW, CANCEL_WIDTH, 1)
-      window.add(ok)
-      window.add(cancel)
+    # +text+ word-wrapped to +width+, its line ends and runs of blanks
+    # taken as single spaces.
+    def self.wrap(text, width) = FrameBuffer.wrap_ansi(text.to_s.split.join(' '), width)
+
+    # The width of a box around +lines+: the longest and TEXT_CHROME, at
+    # least +min+.
+    def self.fit(lines, min) = [(lines.map(&:length).max || 0) + TEXT_CHROME, min].max
+
+    # A centred window of +width+ with +lines+ as labels and room under
+    # them for the buttons.
+    def self.text_box(app, lines, width, title)
+      window = centred_window(app, width: width, height: lines.size + CHROME_ROWS, title: title)
+      lines.each_with_index do |line, i|
+        label = Widgets::Label.new(text: line, style_key: :window_text)
+        place(window, label, PADDING, TEXT_TOP + i, window.bounds.width - (2 * PADDING))
+      end
+      window
+    end
+
+    # Lays +widget+ out in +window+ at column +col+ and row +row+ of it
+    # (from 0), +width+ wide and one row high, and adds it.
+    def self.place(window, widget, col, row, width)
+      widget.layout(window.bounds.x + col, window.bounds.y + row, width, 1)
+      window.add(widget)
+    end
+
+    # Places the buttons +left+ (BUTTON_WIDTH wide) and +right+ (+width+
+    # wide) side by side round the middle of the button row.
+    def self.pair(window, left, right, width)
+      middle = window.bounds.width / 2
+      place(window, left, middle - HALF_GAP - BUTTON_WIDTH, button_row(window), BUTTON_WIDTH)
+      place(window, right, middle + HALF_GAP, button_row(window), width)
+    end
+
+    # The row of the buttons in +window+.
+    def self.button_row(window) = window.bounds.height - BUTTON_ROW
+
+    # Opens +window+ on +app+ with the focus on its first widget, or on
+    # +focus+. Returns the window.
+    def self.show(app, window, focus: nil)
       window.reset_focus
-      window.focus_manager.focus(input)
+      window.focus_manager.focus(focus) if focus
       app.open_window(window)
       window
     end
+
+    private_class_method :closer, :wrap, :fit, :text_box, :place, :pair, :button_row, :show
   end
 end

@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative 'editor/layout'
+require_relative 'editor/chrome'
+
 module BBS
   # A full-screen text editor on a telnet line, for a modern terminal and a
   # Commodore 64 alike, for text longer than a BBS::Field holds: the cursor
@@ -34,6 +37,10 @@ module BBS
     SAVE_KEYS = %i[f1 ctrl_s].freeze
     # The keys that ask whether to save or quit.
     MENU_KEYS = %i[escape interrupt ctrl_q f7].freeze
+    # The keys that move a row up or down, keeping the column.
+    ROW_MOVES = { up: -1, down: 1 }.freeze
+    # The keys that move a screenful up or down, keeping the column.
+    PAGE_MOVES = { page_up: -1, page_down: 1 }.freeze
 
     # Creates an editor for +session+.
     #
@@ -50,15 +57,14 @@ module BBS
       @session = session
       @screen  = Cursor.new(session)
       @buffer  = TextBuffer.new(text, max: max, single_line: single_line)
-      @title   = title.to_s
       @single  = single_line
-      @max     = max
       @cols    = cols || session.term_cols
       @rows    = rows || session.term_rows
       @width   = @cols - 2
       @height  = @rows - 3
       @goal    = nil
       @top     = 0
+      @chrome  = Chrome.new(@screen, title: title.to_s, single_line: single_line, max: max, cols: @cols, rows: @rows)
     end
 
     # Runs the editor until the caller saves or quits, then leaves the
@@ -69,15 +75,9 @@ module BBS
     def run
       first_paint
       loop do
-        key = @screen.key
-        return @buffer.text if SAVE_KEYS.include?(key) || (@single && key == :enter)
-
-        if MENU_KEYS.include?(key)
-          case menu
-          when :save then return @buffer.text
-          when :quit then return nil
-          end
-        end
+        key  = @screen.key
+        done = finish(key)
+        return done == :quit ? nil : @buffer.text if done
 
         handle(key)
         paint
@@ -86,136 +86,93 @@ module BBS
 
     private
 
+    # What +key+ ends the editor with: +:save+, +:quit+, or +nil+ to go
+    # on (also after the save-or-quit question was answered with another
+    # key).
+    def finish(key)
+      return :save if SAVE_KEYS.include?(key) || (@single && key == :enter)
+
+      MENU_KEYS.include?(key) ? menu : nil
+    end
+
     def handle(key)
-      @goal = nil unless %i[up down page_up page_down].include?(key)
+      @goal = nil unless ROW_MOVES.key?(key) || PAGE_MOVES.key?(key)
       return if @buffer.edit(key)
+      return vertical(ROW_MOVES[key]) if ROW_MOVES.key?(key)
+      return vertical(PAGE_MOVES[key] * @height) if PAGE_MOVES.key?(key)
 
-      case key
-      when :up        then vertical(-1)
-      when :down      then vertical(1)
-      when :page_up   then vertical(-@height)
-      when :page_down then vertical(@height)
-      when :home      then @buffer.place(@buffer.line, layout[current_row][1])
-      when :end       then @buffer.place(@buffer.line, row_end(current_row))
-      end
+      row_key(key)
     end
 
+    # HOME and END: the start and the end of the screen row.
+    def row_key(key)
+      layout = self.layout
+      row    = current_row(layout)
+      pos    = { home: layout.rows[row][1], end: layout.row_end(row) }[key]
+      @buffer.place(@buffer.line, pos) if pos
+    end
+
+    # Moves the cursor +delta+ screen rows, keeping its column (the goal).
     def vertical(delta)
-      rows = layout
-      now  = current_row(rows)
-      @goal ||= @buffer.pos - rows[now][1]
-      target = (now + delta).clamp(0, rows.size - 1)
-      line, start, = rows[target]
-      @buffer.place(line, [start + @goal, row_end(target, rows)].min)
+      layout = self.layout
+      now    = current_row(layout)
+      @goal ||= @buffer.pos - layout.rows[now][1]
+      target = (now + delta).clamp(0, layout.rows.size - 1)
+      line, start, = layout.rows[target]
+      @buffer.place(line, [start + @goal, layout.row_end(target)].min)
     end
 
-    # ── Layout ───────────────────────────────────────────────────────────
+    def layout = Layout.new(@buffer.lines, @width)
 
-    # The screen rows of the text: <tt>[line, start, stop]</tt>, the
-    # characters <tt>start...stop</tt> of line +line+.
-    def layout
-      @buffer.lines.each_with_index.flat_map do |text, i|
-        starts = wrap(text)
-        starts.each_with_index.map { |s, j| [i, s, starts[j + 1] || text.length] }
-      end
-    end
-
-    # Where the rows of +text+ start: a row breaks after the last space
-    # that fits, or at the width when a word is longer than a row. A row
-    # may end in one space beyond the width, which takes no room.
-    def wrap(text)
-      starts = [0]
-      pos    = 0
-      while text.length - pos > @width
-        space = text.rindex(' ', pos + @width)
-        pos   = space && space >= pos ? space + 1 : pos + @width
-        starts << pos
-      end
-      starts
-    end
-
-    def current_row(rows = layout)
-      rows.rindex { |line, start, _| line == @buffer.line && start <= @buffer.pos } || 0
-    end
-
-    # The last cursor position on a row: its end on the last row of a line,
-    # before its last character otherwise, as that position is the next
-    # row's start.
-    def row_end(index, rows = layout)
-      line, start, stop = rows[index]
-      last = rows[index + 1].nil? || rows[index + 1][0] != line
-      last ? stop : [stop - 1, start].max
-    end
+    def current_row(layout = self.layout) = layout.row_of(@buffer.line, @buffer.pos)
 
     # ── Screen ───────────────────────────────────────────────────────────
 
     def first_paint
-      @shown  = Array.new(@height)
-      @status = nil
-      out = @screen.clear
-      out << "#{Ansi::REVERSE}#{fit(" #{@title}", @cols - 1)}#{Ansi::REVERSE_OFF}"
-      @screen.wrote(@cols - 1)
-      out << bottom(hints)
-      @session.write(out)
+      @shown = Array.new(@height)
+      @session.write(@screen.clear << @chrome.title << @chrome.hints)
       paint
-    end
-
-    def hints
-      menu  = @screen.petscii? ? 'STOP/←' : 'Esc'
-      enter = @screen.petscii? ? 'RETURN' : 'Enter'
-      @single ? "#{enter} save  #{menu} quit" : "#{menu}: save or quit"
     end
 
     # Asks on the bottom row whether to save or quit: +:save+, +:quit+, or
     # +nil+ to go back to the text.
     def menu
-      enter = @screen.petscii? ? 'RETURN' : 'Enter'
-      @session.write(bottom("S save  Q quit  #{enter} back"))
+      @session.write(@chrome.question)
       key = @screen.key
-      @session.write(bottom(hints))
+      @session.write(@chrome.hints)
       { 's' => :save, 'q' => :quit }[key.to_s.downcase]
     end
 
-    # The bottom row in reverse, written over with +text+.
-    def bottom(text)
-      out = @screen.move(@rows - 1, 1) << "#{Ansi::REVERSE}#{fit(" #{text}", @cols - 1)}#{Ansi::REVERSE_OFF}"
-      @screen.wrote(@cols - 1)
-      out
-    end
-
+    # Draws the rows that changed, the count and the cursor, with the
+    # cursor hidden meanwhile.
     def paint
-      rows = layout
-      row  = current_row(rows)
-      @top = [row - (@height / 2), 0].max if row < @top || row >= @top + @height
-      out = +Ansi::HIDE_CURSOR
-      @height.times do |i|
-        line, start, stop = rows[@top + i]
-        text = line.nil? ? '' : @buffer.lines[line][start, [stop - start, @width].min]
-        text = fit(@screen.cells(text), @width)
-        next if @shown[i] == text
-
-        out << @screen.move(2 + i, 1) << text
-        @screen.wrote(@width)
-        @shown[i] = text
-      end
-      out << status
-      out << @screen.move(2 + row - @top, 1 + @buffer.pos - rows[row][1])
-      out << Ansi::SHOW_CURSOR
-      @session.write(out)
+      layout = self.layout
+      row    = current_row(layout)
+      scroll_to(row)
+      out = (0...@height).map { |i| paint_row(i, layout.rows[@top + i]) }.join << @chrome.count(@buffer.length)
+      @session.write("#{Ansi::HIDE_CURSOR}#{out}#{park(layout.rows[row], row)}#{Ansi::SHOW_CURSOR}")
     end
 
-    # The count of characters at the right of the title bar, when there
-    # is a limit to it.
-    def status
-      return '' unless @max
+    # The cursor to its place in screen row +row+, the layout row +cells+.
+    def park(cells, row) = @screen.move(2 + row - @top, 1 + @buffer.pos - cells[1])
 
-      count = "#{@buffer.length}/#{@max} ".rjust("#{@max}/#{@max} ".length)
-      return '' if count == @status
+    # Scrolls the text so screen row +row+ shows, to the middle when it
+    # was off the screen.
+    def scroll_to(row)
+      @top = [row - (@height / 2), 0].max if row < @top || row >= @top + @height
+    end
 
-      @status = count
-      out = @screen.move(1, @cols - 1 - count.length)
-      @screen.wrote(count.length + 1)
-      "#{out}#{Ansi::REVERSE} #{count}#{Ansi::REVERSE_OFF}"
+    # The bytes that draw screen row +index+ of the text, the layout row
+    # +row+ (+nil+ past the end); nothing when it shows already.
+    def paint_row(index, row)
+      line, start, stop = row
+      text = fit(@screen.cells(line.nil? ? '' : @buffer.lines[line][start, [stop - start, @width].min]), @width)
+      return '' if @shown[index] == text
+
+      @shown[index] = text
+      out = @screen.move(2 + index, 1) << text
+      @screen.wrote(@width)
+      out
     end
 
     def fit(text, width) = text[0, width].ljust(width)

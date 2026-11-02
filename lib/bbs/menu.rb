@@ -2,6 +2,7 @@
 
 require_relative 'widget'
 require_relative 'window'
+require_relative 'hotkey'
 
 module BBS
   # A horizontal strip at the top of the screen with named drop-down menus.
@@ -10,7 +11,8 @@ module BBS
   # entries. F10 opens the first menu; the arrow keys, Enter, Esc, the item
   # hotkeys and the mouse work inside an open one.
   #
-  # An Application fills it with its +menu+ DSL (BBS::Application::MenubarBuilder#menu):
+  # An Application fills it with its +menu+ DSL
+  # (BBS::Application::MenubarBuilder#menu):
   #
   #   menubar do
   #     menu("&File") do
@@ -23,49 +25,11 @@ module BBS
   # The bar itself never takes the keyboard focus (#focusable? is false);
   # the application passes events to #handle_event first.
   class Menubar < Widget
-    # One menu on the bar: +label+ with an optional <tt>&</tt> before the
-    # hotkey letter, +items+ an Array of MenuItem, +x+ the column it was last
-    # drawn at (+nil+ before the first render). +hotkey+ returns the
-    # lower-case hotkey letter or +nil+, +display+ the label without the
-    # <tt>&</tt>.
-    Menu = Struct.new(:label, :items, :x, keyword_init: true) do
-      def hotkey
-        idx = label.index('&')
-        idx && idx + 1 < label.length ? label[idx + 1].downcase : nil
-      end
-
-      def display = label.sub('&', '')
-    end
-
-    # One entry of a menu, built by the Application menu DSL: +label+ (with an optional
-    # <tt>&</tt> before the hotkey letter), +shortcut+ (text shown at the
-    # right edge, for display only), +enabled+ (+true+, +false+ or a callable
-    # asked each time), +on_select+ (the block called with the item when it
-    # is chosen), +separator+ (a dividing line rather than an entry) and
-    # +hint+ (a line about the entry that the Application shows on the
-    # statusbar while the entry is highlighted, or +nil+).
-    # +hotkey+ returns the lower-case hotkey letter or +nil+, +display+ the
-    # text shown, #enabled? whether the item can be chosen.
-    MenuItem = Struct.new(:label, :shortcut, :enabled, :on_select, :separator, :hint,
-                          keyword_init: true) do
-      def hotkey
-        return nil if separator
-        idx = label.index('&')
-        idx && idx + 1 < label.length ? label[idx + 1].downcase : nil
-      end
-
-      def display = separator ? '─' : label.sub('&', '')
-
-      # Returns whether the item can be chosen: never for a separator; a
-      # callable +enabled+ is asked every time; otherwise only +false+
-      # disables.
-      def enabled?
-        return false if separator
-        return enabled.call ? true : false if enabled.respond_to?(:call)
-
-        enabled != false
-      end
-    end
+    # The keys of an open menu and the method each one calls.
+    KEYS = {
+      left: :previous_menu, right: :next_menu, up: :previous_item, down: :next_item,
+      escape: :close, f10: :close, enter: :activate
+    }.freeze
 
     # The Array of Menu entries, in bar order.
     attr_reader :menus
@@ -84,17 +48,17 @@ module BBS
     end
 
     # Returns whether a menu is dropped down.
-    def open?           = !@open_index.nil?
+    def open? = !@open_index.nil?
+
     # Returns the Menu that is dropped down, or +nil+.
-    def opened_menu     = @open_index ? @menus[@open_index] : nil
-    # Returns the index of the open menu in #menus, or +nil+.
-    attr_reader :open_index
+    def opened_menu = @open_index && @menus[@open_index]
 
     # Returns the highlighted MenuItem of the open menu, or +nil+.
-    def selected_item   = opened_menu&.items&.[](@item_index)
+    def selected_item = opened_menu&.items&.[](@item_index)
+
     # Returns the hint of the highlighted item while a menu is open, or
     # +nil+ (no menu open, or the item has no hint).
-    def selected_hint   = open? ? selected_item&.hint : nil
+    def selected_hint = open? ? selected_item&.hint : nil
 
     # Drops down the menu at +index+ (clamped to the existing menus) and
     # highlights its first enabled item. Does nothing when there are no
@@ -102,9 +66,8 @@ module BBS
     def open(index)
       return if @menus.empty?
 
-      idx = index.clamp(0, @menus.size - 1)
-      @open_index = idx
-      @item_index = first_selectable_index(@menus[idx].items) || 0
+      @open_index = index.clamp(0, @menus.size - 1)
+      @item_index = opened_menu.items.find_index(&:enabled?) || 0
     end
 
     # Closes the open menu, if any.
@@ -120,256 +83,125 @@ module BBS
     # with the hotkey letters highlighted, and the open menu's drop-down
     # box with its shadow under it. Records each menu's column in Menu#x.
     def render(frame)
-      sgr     = style(:menubar)
-      sel     = style(:menubar_selected)
-      hotkey  = style(:menubar_hotkey)
-      sel_hot = style(:menubar_sel_hot)
-
       frame.move(bounds.x, bounds.y)
-      frame.write(' ' * bounds.width, sgr: sgr)
-
-      cx = bounds.x + 1
-      @menus.each_with_index do |menu, i|
-        menu.x = cx
-        is_open = (@open_index == i)
-        slabel  = is_open ? sel : sgr
-        shotkey = is_open ? sel_hot : hotkey
-        frame.move(cx, bounds.y)
-        frame.write(' ', sgr: slabel)
-        render_hotkey_label(frame, menu.label, cx + 1, bounds.y, slabel, shotkey)
-        frame.move(cx + 1 + menu.display.length, bounds.y)
-        frame.write(' ', sgr: slabel)
-        cx += menu.display.length + 3
-      end
-
-      render_dropdown(frame) if open?
+      frame.write(' ' * bounds.width, sgr: style(:menubar))
+      @menus.each_with_index.reduce(bounds.x + 1) { |x, (menu, i)| render_label(frame, menu, i, x) }
+      dropdown&.render(frame, @item_index)
     end
 
-    # Handles a keyboard or mouse event: inside an open menu through
-    # #navigate, otherwise F10 or an Alt-hotkey opens a menu
-    # (#open_via_keyboard) and a left click on a label toggles it.
-    #
-    # Returns +:halt+ when an activated item's block returned +:halt+,
-    # +:handled+ when the bar used the event, +nil+ otherwise.
-    def handle_event(event)
-      return navigate(event) if open?
-      return open_via_keyboard(event) if event.key?
-      return handle_mouse_press(event) if event.mouse? && event.mouse.kind == :press && event.mouse.button == :left
-      nil
-    end
-
-    # Handles +event+ while a menu is open: Left/Right switch menus, Up/Down
-    # move to the previous/next enabled item, Enter or the item's hotkey
-    # letter activates it, Esc or F10 closes the menu. A left click selects
-    # an item, switches menus or closes the menu when outside it; other
-    # mouse events are swallowed.
+    # Handles a keyboard or mouse event. Inside an open menu Left/Right
+    # switch menus, Up/Down move to the previous/next enabled item, Enter
+    # or an item's hotkey letter activates it, Esc or F10 closes the menu,
+    # and a left click picks an item, switches menus or closes the menu
+    # when outside it. Otherwise F10 or an Alt-hotkey opens a menu and a
+    # left click on a label toggles it.
     #
     # Activating an item closes the menu, calls its +on_select+ block with
     # the item, then #on_activate. Returns +:halt+ when the block returned
-    # +:halt+, +:handled+ otherwise, or +nil+ when no menu is open.
-    def navigate(event)
-      if event.mouse?
-        return handle_mouse_press(event) if event.mouse.kind == :press && event.mouse.button == :left
-        return :handled
-      end
+    # +:halt+, +:handled+ when the bar used the event, +nil+ otherwise.
+    def handle_event(event)
+      return press(event) if left_press?(event)
+      return (open? ? :handled : nil) if event.mouse?
+      return navigate(event.key) if open?
 
-      menu = opened_menu
-      return nil unless menu
-      case event.key
-      when :left
-        @open_index = (@open_index - 1) % @menus.size
-        @item_index = first_selectable_index(opened_menu.items) || 0
-      when :right
-        @open_index = (@open_index + 1) % @menus.size
-        @item_index = first_selectable_index(opened_menu.items) || 0
-      when :up
-        @item_index = prev_selectable_index(menu.items, @item_index)
-      when :down
-        @item_index = next_selectable_index(menu.items, @item_index)
-      when :escape, :f10
-        close
-      when :enter
-        return activate_current
-      else
-        if event.char?
-          activated = activate_by_hotkey(menu.items, event.key)
-          return activated if activated
-        end
-      end
-      :handled
-    end
-
-    # Opens the first menu on F10, or the menu whose hotkey matches an
-    # Alt-letter +event+. Returns +:handled+ when a menu opened, +nil+
-    # otherwise.
-    def open_via_keyboard(event)
-      if event.key == :f10
-        open(0)
-        return :handled
-      end
-      if event.alt? && event.alt_char
-        idx = @menus.find_index { |m| m.hotkey == event.alt_char.downcase }
-        if idx
-          open(idx)
-          return :handled
-        end
-      end
-      nil
+      open_by_key(event)
     end
 
     private
 
-    def handle_mouse_press(event)
-      if event.y == bounds.y
-        # menubar click
-        idx = @menus.find_index do |m|
-          m.x && event.x >= m.x && event.x < m.x + m.display.length + 2
-        end
-        if idx
-          @open_index == idx ? close : open(idx)
-          return :handled
-        end
-        close
-        return :handled
-      end
+    def left_press?(event) = event.mouse? && event.mouse.kind == :press && event.mouse.button == :left
 
-      if open?
-        menu = opened_menu
-        x0   = dropdown_x(menu)
-        y0   = bounds.y + 1
-        w    = menu_width(menu)
-        h    = menu.items.size + 2
-        if event.x >= x0 && event.x < x0 + w && event.y >= y0 && event.y < y0 + h
-          inner_y = event.y - y0 - 1
-          if inner_y >= 0 && inner_y < menu.items.size
-            item = menu.items[inner_y]
-            unless item.separator || !item.enabled?
-              @item_index = inner_y
-              return activate_current
-            end
-          end
-          return :handled
-        end
-        close
-        return :handled
-      end
-      nil
+    # The keys of an open menu.
+    def navigate(key)
+      return send(KEYS[key]).then { |r| r.is_a?(Symbol) ? r : :handled } if KEYS.key?(key)
+      return :handled unless Text.printable?(key)
+
+      by_hotkey(key) || :handled
     end
 
-    def activate_current
+    # F10 opens the first menu, an Alt-letter the menu of that hotkey.
+    def open_by_key(event)
+      index = event.key == :f10 ? 0 : event.alt_char && @menus.find_index { |m| m.hotkey == event.alt_char.downcase }
+      return nil unless index
+
+      self.open(index)
+      :handled
+    end
+
+    # A left click: on the bar it toggles a menu; in the open dropdown it
+    # picks an item; anywhere else it closes the menu.
+    def press(event)
+      return click_bar(event.x) if event.y == bounds.y
+      return nil unless open?
+
+      row = dropdown.item_at(event.x, event.y)
+      return close.then { :handled } if row.nil?
+
+      pick(row)
+    end
+
+    def click_bar(col)
+      index = @menus.find_index { |m| m.at?(col) }
+      index.nil? || @open_index == index ? close : self.open(index)
+      :handled
+    end
+
+    # Activates item +row+ of the open menu when it can be chosen.
+    def pick(row)
+      return :handled unless row.between?(0, opened_menu.items.size - 1) && opened_menu.items[row].enabled?
+
+      @item_index = row
+      activate
+    end
+
+    def activate
       item = selected_item
       return :handled unless item&.enabled?
+
       close
       result = item.on_select&.call(item)
       @on_activate&.call(item)
       result == :halt ? :halt : :handled
     end
 
-    def activate_by_hotkey(items, ch)
-      down = ch.downcase
-      idx = items.find_index { |i| i.enabled? && i.hotkey == down }
-      return nil unless idx
-      @item_index = idx
-      activate_current
+    def by_hotkey(char)
+      index = opened_menu.items.find_index { |i| i.enabled? && i.hotkey == char.downcase }
+      return nil unless index
+
+      @item_index = index
+      activate
     end
 
-    def first_selectable_index(items)
-      items.find_index(&:enabled?)
+    def previous_menu = self.open((@open_index - 1) % @menus.size)
+
+    def next_menu = self.open((@open_index + 1) % @menus.size)
+
+    def previous_item = @item_index = step_item(-1)
+
+    def next_item = @item_index = step_item(1)
+
+    # The next enabled item in direction +dir+, round the end; the current
+    # one when there is none.
+    def step_item(dir)
+      items = opened_menu.items
+      (1..items.size).map { |n| (@item_index + (dir * n)) % items.size }.find { |i| items[i].enabled? } || @item_index
     end
 
-    def next_selectable_index(items, from)
-      n = items.size
-      i = from
-      n.times do
-        i = (i + 1) % n
-        return i if items[i].enabled?
-      end
-      from
-    end
-
-    def prev_selectable_index(items, from)
-      n = items.size
-      i = from
-      n.times do
-        i = (i - 1) % n
-        return i if items[i].enabled?
-      end
-      from
-    end
-
-    def menu_width(menu)
-      max_label = menu.items.reject(&:separator).map { |i| i.display.length }.max || 0
-      max_short = menu.items.reject(&:separator).map { |i| i.shortcut.to_s.length }.max || 0
-      max_label + max_short + 6
-    end
-
-    # A dropdown near the right edge is shifted left so it fits the screen.
-    def dropdown_x(menu)
-      [[menu.x.to_i, bounds.x + bounds.width - menu_width(menu)].min, 1].max
-    end
-
-    def render_dropdown(frame)
+    # The dropdown of the open menu, or +nil+.
+    def dropdown
       menu = opened_menu
-      return unless menu
-      x = dropdown_x(menu)
-      y = bounds.y + 1
-      w = menu_width(menu)
-      h = menu.items.size + 2
-      frame.shadow(x: x, y: y, width: w, height: h, sgr: style(:window_shadow))
-      frame.box(x: x, y: y, width: w, height: h,
-                sgr: style(:menu_border), fill_sgr: style(:menu_bg))
-
-      menu.items.each_with_index do |item, idx|
-        row_y = y + 1 + idx
-        if item.separator
-          frame.hline(x: x + 1, y: row_y, length: w - 2, char: '─', sgr: style(:menu_border))
-          next
-        end
-        selected = (idx == @item_index)
-        enabled = item.enabled?
-        sgr = if !enabled
-                style(:menu_disabled)
-              elsif selected
-                style(:menu_selected)
-              else
-                style(:menu_text)
-              end
-        frame.move(x + 1, row_y)
-        frame.write(' ' * (w - 2), sgr: sgr)
-
-        # label with hotkey highlight
-        frame.move(x + 2, row_y)
-        label = item.label
-        idx_amp = label.index('&')
-        if idx_amp && enabled
-          frame.write(label[0, idx_amp], sgr: sgr)
-          frame.write(label[idx_amp + 1].to_s, sgr: selected ? sgr : style(:menu_hotkey))
-          rest = label[(idx_amp + 2)..]
-          frame.write(rest, sgr: sgr) if rest
-        else
-          frame.write(item.display, sgr: sgr)
-        end
-
-        next unless item.shortcut
-        short = item.shortcut.to_s
-        frame.move(x + w - 1 - short.length, row_y)
-        frame.write(short, sgr: sgr)
-      end
+      menu && Dropdown.new(menu, bounds, ->(key) { style(key) })
     end
 
-    def render_hotkey_label(frame, label, x, y, sgr, hotkey_sgr)
-      idx = label.index('&')
-      if idx
-        frame.move(x, y)
-        frame.write(label[0, idx], sgr: sgr) if idx > 0
-        frame.write(label[idx + 1].to_s, sgr: hotkey_sgr)
-        rest = label[(idx + 2)..]
-        frame.write(rest, sgr: sgr) if rest && !rest.empty?
-      else
-        frame.move(x, y)
-        frame.write(label, sgr: sgr)
-      end
+    # Draws the label of +menu+ (number +index+) at column +x+; returns the
+    # column of the next one.
+    def render_label(frame, menu, index, x)
+      lit = @open_index == index
+      menu.render(frame, x, bounds.y, style(lit ? :menubar_selected : :menubar),
+                  style(lit ? :menubar_sel_hot : :menubar_hotkey))
     end
-
   end
 end
+
+require_relative 'menu/items'
+require_relative 'menu/dropdown'
