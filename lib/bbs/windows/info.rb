@@ -4,6 +4,7 @@ require_relative '../window'
 require_relative '../widgets'
 require_relative '../frame_buffer'
 require_relative 'button_bar'
+require_relative 'info/body'
 
 module BBS
   module Windows
@@ -46,12 +47,18 @@ module BBS
       # and rows below the button row.
       DEFAULT_PADDING = { sides: 2, top: 1, bottom: 2 }.freeze
 
+      # The options of ::new and their defaults.
+      OPTIONS = { body: [], buttons: nil, width: 60, height: nil, scroll: false, padding: nil,
+                  maximizable: false }.freeze
+      # The body rows of a scrolling window without a height of its own.
+      SCROLL_ROWS = 10
+
       # Creates an info window with the keywords of Info.new and opens it on
       # +app+.
       #
       # Returns the Info window.
-      def self.open(app, **kw)
-        new(app: app, **kw).tap(&:attach)
+      def self.open(app, **)
+        new(app: app, **).tap(&:attach)
       end
 
       # The BBS::Widgets::ScrollView holding the body in scroll mode; +nil+
@@ -61,30 +68,33 @@ module BBS
       # Creates the window and its widgets, centred on +app+'s screen. It is
       # not opened; see #attach.
       #
-      # [app]         the BBS::Application
-      # [title]       the window title
+      # [app]   the BBS::Application
+      # [title] the window title
+      #
+      # The +options+ (OPTIONS):
+      #
       # [body]        an Array of body items (see above)
       # [buttons]     an Array of BBS::Windows::ButtonBar descriptors;
       #               +nil+ gives DEFAULT_BUTTON, <tt>[]</tt> no buttons
       # [width]       the window width (default 60)
-      # [height]      the window height; by default it fits the body (10
-      #               body rows in scroll mode)
+      # [height]      the window height; by default it fits the body
+      #               (SCROLL_ROWS body rows in scroll mode)
       # [scroll]      puts the body in a scrolling view
       # [padding]     a Hash overriding DEFAULT_PADDING entries
       # [maximizable] gives the window the zoom gadget
       #
-      # Raises ArgumentError when a widget body item is used in scroll mode.
-      def initialize(app:, title:, body: [], buttons: nil, width: 60, height: nil,
-                     scroll: false, padding: nil, maximizable: false)
-        super(title: title, modal: false, maximizable: maximizable)
+      # Raises ArgumentError for an unknown option, and when a widget body
+      # item is used in scroll mode.
+      def initialize(app:, title:, **options)
+        unknown = options.keys - OPTIONS.keys
+        raise ArgumentError, "unknown info options: #{unknown.inspect}" unless unknown.empty?
+
+        @options = OPTIONS.merge(options)
+        super(title: title, modal: false, maximizable: @options[:maximizable])
         self.theme = app.theme
         @app     = app
-        @body    = body
-        @buttons = buttons.nil? ? DEFAULT_BUTTON.dup : Array(buttons)
-        @scroll  = scroll
-        @width   = width
-        @height  = height
-        @padding = DEFAULT_PADDING.merge(padding || {})
+        @buttons = @options[:buttons].nil? ? DEFAULT_BUTTON.dup : Array(@options[:buttons])
+        @padding = DEFAULT_PADDING.merge(@options[:padding] || {})
         build
       end
 
@@ -100,17 +110,14 @@ module BBS
       end
 
       # Only the scrolling body can be laid out at another size.
-      def resizable? = @scroll
+      def resizable? = @options[:scroll]
 
       # Returns the un-maximized bounds as <tt>[x, y, width, height]</tt>:
       # the requested size (or the fitted height), shrunk to leave a
       # two-cell margin, centred on the screen.
       def normal_rect
-        button_h  = @buttons.any? ? 2 : 0
-        body_rows = @scroll ? 10 : @body.sum { |it| item_rows(it) }
-        h = @height || (@padding[:top] + body_rows + button_h + @padding[:bottom])
-        w = [@width, @app.cols - 4].min
-        h = [h, @app.rows - 4].min
+        w = [@options[:width], @app.cols - 4].min
+        h = [@options[:height] || (body_rows + chrome_rows), @app.rows - 4].min
         [((@app.cols - w) / 2) + 1, ((@app.rows - h) / 2) + 1, w, h]
       end
 
@@ -118,150 +125,40 @@ module BBS
       # caller, so a wider window shows them as they are.
       def place(x, y, width, height)
         layout(x, y, width, height)
-        button_h = @buttons.any? ? 2 : 0
-        body_h   = [height - @padding[:top] - @padding[:bottom] - button_h, 1].max
-        @scroll_view.layout(x + @padding[:sides], y + @padding[:top], width - (@padding[:sides] * 2), body_h)
-        @scroll_view.scroll = @scroll_view.scroll.clamp(0, [@scroll_view.lines.size - body_h, 0].max)
+        rows = [height - chrome_rows, 1].max
+        @scroll_view.layout(*inside(x, y, width), rows)
+        @scroll_view.scroll = @scroll_view.scroll.clamp(0, [@scroll_view.lines.size - rows, 0].max)
         ButtonBar.place(self, @bar[:widgets], @buttons)
       end
 
       private
 
+      # The rows around the body: the padding and the button row.
+      def chrome_rows = @padding[:top] + @padding[:bottom] + (@buttons.any? ? 2 : 0)
+
+      # The body's corner and width in a window at +x+, +y+, +width+ wide.
+      def inside(x, y, width) = [x + @padding[:sides], y + @padding[:top], width - (@padding[:sides] * 2)]
+
+      def body_rows = @options[:scroll] ? SCROLL_ROWS : @options[:body].sum { |item| Body.rows(item) }
+
       def build
-        button_h = @buttons.any? ? 2 : 0
         layout(*normal_rect)
-        w = bounds.width
-        h = bounds.height
-
-        inner_w = w - (@padding[:sides] * 2)
-        inner_x = bounds.x + @padding[:sides]
-        inner_y = bounds.y + @padding[:top]
-        body_h  = h - @padding[:top] - @padding[:bottom] - button_h
-        body_h  = [body_h, 0].max
-
-        if @scroll
-          place_scroll_body(inner_x, inner_y, inner_w, body_h)
-        else
-          place_static_body(inner_x, inner_y, inner_w)
-        end
-
+        area = inside(bounds.x, bounds.y, bounds.width)
+        @options[:scroll] ? scroll_body(*area, [bounds.height - chrome_rows, 0].max) : static_body(*area)
         @bar = ButtonBar.attach(self, @app, @buttons)
         @primary_button = @bar[:primary]
       end
 
-      def item_rows(item)
-        case item
-        when :spacer, :rule, '', nil then 1
-        when String                  then 1
-        when Hash
-          return item[:kv].length          if item[:kv]
-          return item[:height] || 1        if item[:widget]
-          1
-        when BBS::Widget
-          h = item.bounds.height
-          h.positive? ? h : 1
-        else 1
-        end
-      end
-
-      def place_scroll_body(x, y, w, h)
-        lines = []
-        @body.each { |item| append_scroll_lines(lines, item, w) }
-        @scroll_view = BBS::Widgets::ScrollView.new(lines: lines)
-        @scroll_view.layout(x, y, w, h)
+      def scroll_body(x, y, width, height)
+        body = Body.new(self)
+        @scroll_view = Widgets::ScrollView.new(lines: @options[:body].flat_map { |item| body.lines(item, width) })
+        @scroll_view.layout(x, y, width, height)
         add(@scroll_view)
       end
 
-      def append_scroll_lines(lines, item, width)
-        base = theme[:text]
-        case item
-        when :spacer, '', nil
-          lines << ''
-        when :rule
-          lines << "#{theme[:label]}#{'─' * width}#{base}"
-        when String
-          lines << item
-        when Hash
-          if item[:kv]
-            kw = item[:label_width] || default_kv_label_width(item[:kv])
-            item[:kv].each do |k, v|
-              lines << "#{theme[:input_label]}#{k.to_s.ljust(kw)}#{base}  #{v}"
-            end
-          elsif item[:text]
-            sgr = item[:style] ? theme[item[:style]] : base
-            lines << "#{sgr}#{item[:text]}#{base}"
-          end
-        when BBS::Widget
-          raise ArgumentError, 'scroll mode does not support widget body items'
-        end
-      end
-
-      def place_static_body(x, y, w)
-        row = 0
-        @body.each { |item| row += place_static_item(item, x, y + row, w) }
-      end
-
-      def place_static_item(item, x, y, w)
-        case item
-        when :spacer, '', nil
-          1
-        when :rule
-          label = BBS::Widgets::Label.new(text: '─' * w, style_key: :label)
-          label.layout(x, y, w, 1)
-          add(label)
-          1
-        when String
-          label = BBS::Widgets::Label.new(text: item, style_key: :window_text)
-          label.layout(x, y, w, 1)
-          add(label)
-          1
-        when Hash
-          place_static_hash(item, x, y, w)
-        when BBS::Widget
-          h = item.bounds.height.positive? ? item.bounds.height : 1
-          item.layout(x, y, w, h)
-          add(item)
-          h
-        else
-          1
-        end
-      end
-
-      def place_static_hash(item, x, y, w)
-        if item[:kv]
-          kw = item[:label_width] || default_kv_label_width(item[:kv])
-          item[:kv].each_with_index do |(k, v), i|
-            label = BBS::Widgets::Label.new(text: k.to_s.ljust(kw), style_key: :input_label)
-            label.layout(x, y + i, kw, 1)
-            add(label)
-            value = BBS::Widgets::Label.new(text: v.to_s, style_key: :window_text)
-            value.layout(x + kw + 2, y + i, w - kw - 2, 1)
-            add(value)
-          end
-          item[:kv].length
-        elsif item[:widget]
-          wd = item[:widget]
-          h  = item[:height] || (wd.bounds.height.positive? ? wd.bounds.height : 1)
-          wd.layout(x, y, w, h)
-          add(wd)
-          h
-        elsif item[:text]
-          label = BBS::Widgets::Label.new(
-            text:      item[:text],
-            style_key: item[:style] || :window_text,
-            align:     item[:align] || :left
-          )
-          label.layout(x, y, w, 1)
-          add(label)
-          1
-        else
-          1
-        end
-      end
-
-      def default_kv_label_width(pairs)
-        max = pairs.map { |k, _| k.to_s.length }.max || 0
-        [max + 1, 16].min.clamp(8, 16)
+      def static_body(x, y, width)
+        body = Body.new(self)
+        @options[:body].reduce(y) { |row, item| row + body.place(item, x, row, width) }
       end
     end
   end

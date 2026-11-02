@@ -39,11 +39,18 @@ module BBS
       # BBS::Widgets::TextInput under it.
       attr_reader :history, :input
 
+      # The options of ::new and their defaults.
+      OPTIONS = { initial_lines: [], placeholder: '', on_submit: nil, on_poll: nil, buffer_size: 500, width: nil,
+                  height: nil, close_button: true, close_label: '&Close', maximizable: false }.freeze
+
       # Creates the window and its widgets, centred on +app+'s screen. It is
       # not opened; see #attach.
       #
-      # [app]           the BBS::Application
-      # [title]         the window title
+      # [app]   the BBS::Application
+      # [title] the window title
+      #
+      # The +options+ (OPTIONS):
+      #
       # [initial_lines] the lines the history starts with
       # [placeholder]   the text the empty input shows
       # [on_submit]     called with <tt>(text, app)</tt> on Enter
@@ -54,22 +61,16 @@ module BBS
       # [close_button]  adds a Close button (default true)
       # [close_label]   the Close button's label
       # [maximizable]   gives the window the zoom gadget
-      def initialize(app:, title:, initial_lines: [], placeholder: '',
-                     on_submit: nil, on_poll: nil, buffer_size: 500,
-                     width: nil, height: nil,
-                     close_button: true, close_label: '&Close', maximizable: false)
-        super(title: title, modal: false, maximizable: maximizable)
+      #
+      # Raises ArgumentError for an unknown option.
+      def initialize(app:, title:, **options)
+        unknown = options.keys - OPTIONS.keys
+        raise ArgumentError, "unknown stream options: #{unknown.inspect}" unless unknown.empty?
+
+        @options = OPTIONS.merge(options)
+        super(title: title, modal: false, maximizable: @options[:maximizable])
         self.theme = app.theme
-        @app           = app
-        @initial_lines = initial_lines
-        @placeholder   = placeholder
-        @on_submit     = on_submit
-        @on_poll       = on_poll
-        @buffer_size   = buffer_size
-        @width         = width
-        @height        = height
-        @close_button  = close_button
-        @close_label   = close_label
+        @app = app
         build
       end
 
@@ -87,11 +88,11 @@ module BBS
       # returns to the history, drops the oldest beyond +buffer_size+, and
       # scrolls to the end. Does nothing without +on_poll+ or new lines.
       def tick(_app)
-        return unless @on_poll
-        new_lines = @on_poll.call(@app)
+        new_lines = @options[:on_poll]&.call(@app)
         return if new_lines.nil? || new_lines.empty?
-        @history.lines  = (@history.lines + Array(new_lines)).last(@buffer_size)
-        @history.scroll = [@history.lines.size - @history.bounds.height, 0].max
+
+        @history.lines = (@history.lines + Array(new_lines)).last(@options[:buffer_size])
+        scroll_to_end
       end
 
       # A stream window can be resized; #place lays it out again.
@@ -101,8 +102,8 @@ module BBS
       # the requested size, or the screen less 8 columns and 6 rows,
       # centred.
       def normal_rect
-        w = @width  || (@app.cols - 8)
-        h = @height || (@app.rows - 6)
+        w = @options[:width]  || (@app.cols - 8)
+        h = @options[:height] || (@app.rows - 6)
         [((@app.cols - w) / 2) + 1, ((@app.rows - h) / 2) + 1, w, h]
       end
 
@@ -111,7 +112,7 @@ module BBS
       def place(x, y, width, height)
         layout(x, y, width, height)
         @history.layout(x + 2, y + 1, width - 4, [height - 4, 1].max)
-        @history.scroll = [@history.lines.size - @history.bounds.height, 0].max
+        scroll_to_end
         @input.layout(x + 2, y + height - 3, width - 4, 1)
         @input.send(:adjust_scroll)
         ButtonBar.place(self, @bar[:widgets], @bar_descriptors) if @bar
@@ -119,26 +120,29 @@ module BBS
 
       private
 
+      def scroll_to_end = @history.scroll = [@history.lines.size - @history.bounds.height, 0].max
+
       def build
-        @history = BBS::Widgets::ScrollView.new(lines: @initial_lines)
-        add(@history)
-
-        @input = BBS::Widgets::TextInput.new(placeholder: @placeholder)
+        @history = Widgets::ScrollView.new(lines: @options[:initial_lines])
+        @input   = Widgets::TextInput.new(placeholder: @options[:placeholder])
         @input.on_submit = method(:handle_input_submit)
+        add(@history)
         add(@input)
-
         layout(*normal_rect)
-        if @close_button
-          @bar_descriptors = [{ label: @close_label, cancel: true }]
-          @bar = ButtonBar.attach(self, @app, @bar_descriptors)
-        end
+        attach_close_button if @options[:close_button]
         place(*normal_rect)
+      end
+
+      def attach_close_button
+        @bar_descriptors = [{ label: @options[:close_label], cancel: true }]
+        @bar = ButtonBar.attach(self, @app, @bar_descriptors)
       end
 
       def handle_input_submit(value, _input)
         text = value.to_s
         return :handled if text.strip.empty?
-        result = @on_submit&.call(text, @app)
+
+        result = @options[:on_submit]&.call(text, @app)
         @input.value = '' unless result == :keep
         :handled
       end
