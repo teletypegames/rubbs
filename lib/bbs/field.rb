@@ -74,11 +74,7 @@ module BBS
         return finish(@buffer.text) if key == :enter
         return finish(nil) if CANCEL_KEYS.include?(key)
 
-        case key
-        when :home then @buffer.place(0, 0)
-        when :end  then @buffer.place(0, @buffer.lines.first.length)
-        else @buffer.edit(key)
-        end
+        apply(key)
         paint
       end
     end
@@ -90,21 +86,40 @@ module BBS
       result
     end
 
+    # HOME and END go to the ends of the text; any other key edits it.
+    def apply(key)
+      case key
+      when :home then @buffer.place(0, 0)
+      when :end  then @buffer.place(0, text.length)
+      else @buffer.edit(key)
+      end
+    end
+
+    def text = @buffer.lines.first
+
     # Draws the visible part of the text over the whole field and puts the
-    # cursor at its place; the last column of the field is kept for the
-    # cursor when it stands at the end.
+    # cursor at its place.
     def paint
-      text = @buffer.lines.first
-      pos  = @buffer.pos
-      @scroll = pos - @width + 1 if pos - @scroll > @width - 1
-      @scroll = pos if pos < @scroll
-      @scroll = [@scroll, [text.length - @width + 1, 0].max].min
-      shown = text[@scroll, @width] || ''
-      shown = @mask * shown.length if @mask
+      scroll
       out = @screen.move(1, 1) << @screen.cells(shown).ljust(@width)
       @screen.wrote(@width)
-      out << @screen.move(1, 1 + pos - @scroll)
+      out << @screen.move(1, 1 + @buffer.pos - @scroll)
       @session.write(out)
+    end
+
+    # Scrolls the text so the cursor is in the field; the last column of
+    # the field is kept for the cursor when it stands at the end.
+    def scroll
+      pos = @buffer.pos
+      @scroll = (pos - @width + 1).clamp(0..) if pos - @scroll > @width - 1
+      @scroll = pos if pos < @scroll
+      @scroll = [@scroll, text.length - @width + 1].min.clamp(0..)
+    end
+
+    # The part of the text in the field, masked when a mask is set.
+    def shown
+      part = text[@scroll, @width] || ''
+      @mask ? @mask * part.length : part
     end
   end
 end

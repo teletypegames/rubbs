@@ -9,7 +9,7 @@ module BBS
   # position in that line.
   #
   #   buffer = BBS::TextBuffer.new('Hello', max: 80)
-  #   buffer.edit('!')        # => true
+  #   buffer.edit('!')        # => buffer
   #   buffer.text             # => "Hello!"
   class TextBuffer
     # The control characters of a new text that become a space: tab and CR.
@@ -17,6 +17,8 @@ module BBS
     # One printable character, the only kind #edit inserts
     # (BBS::Text::PRINTABLE_CHAR).
     PRINTABLE_CHAR = Text::PRINTABLE_CHAR
+    # The editing keys besides the characters, and the method each calls.
+    KEYS = { backspace: :backspace, delete: :delete, left: :left, right: :right, enter: :split_line }.freeze
     # The most characters a buffer holds when it is given no +max+: 64 KiB.
     MAX_LENGTH = 65_536
 
@@ -70,27 +72,22 @@ module BBS
     # [+:enter+]               splits the line at the cursor (not in a
     #                          single-line buffer)
     #
-    # Returns true when the key was one of these, false for any other key,
-    # which the caller handles.
+    # Returns +self+ when the key was one of these, +nil+ for any other
+    # key, which the caller handles.
     def edit(key)
-      case key
-      when String     then insert(key)
-      when :backspace then backspace
-      when :delete    then delete
-      when :left      then left
-      when :right     then right
-      when :enter
-        return false if @single
+      return nil unless editing?(key)
 
-        split_line
-      else return false
-      end
-      true
+      key.is_a?(String) ? insert(key) : send(KEYS.fetch(key))
+      self
     end
 
     private
 
     def full? = length >= @max
+
+    # Whether +key+ is a character or one of KEYS (RETURN not in a
+    # single-line buffer).
+    def editing?(key) = key.is_a?(String) || (KEYS.key?(key) && !(@single && key == :enter))
 
     def insert(char)
       return if full? || !char.match?(PRINTABLE_CHAR)
