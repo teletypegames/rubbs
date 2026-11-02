@@ -34,10 +34,7 @@ module BBS
     # declaration order (so the last right-aligned button sits closest to the
     # edge).
     #
-    # The methods are module functions.
     module ButtonBar
-      module_function
-
       # Builds a BBS::Widgets::Button for each of +descriptors+, places them
       # on the bottom row of +window+ and adds them to it. A click runs the
       # descriptor's +on_click+ and then closes the window on +app+ unless
@@ -46,86 +43,63 @@ module BBS
       # Returns <tt>{ widgets:, primary:, by_key: }</tt>: the buttons in
       # order, the primary button (or +nil+), and a Hash of descriptor key to
       # button.
-      def attach(window, app, descriptors)
-        return { widgets: [], primary: nil, by_key: {} } if descriptors.nil? || descriptors.empty?
-
-        widgets = descriptors.map do |d|
-          BBS::Widgets::Button.new(label: d[:label], on_click: build_handler(window, app, d))
-        end
-
+      def self.attach(window, app, descriptors)
+        descriptors = Array(descriptors)
+        widgets = descriptors.map { |d| Widgets::Button.new(label: d[:label], on_click: handler(window, app, d)) }
         place(window, widgets, descriptors)
-
         widgets.each { |w| window.add(w) }
-
-        primary_idx = descriptors.index { |d| d[:primary] }
-        primary     = primary_idx ? widgets[primary_idx] : nil
-
-        by_key = {}
-        descriptors.each_with_index { |d, i| by_key[d[:key]] = widgets[i] if d[:key] }
-
-        { widgets: widgets, primary: primary, by_key: by_key }
+        pairs = descriptors.zip(widgets)
+        { widgets: widgets, primary: pairs.find { |d, _| d[:primary] }&.last,
+          by_key: pairs.select { |d, _| d[:key] }.to_h { |d, w| [d[:key], w] } }
       end
 
-      # Position (or re-position) already-built bar widgets against the
-      # window's current bounds. Used by attach and by window relayouts.
-      def place(window, widgets, descriptors)
-        return if widgets.empty?
-
-        default_align = descriptors.length == 1 ? :center : :right
-        aligns        = descriptors.map { |d| d[:align] || default_align }
-
-        row_y    = window.bounds.y + window.bounds.height - 2
-        left_x0  = window.bounds.x + 2
-        right_x1 = window.bounds.x + window.bounds.width - 2
-        win_x0   = window.bounds.x
-        win_w    = window.bounds.width
-
-        x = left_x0
-        widgets.each_with_index do |w, i|
-          next unless aligns[i] == :left
-          bw = button_width(w)
-          w.layout(x, row_y, bw, 1)
-          x += bw + 1
-        end
-
-        right_indices = aligns.each_index.select { |i| aligns[i] == :right }
-        total_right   = right_indices.sum { |i| button_width(widgets[i]) + 1 } - 1
-        total_right   = [total_right, 0].max
-        x = right_x1 - total_right + 1
-        right_indices.each do |i|
-          bw = button_width(widgets[i])
-          widgets[i].layout(x, row_y, bw, 1)
-          x += bw + 1
-        end
-
-        center_indices = aligns.each_index.select { |i| aligns[i] == :center }
-        total_center   = center_indices.sum { |i| button_width(widgets[i]) + 1 } - 1
-        total_center   = [total_center, 0].max
-        x = win_x0 + ((win_w - total_center) / 2)
-        center_indices.each do |i|
-          bw = button_width(widgets[i])
-          widgets[i].layout(x, row_y, bw, 1)
-          x += bw + 1
+      # Positions (or re-positions) the bar's +widgets+, built from
+      # +descriptors+, against the window's current bounds: the left ones
+      # from the left edge, the right ones flush against the right edge, the
+      # centred ones in the middle. Used by ::attach and by window relayouts.
+      def self.place(window, widgets, descriptors)
+        default = descriptors.length == 1 ? :center : :right
+        groups  = widgets.each_index.group_by { |i| descriptors[i][:align] || default }
+        %i[left right center].each do |align|
+          row = widgets.values_at(*groups.fetch(align, []))
+          lay_out(row, start(window.bounds, align, row), window.bounds.y + window.bounds.height - 2)
         end
       end
 
-      # Returns the width of +button+ on screen, brackets included.
-      def button_width(button)
-        "[ #{button.display_label} ]".length
+      # The column the +row+ of buttons aligned +align+ starts at in
+      # +bounds+.
+      def self.start(bounds, align, row)
+        total = [row.sum { |w| width(w) + 1 } - 1, 0].max
+        case align
+        when :left  then bounds.x + 2
+        when :right then bounds.x + bounds.width - 1 - total
+        else bounds.x + ((bounds.width - total) / 2)
+        end
       end
 
-      # Returns the click handler for +descriptor+: it calls the descriptor's
-      # +on_click+ with +window+, closes the window on +app+ unless the result
-      # is +:keep+ or +keep_open+ is set, and returns +:handled+.
-      def build_handler(window, app, descriptor)
-        on_click  = descriptor[:on_click]
-        keep_open = descriptor[:keep_open]
-        lambda do |_btn|
-          result = on_click&.call(window)
-          app.close_window(window) unless keep_open || result == :keep
+      # Lays the +row+ of buttons out side by side from column +x+ on row +y+.
+      def self.lay_out(row, x, y)
+        row.each do |w|
+          w.layout(x, y, width(w), 1)
+          x += width(w) + 1
+        end
+      end
+
+      # The width of +button+ on screen, brackets included.
+      def self.width(button) = "[ #{button.display_label} ]".length
+
+      # The click handler for +descriptor+: it calls the descriptor's
+      # +on_click+ with +window+, closes the window on +app+ unless the
+      # result is +:keep+ or +keep_open+ is set, and returns +:handled+.
+      def self.handler(window, app, descriptor)
+        lambda do |_button|
+          result = descriptor[:on_click]&.call(window)
+          app.close_window(window) unless descriptor[:keep_open] || result == :keep
           :handled
         end
       end
+
+      private_class_method :start, :lay_out, :width, :handler
     end
   end
 end
