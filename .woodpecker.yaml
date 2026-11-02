@@ -32,8 +32,7 @@ steps:
       - bundle install
       - bundle exec rake test
 
-  # Az új kód a .rubocop.yml szabályaihoz igazodik; a régi kivételek a
-  # .rubocop_todo.yml-ben vannak.
+  # Az egész gem a .rubocop.yml szabályaihoz igazodik, todo-fájl nélkül.
   - name: rubocop
     image: ruby:3.3
     commands:
