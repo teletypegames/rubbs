@@ -10,11 +10,14 @@ module BBS
   # entries. F10 opens the first menu; the arrow keys, Enter, Esc, the item
   # hotkeys and the mouse work inside an open one.
   #
-  #   bar = BBS::Menubar.new
-  #   bar.add_menu('&File') do
-  #     item('&Open', shortcut: 'F3') { |item| open_file }
-  #     separator
-  #     item('E&xit', shortcut: 'Alt-X') { :halt }
+  # An Application fills it with its +menu+ DSL (BBS::Application::MenubarBuilder#menu):
+  #
+  #   menubar do
+  #     menu("&File") do
+  #       item("&Open", shortcut: "F3") { |item| open_file }
+  #       separator
+  #       item("E&xit", shortcut: "Alt-X") { :halt }
+  #     end
   #   end
   #
   # The bar itself never takes the keyboard focus (#focusable? is false);
@@ -34,7 +37,7 @@ module BBS
       def display = label.sub('&', '')
     end
 
-    # One entry of a menu, built by MenuBuilder: +label+ (with an optional
+    # One entry of a menu, built by the Application menu DSL: +label+ (with an optional
     # <tt>&</tt> before the hotkey letter), +shortcut+ (text shown at the
     # right edge, for display only), +enabled+ (+true+, +false+ or a callable
     # asked each time), +on_select+ (the block called with the item when it
@@ -78,17 +81,6 @@ module BBS
       @open_index  = nil
       @item_index  = 0
       @on_activate = nil
-    end
-
-    # Appends a menu called +label+ to the bar. The block is evaluated in a
-    # MenuBuilder, so its +item+ and +separator+ calls fill the menu.
-    #
-    # Returns +self+.
-    def add_menu(label, &block)
-      builder = MenuBuilder.new
-      builder.instance_eval(&block) if block
-      @menus << Menu.new(label: label, items: builder.items, x: nil)
-      self
     end
 
     # Returns whether a menu is dropped down.
@@ -379,38 +371,5 @@ module BBS
       end
     end
 
-    # The receiver of the block given to Menubar#add_menu: collects the
-    # menu's entries in order.
-    class MenuBuilder
-      # The Array of MenuItem collected so far.
-      attr_reader :items
-
-      # Creates a builder with no items.
-      def initialize
-        @items = []
-      end
-
-      # Adds an entry labelled +label+.
-      #
-      # [shortcut] text shown at the right edge of the entry; it does not
-      #            bind a key
-      # [enabled]  +true+, +false+, or a callable asked each time the menu is
-      #            drawn or used
-      # [hint]     a line about the entry, shown on the statusbar while it is
-      #            highlighted
-      #
-      # The block is called with the MenuItem when the entry is chosen;
-      # returning +:halt+ from it ends the application.
-      def item(label, shortcut: nil, enabled: true, hint: nil, &block)
-        @items << MenuItem.new(label: label, shortcut: shortcut, hint: hint,
-                               enabled: enabled, on_select: block, separator: false)
-      end
-
-      # Adds a dividing line, which cannot be selected.
-      def separator
-        @items << MenuItem.new(label: '', shortcut: nil, enabled: false,
-                               on_select: nil, separator: true)
-      end
-    end
   end
 end
