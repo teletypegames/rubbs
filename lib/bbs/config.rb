@@ -22,7 +22,7 @@ module BBS
     # [mouse_on_connect] whether a session turns mouse reporting on as soon
     #                    as it connects (when +mouse+ is on); default +true+
     # [idle_seconds]     idle limit in seconds of the Application loop and
-    #                    the TUI, and each connection's socket read/write
+    #                    each connection's socket read/write
     #                    timeout; each session starts with it and may change
     #                    its own (<tt>Session#idle_seconds=</tt>);
     #                    +nil+ (the default) means no Application limit and

@@ -16,7 +16,7 @@ module BBS
     attr_reader :session_id, :term_cols, :term_rows
     # The idle limit in seconds for this session (+nil+: no limit), copied
     # from BBS.config.idle_seconds when the session starts. The Application
-    # loop and the TUI runner read it, so a board can give one caller more
+    # loop reads it, so a board can give one caller more
     # time (a sysop) or less; see #idle_seconds=.
     attr_reader :idle_seconds
 
