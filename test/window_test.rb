@@ -148,7 +148,7 @@ class WindowSpecTest < Minitest::Test
     spec.on_submit { |values, _form, ctx| seen = [values[:body], ctx[:db]]; :close }
     form = spec.open(@app, who: 'ada')
     assert_equal ' ada ', form.title
-    form.instance_variable_get(:@on_submit).call({ body: 'x' }, form)
+    form.instance_variable_get(:@options)[:on_submit].call({ body: 'x' }, form)
     assert_equal ['x', :the_db], seen
   end
 
