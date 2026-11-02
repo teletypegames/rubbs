@@ -58,6 +58,7 @@ Style/Documentation:
 # .rubocop_todo.yml.
 Metrics/MethodLength:
   Max: 15
+  CountAsOne: [array, hash, heredoc]
   Exclude:
     - "test/**/*"
 # Options are keyword arguments with defaults, documented one by one.
@@ -74,9 +75,13 @@ Metrics/BlockLength:
   Exclude:
     - "test/**/*"
     - "bbs.gemspec"
+# Data (a table, a list, a heredoc) counts as one line: a preset is not code.
 Metrics/ClassLength:
+  CountAsOne: [array, hash, heredoc]
   Exclude:
     - "test/**/*"
+Metrics/ModuleLength:
+  CountAsOne: [array, hash, heredoc]
 
 # BBS::Cache#fetch takes a block, not a default.
 Style/RedundantFetchBlock:

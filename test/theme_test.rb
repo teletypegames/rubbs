@@ -40,3 +40,20 @@ class ThemeTest < Minitest::Test
     refute builder.services.frozen?
   end
 end
+
+class ThemePresetsTest < Minitest::Test
+  def test_every_preset_defines_every_role
+    BBS::Theme::PRESETS.each do |name, styles|
+      assert_equal BBS::Theme::ROLES.sort, styles.keys.sort, "#{name} roles"
+    end
+  end
+
+  def test_an_unknown_role_is_refused
+    assert_raises(ArgumentError) { BBS::Theme.synchronet.merge(windw_bg: 'x') }
+  end
+
+  def test_merge_keeps_the_name_and_replaces_a_role
+    theme = BBS::Theme.mono.merge(window_bg: 'B')
+    assert_equal [:mono, 'B'], [theme.name, theme[:window_bg]]
+  end
+end
