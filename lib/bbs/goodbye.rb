@@ -23,8 +23,9 @@ module BBS
     # and "More of us: +url+", then NO CARRIER in red.
     def self.modern_text(title:, note: nil, url: URL, clear: true)
       more = [note, "More of us: #{url}"].compact.join(' ')
-      "#{clear ? "\e[0m\e[2J\e[H" : "\e[0m"}\r\n  \e[1;37mThanks for calling #{title}.\e[0m\r\n  " \
-        "\e[2;37m#{more}\e[0m\r\n\r\n  \e[1;31mNO CARRIER\e[0m\r\n\r\n"
+      a = Ansi
+      "#{a::RESET}#{a::CLEAR if clear}#{a::CRLF}  #{a::WHITE}Thanks for calling #{title}.#{a::RESET}#{a::CRLF}  " \
+        "#{a::DIM_GREY}#{more}#{a::RESET}#{a::CRLF * 2}  #{a::BRIGHT_RED}NO CARRIER#{a::RESET}#{a::CRLF * 2}"
     end
 
     # Writes ::modern_text to +out+, anything with a +write+ method: a
@@ -71,7 +72,7 @@ module BBS
       if block_given?
         yield screen
       else
-        screen.say([note, "More of us: #{url}"].compact.join(' '), c::GR)
+        screen.say([note, "More of us: #{url}"].compact.join(' '), color: c::GR)
       end
       screen.puts
       hang_up(screen)

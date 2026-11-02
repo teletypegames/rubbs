@@ -66,7 +66,7 @@ module BBS
     #
     # Returns the Window.
     def self.message(app, text, title: ' Message ', width: nil)
-      lines  = wrap(text, width ? width - TEXT_CHROME : WRAP_WIDTH)
+      lines  = FrameBuffer.wrap_ansi(text.to_s.split.join(' '), width ? width - TEXT_CHROME : WRAP_WIDTH)
       w      = width || [(lines.map(&:length).max || 0) + TEXT_CHROME, MESSAGE_MIN_WIDTH].max
       h      = lines.size + CHROME_ROWS
       window = centred_window(app, width: w, height: h, title: title)
@@ -92,7 +92,7 @@ module BBS
     #
     # Returns the Window.
     def self.confirm(app, text, title: ' Confirm ', on_yes: nil, on_no: nil)
-      lines = wrap(text, WRAP_WIDTH)
+      lines = FrameBuffer.wrap_ansi(text.to_s.split.join(' '), WRAP_WIDTH)
       w     = [(lines.map(&:length).max || 0) + TEXT_CHROME, CONFIRM_MIN_WIDTH].max
       h     = lines.size + CHROME_ROWS
       window = centred_window(app, width: w, height: h, title: title)
@@ -157,26 +157,6 @@ module BBS
       window.focus_manager.focus(input)
       app.open_window(window)
       window
-    end
-
-    # Splits +text+ into an Array of lines of whole words, each at most
-    # +width+ characters (a longer word gets a line of its own).
-    def self.wrap(text, width)
-      words = text.to_s.split
-      lines = []
-      cur   = +''
-      words.each do |w|
-        if cur.empty?
-          cur << w
-        elsif cur.length + 1 + w.length <= width
-          cur << ' ' << w
-        else
-          lines << cur.dup
-          cur = +w
-        end
-      end
-      lines << cur unless cur.empty?
-      lines
     end
   end
 end

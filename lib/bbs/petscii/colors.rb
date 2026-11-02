@@ -2,11 +2,12 @@
 
 module BBS
   module Petscii
-    # The colours of a line-by-line C64 board as two-letter constants, each
-    # an ANSI SGR sequence: a PETSCII session (<tt>session.petscii!</tt>)
-    # turns them into the C64's own colour codes, and the width helpers of
-    # rubbs (BBS::FrameBuffer) know ANSI, where they would count PETSCII
-    # codes as text. The same sequences show on a modern terminal too.
+    # The colours of a line-by-line C64 board as two-letter constants: the
+    # C64 names of the BBS::Ansi palette, so each is an ANSI SGR sequence. A
+    # PETSCII session (<tt>session.petscii!</tt>) turns them into the C64's
+    # own colour codes, and the width helpers of rubbs (BBS::FrameBuffer)
+    # know ANSI, where they would count PETSCII codes as text. The same
+    # sequences show on a modern terminal too.
     #
     # A class gets the bare names by including the module (BBS::Petscii::Screen
     # does, so its subclasses have them). A board's namespace module needs
@@ -24,33 +25,33 @@ module BBS
     #   end
     module Colors
       # White (the C64's white).
-      WH = "\e[1;37m"
+      WH = Ansi::WHITE
       # Yellow.
-      YE = "\e[1;33m"
+      YE = Ansi::BRIGHT_YELLOW
       # Cyan.
-      CY = "\e[0;36m"
+      CY = Ansi::CYAN
       # Light grey, the colour of plain text.
-      LG = "\e[0;37m"
+      LG = Ansi::GREY
       # Medium grey.
-      GR = "\e[2;37m"
+      GR = Ansi::DIM_GREY
       # Dark grey.
-      DG = "\e[1;30m"
+      DG = Ansi::DARK_GREY
       # Light blue.
-      LB = "\e[1;34m"
+      LB = Ansi::BRIGHT_BLUE
       # Blue.
-      BL = "\e[0;34m"
+      BL = Ansi::BLUE
       # Light green.
-      GN = "\e[1;32m"
+      GN = Ansi::BRIGHT_GREEN
       # Light red.
-      RD = "\e[1;31m"
+      RD = Ansi::BRIGHT_RED
       # Purple.
-      PU = "\e[0;35m"
+      PU = Ansi::MAGENTA
       # Orange.
-      OR = "\e[0;33m"
+      OR = Ansi::YELLOW
       # Reverse video on.
-      RV = "\e[7m"
+      RV = Ansi::REVERSE
       # Reverse video off.
-      RO = "\e[27m"
+      RO = Ansi::REVERSE_OFF
 
       # Defines every colour constant of this module (WH, YE … RO) in +mod+,
       # a Module or Class, so code lexically nested in it finds the bare

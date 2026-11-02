@@ -50,15 +50,6 @@ module BBS
 
     # A pair of pixels, the upper and the lower, => its half block.
     HALF = { [true, true] => '█', [true, false] => '▀', [false, true] => '▄', [false, false] => ' ' }.freeze
-    # SGR: reverse video on.
-    REVERSE = "\e[7m"
-    # SGR: reverse video off.
-    NORMAL = "\e[27m"
-    # SGR: light grey, the C64 board's plain text colour, written after a
-    # ::petscii row.
-    PETSCII_RESET = "\e[0;37m"
-    # SGR: all attributes off, written after a coloured ::half_blocks row.
-    RESET = "\e[0m"
 
     # The five rows of +char+ (looked up as it is, then in capitals) in
     # +glyphs+ over FONT. Raises KeyError for a character the font lacks.
@@ -89,7 +80,7 @@ module BBS
     # [reset]  what ends a coloured row
     #
     # Returns the rows, an Array of three Strings.
-    def self.half_blocks(word, glyphs: {}, colors: nil, reset: RESET)
+    def self.half_blocks(word, glyphs: {}, colors: nil, reset: Ansi::RESET)
       bits = rows(word, glyphs: glyphs).map { |r| r.chars.map { |c| c == SET } }
       bits << Array.new(bits.first.size, false)
       lines = bits.each_slice(2).map { |top, bottom| top.zip(bottom).map { |pair| HALF[pair] }.join }
@@ -103,7 +94,7 @@ module BBS
     # +normal+, the clear ones plain spaces.
     #
     #   BBS::BlockFont.reversed('#.##')   # => "\e[7m \e[27m \e[7m  \e[27m"
-    def self.reversed(row, reverse: REVERSE, normal: NORMAL)
+    def self.reversed(row, reverse: Ansi::REVERSE, normal: Ansi::REVERSE_OFF)
       row.gsub(/#{SET}+/o) { |run| "#{reverse}#{' ' * run.size}#{normal}" }.tr(CLEAR, ' ')
     end
 
@@ -118,7 +109,7 @@ module BBS
     # Returns the rows, an Array of five Strings.
     #
     #   BBS::BlockFont.petscii('WARP', colors: [LB, LB, CY, CY, WH], indent: 10)
-    def self.petscii(word, colors:, glyphs: {}, indent: 0, reset: PETSCII_RESET, reverse: REVERSE, normal: NORMAL)
+    def self.petscii(word, colors:, glyphs: {}, indent: 0, reset: Ansi::GREY, reverse: Ansi::REVERSE, normal: Ansi::REVERSE_OFF)
       rows(word, glyphs: glyphs).each_with_index.map do |row, i|
         "#{' ' * indent}#{color_of(colors, i)}#{reversed(row, reverse: reverse, normal: normal)}#{reset}"
       end

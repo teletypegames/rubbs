@@ -184,18 +184,42 @@ module BBS
     COLORS      = [WHITE, RED, GREEN, BLUE, ORANGE, BLACK, BROWN, LIGHT_RED, DARK_GREY, GREY,
                    LIGHT_GREEN, LIGHT_BLUE, LIGHT_GREY, PURPLE, YELLOW, CYAN].freeze
 
-    # Unicode -> the bytes of the lowercase set (box drawing, blocks, the
-    # typography of the modern board). Letters, digits and most punctuation
-    # are mapped by code in Encoder#glyph.
-    GLYPHS = {
-      '─' => "\u00c0", '━' => "\u00c0", '═' => "\u00c0", '│' => "\u00dd", '┃' => "\u00dd", '║' => "\u00dd",
-      '┌' => "\u00b0", '╔' => "\u00b0", '╭' => "\u00b0", '┐' => "\u00ae", '╗' => "\u00ae", '╮' => "\u00ae",
-      '└' => "\u00ad", '╚' => "\u00ad", '╰' => "\u00ad", '┘' => "\u00bd", '╝' => "\u00bd", '╯' => "\u00bd",
-      '├' => "\u00ab", '╠' => "\u00ab", '┤' => "\u00b3", '╣' => "\u00b3", '┬' => "\u00b2", '╦' => "\u00b2",
-      '┴' => "\u00b1", '╩' => "\u00b1", '┼' => "\u00db", '╬' => "\u00db",
-      '░' => "\u00a6", '▒' => "\u00a6", '▓' => "\u00a6", '▄' => "\u00a2", '▌' => "\u00a1", '▁' => "\u00a4",
-      '▔' => "\u00a3", '✓' => "\u00ba", '✔' => "\u00ba",
-      '£' => "\u005c", '←' => "\u005f", '↑' => "\u005e", '^' => "\u005e", '_' => "\u00a4", '|' => "\u00dd",
+    # ── The glyph table ───────────────────────────────────────────────────
+    # The graphics of the C64 by the Unicode character they look like, as
+    # PETSCII codes. The lowercase set (the Encoder's) and the
+    # uppercase/graphics set (BBS::Petscii::Canvas) share most of them.
+
+    # Graphics both character sets have at the same code: the box drawing
+    # with square corners, the blocks, £ ↑ ←.
+    GRAPHICS = {
+      '─' => 0xc0, '│' => 0xdd, '┼' => 0xdb, '┌' => 0xb0, '┐' => 0xae, '└' => 0xad, '┘' => 0xbd,
+      '├' => 0xab, '┤' => 0xb3, '┬' => 0xb2, '┴' => 0xb1,
+      '▌' => 0xa1, '▄' => 0xa2, '▔' => 0xa3, '▁' => 0xa4, '▒' => 0xa6,
+      '▖' => 0xbb, '▗' => 0xac, '▘' => 0xbe, '▝' => 0xbc, '▚' => 0xbf,
+      '£' => 0x5c, '↑' => 0x5e, '←' => 0x5f
+    }.freeze
+    # The rounded corners, which only the uppercase/graphics set has; the
+    # lowercase set draws them as the square ones (LOOK_ALIKES).
+    ROUNDED_CORNERS = { '╭' => 0xd5, '╮' => 0xc9, '╰' => 0xca, '╯' => 0xcb }.freeze
+    # The graphics only the uppercase/graphics set has: the rounded
+    # corners, the balls, the card suits, the diagonals.
+    UPPERCASE_GRAPHICS = ROUNDED_CORNERS.merge(
+      '●' => 0xd1, '○' => 0xd7, '♥' => 0xd3, '♠' => 0xc1, '♣' => 0xd8, '♦' => 0xda, 'π' => 0xde,
+      '╲' => 0xcd, '╱' => 0xce, '╳' => 0xd6, '◤' => 0xa9, '◥' => 0xdf
+    ).freeze
+    # The graphics only the lowercase set has: the tick.
+    LOWERCASE_GRAPHICS = { '✓' => 0xba, '✔' => 0xba }.freeze
+    # Characters the lowercase set shows as the graphic of a look-alike:
+    # double and heavy lines as single ones, rounded corners as square ones.
+    LOOK_ALIKES = {
+      '━' => '─', '═' => '─', '┃' => '│', '║' => '│', '|' => '│',
+      '╔' => '┌', '╭' => '┌', '╗' => '┐', '╮' => '┐', '╚' => '└', '╰' => '└', '╝' => '┘', '╯' => '┘',
+      '╠' => '├', '╣' => '┤', '╦' => '┬', '╩' => '┴', '╬' => '┼',
+      '░' => '▒', '▓' => '▒', '_' => '▁', '^' => '↑'
+    }.freeze
+    # The typography of a modern board in ASCII, for the characters the C64
+    # has no glyph for.
+    ASCII_FORMS = {
       '\\' => '/', '`' => "'", '{' => '(', '}' => ')', '~' => '-',
       '–' => '-', '—' => '-', '―' => '-', '‘' => "'", '’' => "'", '“' => '"', '”' => '"', '„' => '"',
       '…' => '...', '·' => '.', '•' => '*', '●' => '*', '◆' => '*', '★' => '*', '■' => '*', '☼' => '*',
@@ -203,6 +227,13 @@ module BBS
       '›' => '>', '»' => '>', '→' => '>', '↓' => 'v', '×' => 'x', '°' => 'o', '≈' => '-', '∿' => '-',
       '≋' => '-', ' ' => ' ', 'ß' => 'ss', 'π' => 'pi'
     }.freeze
+    # What the Encoder writes for a character of the lowercase set: the
+    # PETSCII code point of its graphic (GRAPHICS, LOWERCASE_GRAPHICS,
+    # LOOK_ALIKES), or its ASCII form.
+    GLYPHS = GRAPHICS.merge(LOWERCASE_GRAPHICS)
+                     .then { |codes| codes.merge(LOOK_ALIKES.transform_values { |c| codes.fetch(c) }) }
+                     .transform_values { |code| code.chr(Encoding::UTF_8) }
+                     .merge(ASCII_FORMS).freeze
 
     # Translates a +byte+ the C64 sent into a key the way BBS::Telnet#readkey
     # returns keys: a Symbol (+:enter+, +:backspace+ for DEL and for the ASCII
@@ -237,6 +268,11 @@ module BBS
       when SHIFT_SPACE     then ' '
       end
     end
+
+    # Returns the PETSCII colour code, an Integer, that the SGR colour
+    # sequence +sgr+ turns into on a PETSCII line (BBS::Petscii::Colors::YE
+    # is YELLOW), or +nil+ when it sets no colour.
+    def self.color_code(sgr) = Encoder.new.encode(sgr).each_byte.find { |b| COLORS.any? { |c| c.ord == b } }
 
     # Returns the binary String of bytes for +codes+, a String of PETSCII
     # code points (such as the constants of this module).

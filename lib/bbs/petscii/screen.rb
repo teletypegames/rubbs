@@ -41,15 +41,12 @@ module BBS
       CHROME = 5
       # The lines of text on a C64 page (#page_size of a 40×25 screen).
       PAGE = ROWS - CHROME
-      # The colours of the menus (BBS::Selector): the bar in the title
-      # bar's cyan.
-      MENU = { text: LG, key: YE, bar: CY, heading: DG, about: GR, hint: DG }.freeze
       # The status row of #pick.
       PICK_HINT = 'crsr or number, return  q: back'
       # What #page and #pick show for nothing.
       EMPTY = '(nothing here)'
       # The clear screen of a modern terminal: colours reset, cursor home.
-      MODERN_CLEAR = "\e[0m\e[2J\e[H"
+      MODERN_CLEAR = "#{Ansi::RESET}#{Ansi::CLEAR}".freeze
 
       # The session written to and read from (BBS::Session or one that
       # quacks like it).
@@ -58,9 +55,6 @@ module BBS
       attr_reader :cols, :rows
       # The width a paragraph wraps to: #cols less two.
       attr_reader :width
-
-      # +text+ made #plain for the C64: see BBS::Petscii.plain.
-      def self.plain(text) = Petscii.plain(text)
 
       # Creates the screen of +session+, +cols+ × +rows+ (default the C64's
       # 40×25).
@@ -109,7 +103,7 @@ module BBS
       end
 
       # Writes a horizontal line in +color+, the screen's width less one.
-      def rule(color = DG) = puts("#{color}#{'─' * (@cols - 1)}#{LG}")
+      def rule(color: DG) = puts("#{color}#{'─' * (@cols - 1)}#{LG}")
 
       # +text+ word-wrapped to +width+ columns, ANSI colours kept: an Array
       # of lines (BBS::FrameBuffer.wrap_ansi).
@@ -125,7 +119,7 @@ module BBS
         lines.flat_map do |l|
           next [''] if l.to_s.empty?
 
-          indent = FrameBuffer.text(l.to_s).gsub(FrameBuffer::ANSI_ESC_RE, '')[/\A */]
+          indent = FrameBuffer.plain(l)[/\A */]
           first, *rest = wrap(l, width)
           next [first] if rest.empty?
 
@@ -135,7 +129,9 @@ module BBS
 
       # Writes +text+ (made #plain) as a paragraph in +color+, wrapped to
       # #width and indented by a space.
-      def say(text, color = LG)
+      #
+      #   screen.say('Posted.', color: GN)
+      def say(text, color: LG)
         wrap(plain(text)).each { |l| puts " #{color}#{l}#{LG}" }
       end
 
@@ -174,17 +170,6 @@ module BBS
       # RUN/STOP or ←.
       def ask(prompt, text: '', mask: nil, max: nil)
         Field.ask(@session, prompt, text: text, max: max, mask: mask, cols: @cols).to_s.strip
-      end
-
-      # A text of several lines, at most +max+ characters, in the
-      # full-screen BBS::Editor titled +heading+ at the session's own size;
-      # after it the screen is cleared under the #title of +heading+.
-      #
-      # Returns the text; empty when the caller quit.
-      def editor(max = nil, heading = 'YOUR TEXT')
-        text = Editor.new(@session, title: heading, max: max).run
-        title(heading)
-        text.to_s
       end
 
       # +text+ edited in the full-screen BBS::Editor at this screen's size,
@@ -238,7 +223,7 @@ module BBS
 
       # A numbered list of +items+, each labelled by the block (made
       # #plain; default +to_s+), under the #title of +heading+ and +right+: a
-      # BBS::Selector.list a #page_size high in the MENU colours. CRSR and
+      # BBS::Selector.list a #page_size high. CRSR and
       # RETURN or the number pick, CRSR left and right turn the pages.
       #
       # [empty]    shown, with a #pause, when +items+ is empty
@@ -251,24 +236,24 @@ module BBS
         label ||= :to_s.to_proc
         title(heading, right)
         if items.empty?
-          say(empty, GR)
+          say(empty, color: GR)
           pause
           return nil
         end
         hint = commands.empty? ? PICK_HINT : "#{commands.map { |k, v| "#{k}: #{v}" }.join('  ')}  q: back"
-        Selector.list(@session, items, width: @cols - 1, height: page_size, hint: hint, colors: MENU,
+        Selector.list(@session, items, width: @cols - 1, height: page_size, hint: hint,
                                        exits: commands.keys.to_h { |k| [k, k] }.merge('q' => nil)) do |item|
           plain(label.call(item))
         end
       end
 
       # A BBS::Selector of +items+ (BBS::Selector::Item) at the cursor, the
-      # screen's width less one, in the MENU colours. The other options are
+      # screen's width less one. The other options are
       # those of BBS::Selector.new.
       #
       # Returns the value of the item taken, or +back+ for ← or RUN/STOP.
       def menu(items, back: nil, **)
-        Selector.new(@session, items, width: @cols - 1, back: back, colors: MENU, **).run
+        Selector.new(@session, items, width: @cols - 1, back: back, **).run
       end
 
       # The keys of +actions+, <tt>[key, label]</tt> pairs, as a #menu on

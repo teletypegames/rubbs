@@ -36,10 +36,17 @@ module BBS
     # SGR: reverse video off (RVS OFF on a C64).
     REVERSE_OFF = "\e[27m"
 
+    # ── The palette ───────────────────────────────────────────────────────
+    # The one set of text colours of rubbs, as SGR sequences. Every
+    # component takes its colours from here (or from a BBS::Theme): the C64
+    # names of BBS::Petscii::Colors are these same sequences.
+
+    # SGR: grey (normal white) text, the colour of plain text.
+    GREY = "\e[0;37m"
+    # SGR: dim grey text.
+    DIM_GREY = "\e[2;37m"
     # SGR: dark grey (bold black) text.
     DARK_GREY = "\e[1;30m"
-    # SGR: grey (normal white) text.
-    GREY = "\e[0;37m"
     # SGR: bright white text.
     WHITE = "\e[1;37m"
     # SGR: bright red text.
@@ -54,6 +61,8 @@ module BBS
     BRIGHT_YELLOW = "\e[1;33m"
     # SGR: blue text.
     BLUE = "\e[0;34m"
+    # SGR: bright blue text.
+    BRIGHT_BLUE = "\e[1;34m"
     # SGR: magenta text.
     MAGENTA = "\e[0;35m"
     # SGR: cyan text.
@@ -61,9 +70,10 @@ module BBS
     # SGR: bright cyan text.
     BRIGHT_CYAN = "\e[1;36m"
 
-    # A CSI sequence with digit and semicolon parameters and a letter or
-    # <tt>~</tt> final byte.
-    CSI_RE = /\e\[[\d;]*[A-Za-z~]/
+    # A CSI sequence with digit, semicolon and <tt>?</tt> parameters and a
+    # letter or <tt>~</tt> final byte: the one pattern rubbs finds escape
+    # sequences in text with.
+    CSI_RE = /\e\[[\d;?]*[A-Za-z~]/
     # The final byte of a CSI sequence: a letter or <tt>~</tt>.
     CSI_FINAL = /[A-Za-z~]/
     # A letter, the final byte of a CSI sequence that ends with one.

@@ -17,7 +17,9 @@ module BBS
     # paints the menu and sends its rows itself.
     #
     # The colours (+colors+ and an Item's +color+) are C64 colours: a
-    # BBS::Petscii::Canvas code or name (+:yellow+).
+    # BBS::Petscii::Canvas code, a name (+:yellow+) or a colour of the
+    # palette (BBS::Petscii::Colors, +YE+); the roles default to the
+    # Selector's COLORS.
     #
     #   canvas = BBS::Petscii::Canvas.new
     #   house.draw_canvas(canvas)                      # a BBS::Art
@@ -35,14 +37,6 @@ module BBS
     # key and returns the bytes to send (or +nil+); a key stops waiting at
     # once.
     class CanvasMenu < Selector
-      # The colours, C64 colour codes: +text+ the labels, +key+ the keys and
-      # numbers, +bar+ the lit cell (reversed), +heading+ the headings,
-      # +about+ the about row, +hint+ the status row.
-      COLORS = {
-        text: Canvas::LIGHT_GREY, key: Canvas::YELLOW, bar: Canvas::CYAN, heading: Canvas::DARK_GREY,
-        about: Canvas::GREY, hint: Canvas::DARK_GREY
-      }.freeze
-
       # The canvas the menu is drawn on.
       attr_reader :canvas
 
@@ -57,22 +51,19 @@ module BBS
       #          default the start of the screen's last row
       # [idle]   seconds without a key after which the block is called,
       #          or +nil+
-      # [colors] colours over COLORS (C64 codes or names)
       #
       # The other options (+width+, +height+, +columns+, +index+,
-      # +numbers+, +across+, +hint+, +exits+, +back+) are those of
+      # +numbers+, +across+, +hint+, +exits+, +back+, +colors+) are those of
       # BBS::Selector.new. Raises ArgumentError for a menu with nothing to
       # select or an unknown colour.
-      def initialize(session, items, canvas:, row:, col:, width:, rest: [Canvas::ROWS - 1, 0], idle: nil,
-                     colors: {}, **, &on_idle)
-        super(session, items, width: width, **)
+      def initialize(session, items, canvas:, row:, col:, rest: [Canvas::ROWS - 1, 0], idle: nil, **, &on_idle)
+        super(session, items, **)
         @canvas  = canvas
         @top     = row
         @left    = col
         @rest    = rest
-        @idle    = idle
-        @on_idle = on_idle
-        @colors  = COLORS.merge(colors.transform_values { |c| Canvas.color(c) })
+        @keys    = Keys.new(session, idle, on_idle)
+        @colors  = @colors.transform_values { |c| Canvas.color(c) }
       end
 
       # Draws the whole menu onto the canvas, sending nothing. Returns
@@ -103,7 +94,7 @@ module BBS
         # seconds without one (when both are given).
         def initialize(session, idle, on_idle)
           @session = session
-          @idle    = idle
+          @idle    = idle && on_idle ? idle : nil
           @on_idle = on_idle
         end
 
@@ -111,9 +102,9 @@ module BBS
         # Raises IOError when the caller hangs up.
         def key
           loop do
-            k = @idle && @on_idle ? @session.readkey(timeout: @idle) : @session.readkey
+            k = @session.readkey(timeout: @idle)
             raise IOError, 'the caller hung up' if k.nil?
-            return k unless k == :idle && @idle && @on_idle
+            return k unless k == :idle && @idle
 
             out = @on_idle.call
             @session.write_raw(out) if out && !out.empty?
@@ -123,30 +114,13 @@ module BBS
 
       private_constant :Keys
 
+      def read_key = @keys.key
+
       def draw
-        @screen = Keys.new(@session, @idle, @on_idle)
         return if @drawn
 
         paint
-        send_lines((1..rows).to_a)
-      end
-
-      def light(index)
-        old    = @index
-        turned = index / per_page != page
-        @index = index
-        lines  = if turned
-                   (1..(@across ? 1 : @height)).to_a
-                 else
-                   [line_of(old), line_of(index)].uniq
-                 end
-        lines << ((@across ? 1 : @height) + 1) if @about.positive?
-        lines << rows if @status.positive?
-        repaint(lines.uniq)
-      end
-
-      def paint_status
-        repaint([rows]) if @status.positive?
+        send_rows(screen_rows((1..rows).to_a).map { |r| @canvas.span(r, @left, @width) }.join.b)
       end
 
       # Paints menu lines +lines+ and sends what changed in them: the
@@ -154,102 +128,38 @@ module BBS
       def repaint(lines)
         before = @canvas.dup
         lines.each { |l| paint_line(l) }
-        rows = screen_rows(lines)
+        rows  = screen_rows(lines)
         cells = @canvas.changes(before).select { |r, _| rows.include?(r) }
-        return @session.write_raw(@canvas.cursor(*@rest)) if cells.empty?
+        return send_rows(''.b) if cells.empty?
 
         patch = @canvas.patch(cells)
         spans = rows.map { |r| @canvas.span(r, @left, @width) }.join.b
-        @session.write_raw((patch.bytesize < spans.bytesize ? patch : spans) + @canvas.cursor(*@rest))
+        send_rows(patch.bytesize < spans.bytesize ? patch : spans)
       end
 
       def finish(result) = result
 
+      # +bytes+ and the cursor to +rest+, raw.
+      def send_rows(bytes) = @session.write_raw(bytes + @canvas.cursor(*@rest))
+
       # The screen rows of menu lines +lines+ that are on the screen.
       def screen_rows(lines) = lines.map { |l| @top + l - 1 }.select { |r| r.between?(0, Canvas::ROWS - 1) }
 
-      # The spans of menu lines +lines+ and the cursor to +rest+.
-      def send_lines(lines)
-        out = screen_rows(lines).map { |r| @canvas.span(r, @left, @width) }.join.b
-        @session.write_raw(out + @canvas.cursor(*@rest))
-      end
-
-      # Paints menu line +number+ (1-based: the items' rows, then the
-      # about row, then the status row) onto the canvas.
+      # Paints the segments of menu line +number+ onto the canvas.
       def paint_line(number)
-        item_rows = @across ? 1 : @height
-        segments = if number <= item_rows then segments_of(number)
-                   elsif @about.positive? && number == item_rows + 1 then about_segments
-                   else status_segments
-                   end
         row = @top + number - 1
         @canvas.clear(row, @left, @width)
-        col = @left
-        segments.each do |text, color, rvs|
-          @canvas.text(row, col, text, color, rvs: rvs)
-          col += text.length
+        line_segments(number).reduce(@left) do |col, (text, color, reversed)|
+          @canvas.text(row, col, text, color.is_a?(Symbol) ? @colors[color] : color, rvs: reversed || false)
+          col + text.length
         end
-      end
-
-      def segments_of(number)
-        return across_segments if @across
-
-        first = (page * per_page) + number - 1
-        (0...@columns).flat_map do |c|
-          width = c == @columns - 1 ? @width - (cell_width * c) : cell_width
-          cell_segments(first + (c * @height), width)
-        end
-      end
-
-      def cell_segments(index, width)
-        item = @items[index]
-        return [[' ' * width, @colors[:text], false]] unless item
-        return [[fit(" #{plain(item.label)}", width), @colors[:heading], false]] if item.heading
-
-        prefix = key_width.positive? ? " #{key_text(index)} " : ' '
-        color  = item.color && Canvas.color(item.color)
-        return [[fit(prefix + plain(item.label), width), color || @colors[:bar], true]] if index == @index
-
-        [[prefix, color || @colors[:key], false],
-         [fit(plain(item.label), [width - prefix.length, 0].max), @colors[:text], false]]
-      end
-
-      # The items on one row: a key letter and a label each, the lit one a
-      # bar; the items that do not fit are left off.
-      def across_segments
-        out  = []
-        used = 0
-        @items.each_with_index do |item, i|
-          word = item.key ? "#{item.key.to_s.upcase} #{plain(item.label)}" : plain(item.label)
-          break if used + word.length + 2 > @width
-
-          color = item.color && Canvas.color(item.color)
-          if i == @index
-            out << [" #{word} ", color || @colors[:bar], true]
-          elsif item.key
-            out << [' ', @colors[:text], false] << [item.key.to_s.upcase, color || @colors[:key], false]
-            out << [" #{plain(item.label)} ", @colors[:text], false]
-          else
-            out << [" #{word} ", @colors[:text], false]
-          end
-          used += word.length + 2
-        end
-        out
-      end
-
-      def about_segments = [[fit(" #{plain(@items[@index].about)}", @width), @colors[:about], false]]
-
-      def status_segments
-        right = if !@typed.empty? then "##{@typed}"
-                elsif pages > 1 then "#{page + 1}/#{pages}"
-                else ''
-                end
-        left = " #{plain(@hint.to_s)}"[0, [@width - right.length - 1, 0].max]
-        [[left + (' ' * (@width - left.length - right.length)) + right, @colors[:hint], false]]
       end
 
       # +text+ without colours, in characters the C64 shows.
       def plain(text) = Petscii.plain(super)
+
+      # A label made #plain, cut or padded to +width+.
+      def label(text, width) = fit(plain(text), width)
     end
   end
 end

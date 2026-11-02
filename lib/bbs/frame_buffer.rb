@@ -1,10 +1,15 @@
 # frozen_string_literal: true
 
+require_relative 'frame_buffer/wrap'
+
 module BBS
   # An off-screen grid of character cells, each holding one character and
   # the SGR escape sequence that styles it. Widgets and windows draw into a
   # frame buffer with 1-based coordinates; #diff then turns the changes
   # since the previous frame into the ANSI bytes to send to the terminal.
+  #
+  # Its class methods are rubbs' one set of tools for ANSI text: ::plain,
+  # ::visible_width, ::clip_ansi and ::wrap_ansi (the one word-wrap).
   #
   #   buf = BBS::FrameBuffer.new(80, 24)
   #   buf.box(x: 1, y: 1, width: 20, height: 5, title: 'Hello')
@@ -17,21 +22,24 @@ module BBS
     Cell = Struct.new(:char, :sgr)
     # The empty cell a cleared buffer is filled with: a space, no style.
     BLANK = Cell.new(' ', nil).freeze
-
-    # Matches one CSI escape sequence (<tt>ESC [</tt> parameters and a final
-    # letter or <tt>~</tt>), used to strip styling when measuring text.
-    ANSI_ESC_RE = Ansi::CSI_RE
     # SGR reset with no parameter, the short form of Ansi::RESET.
     SHORT_RESET = "\e[m"
-    # One token of word wrapping: a CSI sequence, a word, or a run of
-    # whitespace.
-    WRAP_TOKEN_RE = /(\e\[[\d;]*[A-Za-z~]|[^\s\e]+|\s+)/
-    # A token that is whitespace only.
-    BLANK_RE = /\A\s+\z/
+    # The two SGR resets, the long form and the short one.
+    RESETS = [Ansi::RESET, SHORT_RESET].freeze
     # A character a cell never holds: a C0 control, DEL, a C1 control or a
     # bidirectional control, any of which would move or restyle the caller's
     # screen behind the frame buffer's back.
     CONTROL_CHAR = /[\u0000-\u001F\u007F-\u009F#{Text::BIDI_CONTROLS}]/
+    # One token of ANSI text: a CSI sequence (first group), a CSI sequence
+    # cut off by the end of the text (second group) or one character
+    # (third group).
+    ANSI_TOKEN = /(#{Ansi::CSI_RE})|(\e\[[^A-Za-z~]*\z)|(.)/m
+    # Box-drawing characters per frame style (+:single+, +:double+): the
+    # corners +:tl+, +:tr+, +:bl+, +:br+ and the edges +:h+, +:v+.
+    BOX_CHARS = {
+      single: { tl: '┌', tr: '┐', bl: '└', br: '┘', h: '─', v: '│' },
+      double: { tl: '╔', tr: '╗', bl: '╚', br: '╝', h: '═', v: '║' }
+    }.freeze
 
     # Returns +value+ as a UTF-8 String a regexp can read: a binary String
     # is taken as UTF-8, another encoding is converted, and invalid bytes
@@ -50,35 +58,26 @@ module BBS
       s.encode(Encoding::UTF_8, invalid: :replace, undef: :replace, replace: '?')
     end
 
+    # Returns +text+ (anything with +to_s+) as UTF-8 without its ANSI
+    # escape sequences: the one way rubbs strips colours from text.
+    def self.plain(text) = self.text(text).gsub(Ansi::CSI_RE, '')
+
     # Returns the number of characters of +text+ left once its ANSI escape
     # sequences are removed.
-    def self.visible_width(text)
-      self.text(text).gsub(ANSI_ESC_RE, '').length
-    end
+    def self.visible_width(text) = plain(text).length
 
     # Returns +text+ cut so that at most +max_width+ characters are visible.
-    # Escape sequences up to the cut are kept (they take no width); an empty
-    # String when +max_width+ is zero or less.
+    # Escape sequences up to the cut are kept (they take no width); an
+    # escape sequence the text cuts off ends it. An empty String when
+    # +max_width+ is zero or less.
     def self.clip_ansi(text, max_width)
-      return '' if max_width <= 0
       out     = +''
       visible = 0
-      i       = 0
-      s       = self.text(text)
-      len     = s.length
-      while i < len
-        if s[i] == Ansi::ESC && i + 1 < len && s[i + 1] == Ansi::CSI_BYTE
-          j = i + 2
-          j += 1 while j < len && !s[j].match?(Ansi::CSI_FINAL)
-          break if j >= len
-          out << s[i..j]
-          i = j + 1
-          next
-        end
-        break if visible >= max_width
-        out << s[i]
-        visible += 1
-        i += 1
+      self.text(text).scan(ANSI_TOKEN) do |seq, cut, char|
+        break if cut || (char && visible >= max_width)
+
+        out << (seq || char)
+        visible += 1 if char
       end
       out
     end
@@ -92,49 +91,9 @@ module BBS
     # Returns <tt>['']</tt> when +width+ is zero or less.
     def self.wrap_ansi(text, width)
       return [''] if width <= 0
+
       s = self.text(text)
-      return [s] if visible_width(s) <= width
-
-      lines       = []
-      cur         = +''
-      cur_visible = 0
-      active_sgr  = nil
-
-      flush = lambda do
-        lines << cur.rstrip
-        cur = +''
-        cur_visible = 0
-        cur << active_sgr if active_sgr
-      end
-
-      s.scan(WRAP_TOKEN_RE) do |(tok)|
-        if tok.start_with?(Ansi::ESC)
-          active_sgr = [Ansi::RESET, SHORT_RESET].include?(tok) ? nil : tok
-          cur << tok
-          next
-        end
-
-        tok_visible = tok.gsub(ANSI_ESC_RE, '').length
-
-        if tok.match?(BLANK_RE)
-          if cur_visible == 0
-            cur << tok
-            cur_visible += tok_visible
-          elsif cur_visible + tok_visible <= width
-            cur << tok
-            cur_visible += tok_visible
-          else
-            flush.call
-          end
-        else
-          flush.call if cur_visible + tok_visible > width && cur_visible > 0
-          cur << tok
-          cur_visible += tok_visible
-        end
-      end
-
-      lines << cur.rstrip unless cur.empty?
-      lines.empty? ? [''] : lines
+      visible_width(s) <= width ? [s] : Wrap.new(width).lines(s)
     end
 
     # The width (+cols+) and height (+rows+) of the grid in cells.
@@ -170,64 +129,23 @@ module BBS
     def write(text, sgr: nil)
       self.class.text(text).each_char do |ch|
         break if @cy >= @rows
-        next if ch.match?(CONTROL_CHAR)
 
-        put(ch, sgr)
+        put(ch, sgr) unless ch.match?(CONTROL_CHAR)
       end
     end
 
-    # Writes +text+ from the cursor, interpreting the escape sequences in it.
-    #
-    # [base_sgr] the starting style; an embedded <tt>\e[...m</tt> adds to it
-    #            and a reset (<tt>\e[m</tt>, <tt>\e[0m</tt>) returns to it
-    # [cursor]   honour <tt>\e[row;colH</tt> cursor moves (a TUI page); off by
-    #            default so content in a widget cannot jump out of it
-    #
-    # <tt>\e[nC</tt> writes +n+ styled spaces. Other escape sequences and
-    # control characters (CONTROL_CHAR) are skipped.
-    def write_ansi(text, base_sgr: nil, cursor: false)
-      cur_sgr = base_sgr
-      s       = text.to_s
-      s       = s.scrub('?') unless s.valid_encoding?
-      i       = 0
-      len     = s.length
-
-      while i < len
-        ch = s[i]
-
-        if ch == Ansi::ESC && i + 1 < len && s[i + 1] == Ansi::CSI_BYTE
-          j = i + 2
-          j += 1 while j < len && !s[j].match?(Ansi::CSI_LETTER)
-
-          if j < len
-            term  = s[j]
-            inner = s[(i + 2)...j]
-
-            case term
-            when 'm'
-              seq     = s[i..j]
-              cur_sgr = ['', '0'].include?(inner) ? base_sgr : "#{cur_sgr}#{seq}"
-            when 'C'
-              [inner.to_i, 1].max.clamp(1, @cols).times do
-                @cells[@cy][@cx] = Cell.new(' ', cur_sgr) if visible?
-                @cx += 1
-              end
-            when 'H', 'f'
-              if cursor
-                parts = inner.split(';')
-                move([parts[1].to_i, 1].max, [parts[0].to_i, 1].max)
-              end
-            end
-
-            i = j + 1
-          else
-            i += 1
-          end
-        elsif !ch.match?(CONTROL_CHAR)
-          put(ch, cur_sgr)
-          i += 1
-        else
-          i += 1
+    # Writes +text+ from the cursor, interpreting its SGR sequences: they
+    # add to +base_sgr+, the starting style, and a reset (<tt>\e[m</tt>,
+    # <tt>\e[0m</tt>) returns to it. <tt>\e[nC</tt> writes +n+ styled
+    # spaces. Other escape sequences and control characters (CONTROL_CHAR)
+    # are skipped.
+    def write_ansi(text, base_sgr: nil)
+      sgr = base_sgr
+      self.class.text(text).scan(ANSI_TOKEN) do |seq, _cut, char|
+        if seq
+          sgr = csi(seq, sgr, base_sgr)
+        elsif char && !char.match?(CONTROL_CHAR)
+          put(char, sgr)
         end
       end
     end
@@ -237,10 +155,7 @@ module BBS
     # Fills the rectangle at +x+, +y+ of +width+ by +height+ cells with
     # +char+ in style +sgr+.
     def fill(x:, y:, width:, height:, sgr: nil, char: ' ')
-      height.times do |r|
-        move(x, y + r)
-        write(char * [width, 0].max, sgr: sgr)
-      end
+      height.times { |r| hline(x: x, y: y + r, length: width, char: char, sgr: sgr) }
     end
 
     # Draws a horizontal line of +length+ +char+ characters from +x+, +y+
@@ -259,13 +174,6 @@ module BBS
       end
     end
 
-    # Box-drawing characters per frame style (+:single+, +:double+): the
-    # corners +:tl+, +:tr+, +:bl+, +:br+ and the edges +:h+, +:v+.
-    BOX_CHARS = {
-      single: { tl: '┌', tr: '┐', bl: '└', br: '┘', h: '─', v: '│' },
-      double: { tl: '╔', tr: '╗', bl: '╚', br: '╝', h: '═', v: '║' }
-    }.freeze
-
     # Draws a frame of +width+ by +height+ cells with its top left at +x+,
     # +y+. Does nothing when either side is under 2.
     #
@@ -275,39 +183,15 @@ module BBS
     # [title]        text set into the top edge, clipped to fit
     # [title_sgr]    style of the title (defaults to +sgr+)
     # [title_indent] edge characters drawn before the title
-    def box(x:, y:, width:, height:, sgr: nil, fill_sgr: nil, style: :single, title: nil, title_sgr: nil, title_indent: 0)
+    def box(x:, y:, width:, height:, sgr: nil, fill_sgr: nil, style: :single, title: nil, title_sgr: nil,
+            title_indent: 0)
       return if width < 2 || height < 2
-      g  = BOX_CHARS[style] || BOX_CHARS[:single]
-      iw = width - 2
 
-      move(x, y)
-      write(g[:tl], sgr: sgr)
-      if title && title.length > 0
-        indent = [title_indent, 0].max
-        title_max = [iw - 2 - indent, 0].max
-        clipped   = title[0, title_max]
-        write(g[:h] * indent, sgr: sgr) if indent > 0
-        prefix = "#{g[:h]} "
-        write(prefix, sgr: sgr)
-        write(clipped, sgr: title_sgr || sgr)
-        rest = iw - indent - prefix.length - clipped.length
-        write(g[:h] * [rest, 0].max, sgr: sgr) if rest > 0
-      else
-        write(g[:h] * iw, sgr: sgr)
-      end
-      write(g[:tr], sgr: sgr)
-
-      (1...height - 1).each do |r|
-        move(x, y + r)
-        write(g[:v], sgr: sgr)
-        write(' ' * iw, sgr: fill_sgr) if fill_sgr
-        move(x + width - 1, y + r)
-        write(g[:v], sgr: sgr)
-      end
-
-      move(x, y + height - 1)
-      write(g[:bl], sgr: sgr)
-      write(g[:h] * iw, sgr: sgr)
+      g = BOX_CHARS[style] || BOX_CHARS[:single]
+      top_edge(x, y, width, g, sgr, [title, title_sgr || sgr, [title_indent, 0].max])
+      (1...height - 1).each { |r| box_side(x, y + r, width, g, sgr, fill_sgr) }
+      hline(x: x, y: y + height - 1, length: 1, char: g[:bl], sgr: sgr)
+      write(g[:h] * (width - 2), sgr: sgr)
       write(g[:br], sgr: sgr)
     end
 
@@ -316,14 +200,10 @@ module BBS
     # row and two columns, in style +sgr+ (black background by default).
     def shadow(x:, y:, width:, height:, sgr: nil)
       sgr ||= Ansi::BG_BLACK
-      # right edge
-      height.times do |r|
-        move(x + width, y + 1 + r)
-        write('  ', sgr: sgr) if x + width < @cols
+      if x + width < @cols
+        height.times { |r| hline(x: x + width, y: y + 1 + r, length: 2, char: ' ', sgr: sgr) }
       end
-      # bottom edge
-      move(x + 2, y + height)
-      write(' ' * [width, 0].max, sgr: sgr) if y + height <= @rows
+      hline(x: x + 2, y: y + height, length: width, char: ' ', sgr: sgr) if y + height <= @rows
     end
 
     # Returns the ANSI byte String that turns a screen showing the frame
@@ -332,33 +212,10 @@ module BBS
     # style change starts from a reset; the stream ends with a reset when
     # any styled cell was written. Both buffers must have the same size.
     def diff(from)
-      out     = +''
-      cur_sgr = :_none
-      exp_r   = nil
-      exp_c   = nil
-
-      @rows.times do |r|
-        @cols.times do |c|
-          nc = @cells[r][c]
-          oc = from.cell_at(r, c)
-          next if nc == oc
-
-          out << "#{Ansi::CSI}#{r + 1};#{c + 1}H" unless r == exp_r && c == exp_c
-
-          # Each style starts from a reset, so no attribute of the cell
-          # painted before it carries over.
-          if nc.sgr != cur_sgr
-            out << Ansi::RESET << nc.sgr.to_s
-            cur_sgr = nc.sgr
-          end
-
-          out << nc.char
-          exp_r = r
-          exp_c = c + 1
-        end
-      end
-
-      out << Ansi::RESET if cur_sgr != :_none && cur_sgr
+      out   = +''
+      state = { sgr: :none, at: nil }
+      changes(from).each { |r, c, cell| out << diff_cell(r, c, cell, state) }
+      out << Ansi::RESET if state[:sgr] != :none && state[:sgr]
       out
     end
 
@@ -377,6 +234,58 @@ module BBS
     def put(char, sgr)
       @cells[@cy][@cx] = Cell.new(char, sgr) if visible?
       @cx += 1
+    end
+
+    # Acts on the CSI sequence +seq+ written in style +sgr+, and returns
+    # the style after it: an SGR sequence adds to +sgr+ (a reset returns to
+    # +base_sgr+), a cursor right writes styled spaces.
+    def csi(seq, sgr, base_sgr)
+      params = seq[2...-1]
+      case seq[-1]
+      when 'm' then ['', '0'].include?(params) ? base_sgr : "#{sgr}#{seq}"
+      when 'C' then [params.to_i, 1].max.clamp(1, @cols).times { put(' ', sgr) } && sgr
+      else sgr
+      end
+    end
+
+    # The top edge of a box: the corners, and the title when there is one.
+    def top_edge(x, y, width, g, sgr, (title, title_sgr, indent))
+      inner = width - 2
+      hline(x: x, y: y, length: 1, char: g[:tl], sgr: sgr)
+      if title.to_s.empty?
+        write(g[:h] * inner, sgr: sgr)
+      else
+        clipped = title[0, [inner - 2 - indent, 0].max]
+        write("#{g[:h] * indent}#{g[:h]} ", sgr: sgr)
+        write(clipped, sgr: title_sgr)
+        write(g[:h] * [inner - indent - 2 - clipped.length, 0].max, sgr: sgr)
+      end
+      write(g[:tr], sgr: sgr)
+    end
+
+    # One row of a box's sides, its inside cleared with +fill_sgr+.
+    def box_side(x, y, width, g, sgr, fill_sgr)
+      hline(x: x, y: y, length: 1, char: g[:v], sgr: sgr)
+      write(' ' * (width - 2), sgr: fill_sgr) if fill_sgr
+      hline(x: x + width - 1, y: y, length: 1, char: g[:v], sgr: sgr)
+    end
+
+    # The cells that differ from +from+: [row, col, cell], 0-based.
+    def changes(from)
+      (0...@rows).flat_map do |r|
+        (0...@cols).filter_map { |c| [r, c, @cells[r][c]] unless @cells[r][c] == from.cell_at(r, c) }
+      end
+    end
+
+    # The bytes of one changed cell: a cursor move unless it follows the
+    # last one, its style from a reset when it changes, its character.
+    def diff_cell(row, col, cell, state)
+      out = +''
+      out << "#{Ansi::CSI}#{row + 1};#{col + 1}H" unless state[:at] == [row, col]
+      out << Ansi::RESET << cell.sgr.to_s if cell.sgr != state[:sgr]
+      state[:sgr] = cell.sgr
+      state[:at]  = [row, col + 1]
+      out << cell.char
     end
   end
 end

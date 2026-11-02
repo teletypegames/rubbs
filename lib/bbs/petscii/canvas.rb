@@ -10,8 +10,8 @@ module BBS
     #
     # It bypasses the PETSCII Encoder of the session, which speaks the
     # lowercase set: send its bytes with <tt>session.write_raw</tt>. Its
-    # constants are the PETSCII codes as Integers (BBS::Petscii has the same
-    # names as Strings for the Encoder).
+    # constants are the codes of BBS::Petscii as Integers (there they are
+    # Strings, for the Encoder): one code table for both.
     #
     # A cell is drawn by #text from a Unicode string: letters, digits and
     # signs as they are (letters in capitals), and the graphics of GLYPHS and
@@ -37,60 +37,60 @@ module BBS
       COLS = 40
 
       # PETSCII colour code: white.
-      WHITE       = 0x05
+      WHITE       = Petscii::WHITE.ord
       # PETSCII colour code: red.
-      RED         = 0x1c
+      RED         = Petscii::RED.ord
       # PETSCII colour code: green.
-      GREEN       = 0x1e
+      GREEN       = Petscii::GREEN.ord
       # PETSCII colour code: blue.
-      BLUE        = 0x1f
+      BLUE        = Petscii::BLUE.ord
       # PETSCII colour code: orange.
-      ORANGE      = 0x81
+      ORANGE      = Petscii::ORANGE.ord
       # PETSCII colour code: black.
-      BLACK       = 0x90
+      BLACK       = Petscii::BLACK.ord
       # PETSCII colour code: brown.
-      BROWN       = 0x95
+      BROWN       = Petscii::BROWN.ord
       # PETSCII colour code: light red.
-      LIGHT_RED   = 0x96
+      LIGHT_RED   = Petscii::LIGHT_RED.ord
       # PETSCII colour code: dark grey.
-      DARK_GREY   = 0x97
+      DARK_GREY   = Petscii::DARK_GREY.ord
       # PETSCII colour code: medium grey.
-      GREY        = 0x98
+      GREY        = Petscii::GREY.ord
       # PETSCII colour code: light green.
-      LIGHT_GREEN = 0x99
+      LIGHT_GREEN = Petscii::LIGHT_GREEN.ord
       # PETSCII colour code: light blue.
-      LIGHT_BLUE  = 0x9a
+      LIGHT_BLUE  = Petscii::LIGHT_BLUE.ord
       # PETSCII colour code: light grey.
-      LIGHT_GREY  = 0x9b
+      LIGHT_GREY  = Petscii::LIGHT_GREY.ord
       # PETSCII colour code: purple.
-      PURPLE      = 0x9c
+      PURPLE      = Petscii::PURPLE.ord
       # PETSCII colour code: yellow.
-      YELLOW      = 0x9e
+      YELLOW      = Petscii::YELLOW.ord
       # PETSCII colour code: cyan.
-      CYAN        = 0x9f
+      CYAN        = Petscii::CYAN.ord
 
       # Control code: clears the screen and homes the cursor.
-      CLEAR     = 0x93
+      CLEAR     = Petscii::CLEAR.ord
       # Control code: the cursor to the top left.
-      HOME      = 0x13
+      HOME      = Petscii::HOME.ord
       # Control code: the cursor down a row.
-      DOWN      = 0x11
+      DOWN      = Petscii::DOWN.ord
       # Control code: the cursor up a row.
-      UP        = 0x91
+      UP        = Petscii::UP.ord
       # Control code: the cursor right a column.
-      RIGHT     = 0x1d
+      RIGHT     = Petscii::RIGHT.ord
       # Control code: the cursor left a column.
-      LEFT      = 0x9d
+      LEFT      = Petscii::LEFT.ord
       # Control code: reverse video on.
-      RVS_ON    = 0x12
+      RVS_ON    = Petscii::RVS_ON.ord
       # Control code: reverse video off.
-      RVS_OFF   = 0x92
+      RVS_OFF   = Petscii::RVS_OFF.ord
       # Control code: RETURN, the start of the next row with reverse off.
       CR        = 0x0d
       # Control code: the uppercase/graphics character set.
-      UPPERCASE = 0x8e
+      UPPERCASE = Petscii::UPPERCASE.ord
       # Control code: the lowercase character set.
-      LOWERCASE = 0x0e
+      LOWERCASE = Petscii::LOWERCASE.ord
       # The code of a space.
       SPACE     = 0x20
 
@@ -112,15 +112,9 @@ module BBS
       }.freeze
 
       # The graphics of the uppercase set by the Unicode character they look
-      # like, as PETSCII codes.
-      GLYPHS = {
-        '─' => 0xc0, '│' => 0xdd, '┼' => 0xdb, '╭' => 0xd5, '╮' => 0xc9, '╰' => 0xca, '╯' => 0xcb,
-        '●' => 0xd1, '○' => 0xd7, '♥' => 0xd3, '♠' => 0xc1, '♣' => 0xd8, '♦' => 0xda, 'π' => 0xde,
-        '╲' => 0xcd, '╱' => 0xce, '╳' => 0xd6, '◤' => 0xa9, '◥' => 0xdf,
-        '▌' => 0xa1, '▄' => 0xa2, '▔' => 0xa3, '▁' => 0xa4, '▒' => 0xa6,
-        '▖' => 0xbb, '▗' => 0xac, '▘' => 0xbe, '▝' => 0xbc, '▚' => 0xbf, '£' => 0x5c,
-        '↑' => 0x5e, '←' => 0x5f
-      }.freeze
+      # like, as PETSCII codes: the shared BBS::Petscii::GRAPHICS and the
+      # set's own BBS::Petscii::UPPERCASE_GRAPHICS.
+      GLYPHS = Petscii::GRAPHICS.merge(Petscii::UPPERCASE_GRAPHICS).freeze
       # The graphics that are a code of GLYPHS in reverse video: the full
       # block a reversed space, the upper half a reversed lower half …
       GLYPHS_REVERSED = { '█' => 0x20, '▀' => 0xa2, '◢' => 0xa9, '◣' => 0xdf, '▐' => 0xa1 }.freeze
@@ -176,13 +170,15 @@ module BBS
         ch.length == 1 && ASCII_SHOWN.include?(ch.upcase.ord)
       end
 
-      # The colour code of +color+: a code as it is (a key of RGB), a name
+      # The colour code of +color+: a code as it is (a key of RGB), an SGR
+      # colour of the palette (BBS::Petscii::Colors), a name
       # of COLOR_NAMES as a Symbol or String (<tt>'light grey'</tt>,
       # <tt>:dark_gray</tt> and <tt>'LIGHT-BLUE'</tt> all work), or +nil+.
       # Raises ArgumentError for anything else.
       def self.color(color)
         return nil if color.nil?
         return color if color.is_a?(Integer) && RGB.key?(color)
+        return Petscii.color_code(color) if color.to_s.start_with?(Ansi::ESC)
 
         name = color.to_s.downcase.tr(' -', '__').sub('gray', 'grey').to_sym
         COLOR_NAMES.fetch(name) { raise ArgumentError, "not a C64 colour: #{color.inspect}" }
