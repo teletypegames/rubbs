@@ -1,0 +1,612 @@
+{
+  "headings/20/theme": [
+    "\u001b[1;37;40mTitle one\u001b[0;37;40m",
+    "\u001b[1;33;40mSecond \u001b[1;37;40mbold\u001b[0;37;40m\u001b[0;37;40m",
+    "\u001b[0;36;40mThird\u001b[0;37;40m",
+    "\u001b[0;36;40mFourth\u001b[0;37;40m"
+  ],
+  "headings/20/hash": [
+    "<B>Title one<t>",
+    "<a>Second <B>bold<t><t>",
+    "<l>Third<t>",
+    "<l>Fourth<t>"
+  ],
+  "headings/40/theme": [
+    "\u001b[1;37;40mTitle one\u001b[0;37;40m",
+    "\u001b[1;33;40mSecond \u001b[1;37;40mbold\u001b[0;37;40m\u001b[0;37;40m",
+    "\u001b[0;36;40mThird\u001b[0;37;40m",
+    "\u001b[0;36;40mFourth\u001b[0;37;40m"
+  ],
+  "headings/40/hash": [
+    "<B>Title one<t>",
+    "<a>Second <B>bold<t><t>",
+    "<l>Third<t>",
+    "<l>Fourth<t>"
+  ],
+  "headings/80/theme": [
+    "\u001b[1;37;40mTitle one\u001b[0;37;40m",
+    "\u001b[1;33;40mSecond \u001b[1;37;40mbold\u001b[0;37;40m\u001b[0;37;40m",
+    "\u001b[0;36;40mThird\u001b[0;37;40m",
+    "\u001b[0;36;40mFourth\u001b[0;37;40m"
+  ],
+  "headings/80/hash": [
+    "<B>Title one<t>",
+    "<a>Second <B>bold<t><t>",
+    "<l>Third<t>",
+    "<l>Fourth<t>"
+  ],
+  "paragraph/20/theme": [
+    "A long paragraph",
+    "that keeps going and",
+    "going so that it has",
+    "to wrap across",
+    "several lines of the",
+    "narrow column, with \u001b[1;37;40m",
+    "\u001b[1;37;40mbold\u001b[0;37;40m, \u001b[0;2;37;40mitalic\u001b[0;37;40m, \u001b[0;2;37;40munder\u001b[0;37;40m,",
+    "\u001b[0;37;40m\u001b[0;36;40mcode\u001b[0;37;40m and a \u001b[1;33;40mlink\u001b[0;37;40m in",
+    "\u001b[0;37;40mit.",
+    "",
+    "Second paragraph."
+  ],
+  "paragraph/20/hash": [
+    "A long paragraph",
+    "that keeps going and",
+    "going so that it has",
+    "to wrap across",
+    "several lines of the",
+    "narrow column, with",
+    "<B>bold<t>,",
+    "<d>italic<t>,",
+    "<d>under<t>,",
+    "<l>code<t> and a",
+    "<a>link<t> in it.",
+    "",
+    "Second paragraph."
+  ],
+  "paragraph/40/theme": [
+    "A long paragraph that keeps going and",
+    "going so that it has to wrap across",
+    "several lines of the narrow column, with",
+    "\u001b[1;37;40mbold\u001b[0;37;40m, \u001b[0;2;37;40mitalic\u001b[0;37;40m, \u001b[0;2;37;40munder\u001b[0;37;40m, \u001b[0;36;40mcode\u001b[0;37;40m and a \u001b[1;33;40mlink\u001b[0;37;40m in",
+    "\u001b[0;37;40mit.",
+    "",
+    "Second paragraph."
+  ],
+  "paragraph/40/hash": [
+    "A long paragraph that keeps going and",
+    "going so that it has to wrap across",
+    "several lines of the narrow column, with",
+    "<B>bold<t>, <d>italic<t>, <d>under<t>,",
+    "<l>code<t> and a <a>link<t> in it.",
+    "",
+    "Second paragraph."
+  ],
+  "paragraph/80/theme": [
+    "A long paragraph that keeps going and going so that it has to wrap across",
+    "several lines of the narrow column, with \u001b[1;37;40mbold\u001b[0;37;40m, \u001b[0;2;37;40mitalic\u001b[0;37;40m, \u001b[0;2;37;40munder\u001b[0;37;40m, \u001b[0;36;40mcode\u001b[0;37;40m and a \u001b[1;33;40mlink\u001b[0;37;40m in",
+    "\u001b[0;37;40mit.",
+    "",
+    "Second paragraph."
+  ],
+  "paragraph/80/hash": [
+    "A long paragraph that keeps going and going so that it has to wrap across",
+    "several lines of the narrow column, with <B>bold<t>, <d>italic<t>, <d>under<t>,",
+    "<l>code<t> and a <a>link<t> in it.",
+    "",
+    "Second paragraph."
+  ],
+  "escapes/20/theme": [
+    "Not \\\u001b[0;2;37;40mitalic\\\u001b[0;37;40m and",
+    "\u001b[0;37;40msnake_case_word and",
+    "\u001b[0;37;40m2*3*4 and # hash"
+  ],
+  "escapes/20/hash": [
+    "Not \\<d>italic\\<t>",
+    "and snake_case_word",
+    "and 2*3*4 and # hash"
+  ],
+  "escapes/40/theme": [
+    "Not \\\u001b[0;2;37;40mitalic\\\u001b[0;37;40m and snake_case_word and",
+    "\u001b[0;37;40m2*3*4 and # hash"
+  ],
+  "escapes/40/hash": [
+    "Not \\<d>italic\\<t> and snake_case_word",
+    "and 2*3*4 and # hash"
+  ],
+  "escapes/80/theme": [
+    "Not \\\u001b[0;2;37;40mitalic\\\u001b[0;37;40m and snake_case_word and 2*3*4 and # hash"
+  ],
+  "escapes/80/hash": [
+    "Not \\<d>italic\\<t> and snake_case_word and 2*3*4 and # hash"
+  ],
+  "fence/20/theme": [
+    "Before",
+    "\u001b[0;36;40mdef hello = 'a very \u001b[0;37;40m",
+    "\u001b[0;36;40m  # **not bold**\u001b[0;37;40m",
+    "After"
+  ],
+  "fence/20/hash": [
+    "Before",
+    "<l>def hello = 'a very <t>",
+    "<l>  # **not bold**<t>",
+    "After"
+  ],
+  "fence/40/theme": [
+    "Before",
+    "\u001b[0;36;40mdef hello = 'a very long line of code th\u001b[0;37;40m",
+    "\u001b[0;36;40m  # **not bold**\u001b[0;37;40m",
+    "After"
+  ],
+  "fence/40/hash": [
+    "Before",
+    "<l>def hello = 'a very long line of code th<t>",
+    "<l>  # **not bold**<t>",
+    "After"
+  ],
+  "fence/80/theme": [
+    "Before",
+    "\u001b[0;36;40mdef hello = 'a very long line of code that is longer than the width of the colum\u001b[0;37;40m",
+    "\u001b[0;36;40m  # **not bold**\u001b[0;37;40m",
+    "After"
+  ],
+  "fence/80/hash": [
+    "Before",
+    "<l>def hello = 'a very long line of code that is longer than the width of the colum<t>",
+    "<l>  # **not bold**<t>",
+    "After"
+  ],
+  "quote/20/theme": [
+    "\u001b[0;2;37;40m│ \u001b[0;37;40mA quoted line that",
+    "\u001b[0;2;37;40m│ \u001b[0;37;40mis long enough to",
+    "\u001b[0;2;37;40m│ \u001b[0;37;40mwrap inside the",
+    "\u001b[0;2;37;40m│ \u001b[0;37;40mquote bar here.",
+    "\u001b[0;2;37;40m│ \u001b[0;37;40m",
+    "\u001b[0;2;37;40m│ \u001b[0;37;40m\u001b[1;37;40mbold\u001b[0;37;40m quote"
+  ],
+  "quote/20/hash": [
+    "<d>│ <t>A quoted line that",
+    "<d>│ <t>is long enough to",
+    "<d>│ <t>wrap inside the",
+    "<d>│ <t>quote bar here.",
+    "<d>│ <t>",
+    "<d>│ <t><B>bold<t> quote"
+  ],
+  "quote/40/theme": [
+    "\u001b[0;2;37;40m│ \u001b[0;37;40mA quoted line that is long enough to",
+    "\u001b[0;2;37;40m│ \u001b[0;37;40mwrap inside the quote bar here.",
+    "\u001b[0;2;37;40m│ \u001b[0;37;40m",
+    "\u001b[0;2;37;40m│ \u001b[0;37;40m\u001b[1;37;40mbold\u001b[0;37;40m quote"
+  ],
+  "quote/40/hash": [
+    "<d>│ <t>A quoted line that is long enough to",
+    "<d>│ <t>wrap inside the quote bar here.",
+    "<d>│ <t>",
+    "<d>│ <t><B>bold<t> quote"
+  ],
+  "quote/80/theme": [
+    "\u001b[0;2;37;40m│ \u001b[0;37;40mA quoted line that is long enough to wrap inside the quote bar here.",
+    "\u001b[0;2;37;40m│ \u001b[0;37;40m",
+    "\u001b[0;2;37;40m│ \u001b[0;37;40m\u001b[1;37;40mbold\u001b[0;37;40m quote"
+  ],
+  "quote/80/hash": [
+    "<d>│ <t>A quoted line that is long enough to wrap inside the quote bar here.",
+    "<d>│ <t>",
+    "<d>│ <t><B>bold<t> quote"
+  ],
+  "bullets/20/theme": [
+    "\u001b[1;33;40m•\u001b[0;37;40m one",
+    "\u001b[1;33;40m•\u001b[0;37;40m two that is a long",
+    "  item which wraps",
+    "  onto a second and",
+    "  a third line maybe",
+    "  continued here",
+    "\u001b[1;33;40m•\u001b[0;37;40m star",
+    "  \u001b[1;33;40m•\u001b[0;37;40m nested plus",
+    "\u001b[1;33;40m•\u001b[0;37;40m last"
+  ],
+  "bullets/20/hash": [
+    "<a>•<t> one",
+    "<a>•<t> two that is a long",
+    "  item which wraps",
+    "  onto a second and",
+    "  a third line maybe",
+    "  continued here",
+    "<a>•<t> star",
+    "  <a>•<t> nested plus",
+    "<a>•<t> last"
+  ],
+  "bullets/40/theme": [
+    "\u001b[1;33;40m•\u001b[0;37;40m one",
+    "\u001b[1;33;40m•\u001b[0;37;40m two that is a long item which wraps",
+    "  onto a second and a third line maybe",
+    "  continued here",
+    "\u001b[1;33;40m•\u001b[0;37;40m star",
+    "  \u001b[1;33;40m•\u001b[0;37;40m nested plus",
+    "\u001b[1;33;40m•\u001b[0;37;40m last"
+  ],
+  "bullets/40/hash": [
+    "<a>•<t> one",
+    "<a>•<t> two that is a long item which wraps",
+    "  onto a second and a third line maybe",
+    "  continued here",
+    "<a>•<t> star",
+    "  <a>•<t> nested plus",
+    "<a>•<t> last"
+  ],
+  "bullets/80/theme": [
+    "\u001b[1;33;40m•\u001b[0;37;40m one",
+    "\u001b[1;33;40m•\u001b[0;37;40m two that is a long item which wraps onto a second and a third line maybe",
+    "  continued here",
+    "\u001b[1;33;40m•\u001b[0;37;40m star",
+    "  \u001b[1;33;40m•\u001b[0;37;40m nested plus",
+    "\u001b[1;33;40m•\u001b[0;37;40m last"
+  ],
+  "bullets/80/hash": [
+    "<a>•<t> one",
+    "<a>•<t> two that is a long item which wraps onto a second and a third line maybe",
+    "  continued here",
+    "<a>•<t> star",
+    "  <a>•<t> nested plus",
+    "<a>•<t> last"
+  ],
+  "numbers/20/theme": [
+    "\u001b[1;33;40m1.\u001b[0;37;40m first",
+    "\u001b[1;33;40m2.\u001b[0;37;40m second with a",
+    "   long body that",
+    "   wraps across the",
+    "   column width for",
+    "   sure and a",
+    "   continuation",
+    "\u001b[1;33;40m10.\u001b[0;37;40m tenth"
+  ],
+  "numbers/20/hash": [
+    "<a>1.<t> first",
+    "<a>2.<t> second with a",
+    "   long body that",
+    "   wraps across the",
+    "   column width for",
+    "   sure and a",
+    "   continuation",
+    "<a>10.<t> tenth"
+  ],
+  "numbers/40/theme": [
+    "\u001b[1;33;40m1.\u001b[0;37;40m first",
+    "\u001b[1;33;40m2.\u001b[0;37;40m second with a long body that wraps",
+    "   across the column width for sure and",
+    "   a continuation",
+    "\u001b[1;33;40m10.\u001b[0;37;40m tenth"
+  ],
+  "numbers/40/hash": [
+    "<a>1.<t> first",
+    "<a>2.<t> second with a long body that wraps",
+    "   across the column width for sure and",
+    "   a continuation",
+    "<a>10.<t> tenth"
+  ],
+  "numbers/80/theme": [
+    "\u001b[1;33;40m1.\u001b[0;37;40m first",
+    "\u001b[1;33;40m2.\u001b[0;37;40m second with a long body that wraps across the column width for sure and a",
+    "   continuation",
+    "\u001b[1;33;40m10.\u001b[0;37;40m tenth"
+  ],
+  "numbers/80/hash": [
+    "<a>1.<t> first",
+    "<a>2.<t> second with a long body that wraps across the column width for sure and a",
+    "   continuation",
+    "<a>10.<t> tenth"
+  ],
+  "rules/20/theme": [
+    "above",
+    "\u001b[0;36;40m────────────────────\u001b[0;37;40m",
+    "\u001b[0;36;40m────────────────────\u001b[0;37;40m",
+    "\u001b[0;36;40m────────────────────\u001b[0;37;40m",
+    "below"
+  ],
+  "rules/20/hash": [
+    "above",
+    "<l>────────────────────<t>",
+    "<l>────────────────────<t>",
+    "<l>────────────────────<t>",
+    "below"
+  ],
+  "rules/40/theme": [
+    "above",
+    "\u001b[0;36;40m────────────────────────────────────────\u001b[0;37;40m",
+    "\u001b[0;36;40m────────────────────────────────────────\u001b[0;37;40m",
+    "\u001b[0;36;40m────────────────────────────────────────\u001b[0;37;40m",
+    "below"
+  ],
+  "rules/40/hash": [
+    "above",
+    "<l>────────────────────────────────────────<t>",
+    "<l>────────────────────────────────────────<t>",
+    "<l>────────────────────────────────────────<t>",
+    "below"
+  ],
+  "rules/80/theme": [
+    "above",
+    "\u001b[0;36;40m────────────────────────────────────────────────────────────────────────────────\u001b[0;37;40m",
+    "\u001b[0;36;40m────────────────────────────────────────────────────────────────────────────────\u001b[0;37;40m",
+    "\u001b[0;36;40m────────────────────────────────────────────────────────────────────────────────\u001b[0;37;40m",
+    "below"
+  ],
+  "rules/80/hash": [
+    "above",
+    "<l>────────────────────────────────────────────────────────────────────────────────<t>",
+    "<l>────────────────────────────────────────────────────────────────────────────────<t>",
+    "<l>────────────────────────────────────────────────────────────────────────────────<t>",
+    "below"
+  ],
+  "table/20/theme": [
+    "\u001b[0;36;40m┌─────┬──────┬─────┐\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40mNam\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40mCoun\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40mMid\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m├─────┼──────┼─────┤\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m app\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m    1 \u001b[0;36;40m│\u001b[0;37;40m  x  \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m ban\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m   22 \u001b[0;36;40m│\u001b[0;37;40m yy  \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m c   \u001b[0;36;40m│\u001b[0;37;40m      \u001b[0;36;40m│\u001b[0;37;40m     \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m└─────┴──────┴─────┘\u001b[0;37;40m"
+  ],
+  "table/20/hash": [
+    "<l>┌─────┬──────┬─────┐<t>",
+    "<l>│<t> <B><t> <l>│<t> <B>C<t> <l>│<t> <B>Mid<t> <l>│<t>",
+    "<l>├─────┼──────┼─────┤<t>",
+    "<l>│<t> app<t> <l>│<t>    1 <l>│<t>  x  <l>│<t>",
+    "<l>│<t> ban<t> <l>│<t>   22 <l>│<t> yy  <l>│<t>",
+    "<l>│<t> c   <l>│<t>      <l>│<t>     <l>│<t>",
+    "<l>└─────┴──────┴─────┘<t>"
+  ],
+  "table/40/theme": [
+    "\u001b[0;36;40m┌──────────┬───────┬─────┐\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40mName\u001b[0;37;40m     \u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40mCount\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40mMid\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m├──────────┼───────┼─────┤\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m apple    \u001b[0;36;40m│\u001b[0;37;40m     1 \u001b[0;36;40m│\u001b[0;37;40m  x  \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m banana \u001b[1;37;40mb\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m    22 \u001b[0;36;40m│\u001b[0;37;40m yy  \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m c        \u001b[0;36;40m│\u001b[0;37;40m       \u001b[0;36;40m│\u001b[0;37;40m     \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m└──────────┴───────┴─────┘\u001b[0;37;40m"
+  ],
+  "table/40/hash": [
+    "<l>┌────────────────┬───────┬─────┐<t>",
+    "<l>│<t> <B>Name<t>           <l>│<t> <B>Count<t> <l>│<t> <B>Mid<t> <l>│<t>",
+    "<l>├────────────────┼───────┼─────┤<t>",
+    "<l>│<t> apple          <l>│<t>     1 <l>│<t>  x  <l>│<t>",
+    "<l>│<t> banana <B>b<t> <l>│<t>    22 <l>│<t> yy  <l>│<t>",
+    "<l>│<t> c              <l>│<t>       <l>│<t>     <l>│<t>",
+    "<l>└────────────────┴───────┴─────┘<t>"
+  ],
+  "table/80/theme": [
+    "\u001b[0;36;40m┌──────────┬───────┬─────┐\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40mName\u001b[0;37;40m     \u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40mCount\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40mMid\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m├──────────┼───────┼─────┤\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m apple    \u001b[0;36;40m│\u001b[0;37;40m     1 \u001b[0;36;40m│\u001b[0;37;40m  x  \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m banana \u001b[1;37;40mb\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m    22 \u001b[0;36;40m│\u001b[0;37;40m yy  \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m c        \u001b[0;36;40m│\u001b[0;37;40m       \u001b[0;36;40m│\u001b[0;37;40m     \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m└──────────┴───────┴─────┘\u001b[0;37;40m"
+  ],
+  "table/80/hash": [
+    "<l>┌────────────────┬───────┬─────┐<t>",
+    "<l>│<t> <B>Name<t>           <l>│<t> <B>Count<t> <l>│<t> <B>Mid<t> <l>│<t>",
+    "<l>├────────────────┼───────┼─────┤<t>",
+    "<l>│<t> apple          <l>│<t>     1 <l>│<t>  x  <l>│<t>",
+    "<l>│<t> banana <B>b<t> <l>│<t>    22 <l>│<t> yy  <l>│<t>",
+    "<l>│<t> c              <l>│<t>       <l>│<t>     <l>│<t>",
+    "<l>└────────────────┴───────┴─────┘<t>"
+  ],
+  "wide_table/20/theme": [
+    "\u001b[0;36;40m┌─────┬─────┬──────┐\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40ma\u001b[0;37;40m   \u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40mb\u001b[0;37;40m   \u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40mc\u001b[0;37;40m    \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m├─────┼─────┼──────┤\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m som\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m ano\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m thir\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m└─────┴─────┴──────┘\u001b[0;37;40m"
+  ],
+  "wide_table/20/hash": [
+    "<l>┌─────┬─────┬──────┐<t>",
+    "<l>│<t> <B>a<t>   <l>│<t> <B>b<t>   <l>│<t> <B>c<t>    <l>│<t>",
+    "<l>├─────┼─────┼──────┤<t>",
+    "<l>│<t> som<t> <l>│<t> ano<t> <l>│<t> thir<t> <l>│<t>",
+    "<l>└─────┴─────┴──────┘<t>"
+  ],
+  "wide_table/40/theme": [
+    "\u001b[0;36;40m┌────────────┬────────────┬────────────┐\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40ma\u001b[0;37;40m          \u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40mb\u001b[0;37;40m          \u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40mc\u001b[0;37;40m          \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m├────────────┼────────────┼────────────┤\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m something \u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m another lo\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m third cell\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m└────────────┴────────────┴────────────┘\u001b[0;37;40m"
+  ],
+  "wide_table/40/hash": [
+    "<l>┌────────────┬────────────┬────────────┐<t>",
+    "<l>│<t> <B>a<t>          <l>│<t> <B>b<t>          <l>│<t> <B>c<t>          <l>│<t>",
+    "<l>├────────────┼────────────┼────────────┤<t>",
+    "<l>│<t> something <t> <l>│<t> another lo<t> <l>│<t> third cell<t> <l>│<t>",
+    "<l>└────────────┴────────────┴────────────┘<t>"
+  ],
+  "wide_table/80/theme": [
+    "\u001b[0;36;40m┌─────────────────────────┬─────────────────────────┬──────────────────────────┐\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40ma\u001b[0;37;40m                       \u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40mb\u001b[0;37;40m                       \u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40mc\u001b[0;37;40m                        \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m├─────────────────────────┼─────────────────────────┼──────────────────────────┤\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m something quite long in\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m another long cell value\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m third cell that is also \u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m└─────────────────────────┴─────────────────────────┴──────────────────────────┘\u001b[0;37;40m"
+  ],
+  "wide_table/80/hash": [
+    "<l>┌─────────────────────────┬─────────────────────────┬──────────────────────────┐<t>",
+    "<l>│<t> <B>a<t>                       <l>│<t> <B>b<t>                       <l>│<t> <B>c<t>                        <l>│<t>",
+    "<l>├─────────────────────────┼─────────────────────────┼──────────────────────────┤<t>",
+    "<l>│<t> something quite long in<t> <l>│<t> another long cell value<t> <l>│<t> third cell that is also <t> <l>│<t>",
+    "<l>└─────────────────────────┴─────────────────────────┴──────────────────────────┘<t>"
+  ],
+  "not_a_table/20/theme": [
+    "a | b no separator",
+    "here | x |"
+  ],
+  "not_a_table/20/hash": [
+    "a | b no separator",
+    "here | x |"
+  ],
+  "not_a_table/40/theme": [
+    "a | b no separator here | x |"
+  ],
+  "not_a_table/40/hash": [
+    "a | b no separator here | x |"
+  ],
+  "not_a_table/80/theme": [
+    "a | b no separator here | x |"
+  ],
+  "not_a_table/80/hash": [
+    "a | b no separator here | x |"
+  ],
+  "mixed/20/theme": [
+    "\u001b[1;37;40mHead\u001b[0;37;40m",
+    "para line",
+    "\u001b[1;33;40m•\u001b[0;37;40m item",
+    "more para",
+    "\u001b[0;2;37;40m│ \u001b[0;37;40mquote",
+    "",
+    "",
+    "\u001b[0;36;40mcode\u001b[0;37;40m",
+    "\u001b[0;36;40m┌───┐\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40mh\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m├───┤\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m v \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m└───┘\u001b[0;37;40m",
+    "trailing"
+  ],
+  "mixed/20/hash": [
+    "<B>Head<t>",
+    "para line",
+    "<a>•<t> item",
+    "more para",
+    "<d>│ <t>quote",
+    "",
+    "",
+    "<l>code<t>",
+    "<l>┌───┐<t>",
+    "<l>│<t> <B>h<t> <l>│<t>",
+    "<l>├───┤<t>",
+    "<l>│<t> v <l>│<t>",
+    "<l>└───┘<t>",
+    "trailing"
+  ],
+  "mixed/40/theme": [
+    "\u001b[1;37;40mHead\u001b[0;37;40m",
+    "para line",
+    "\u001b[1;33;40m•\u001b[0;37;40m item",
+    "more para",
+    "\u001b[0;2;37;40m│ \u001b[0;37;40mquote",
+    "",
+    "",
+    "\u001b[0;36;40mcode\u001b[0;37;40m",
+    "\u001b[0;36;40m┌───┐\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40mh\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m├───┤\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m v \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m└───┘\u001b[0;37;40m",
+    "trailing"
+  ],
+  "mixed/40/hash": [
+    "<B>Head<t>",
+    "para line",
+    "<a>•<t> item",
+    "more para",
+    "<d>│ <t>quote",
+    "",
+    "",
+    "<l>code<t>",
+    "<l>┌───┐<t>",
+    "<l>│<t> <B>h<t> <l>│<t>",
+    "<l>├───┤<t>",
+    "<l>│<t> v <l>│<t>",
+    "<l>└───┘<t>",
+    "trailing"
+  ],
+  "mixed/80/theme": [
+    "\u001b[1;37;40mHead\u001b[0;37;40m",
+    "para line",
+    "\u001b[1;33;40m•\u001b[0;37;40m item",
+    "more para",
+    "\u001b[0;2;37;40m│ \u001b[0;37;40mquote",
+    "",
+    "",
+    "\u001b[0;36;40mcode\u001b[0;37;40m",
+    "\u001b[0;36;40m┌───┐\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m \u001b[1;37;40mh\u001b[0;37;40m \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m├───┤\u001b[0;37;40m",
+    "\u001b[0;36;40m│\u001b[0;37;40m v \u001b[0;36;40m│\u001b[0;37;40m",
+    "\u001b[0;36;40m└───┘\u001b[0;37;40m",
+    "trailing"
+  ],
+  "mixed/80/hash": [
+    "<B>Head<t>",
+    "para line",
+    "<a>•<t> item",
+    "more para",
+    "<d>│ <t>quote",
+    "",
+    "",
+    "<l>code<t>",
+    "<l>┌───┐<t>",
+    "<l>│<t> <B>h<t> <l>│<t>",
+    "<l>├───┤<t>",
+    "<l>│<t> v <l>│<t>",
+    "<l>└───┘<t>",
+    "trailing"
+  ],
+  "empty/20/theme": [],
+  "empty/20/hash": [],
+  "empty/40/theme": [],
+  "empty/40/hash": [],
+  "empty/80/theme": [],
+  "empty/80/hash": [],
+  "crlf/20/theme": [
+    "line one line two",
+    "",
+    "\u001b[1;37;40mhead\u001b[0;37;40m"
+  ],
+  "crlf/20/hash": [
+    "line one line two",
+    "",
+    "<B>head<t>"
+  ],
+  "crlf/40/theme": [
+    "line one line two",
+    "",
+    "\u001b[1;37;40mhead\u001b[0;37;40m"
+  ],
+  "crlf/40/hash": [
+    "line one line two",
+    "",
+    "<B>head<t>"
+  ],
+  "crlf/80/theme": [
+    "line one line two",
+    "",
+    "\u001b[1;37;40mhead\u001b[0;37;40m"
+  ],
+  "crlf/80/hash": [
+    "line one line two",
+    "",
+    "<B>head<t>"
+  ],
+  "unclosed_fence/20/theme": [
+    "\u001b[0;36;40mcode forever\u001b[0;37;40m",
+    "\u001b[0;36;40m- not a list\u001b[0;37;40m"
+  ],
+  "unclosed_fence/20/hash": [
+    "<l>code forever<t>",
+    "<l>- not a list<t>"
+  ],
+  "unclosed_fence/40/theme": [
+    "\u001b[0;36;40mcode forever\u001b[0;37;40m",
+    "\u001b[0;36;40m- not a list\u001b[0;37;40m"
+  ],
+  "unclosed_fence/40/hash": [
+    "<l>code forever<t>",
+    "<l>- not a list<t>"
+  ],
+  "unclosed_fence/80/theme": [
+    "\u001b[0;36;40mcode forever\u001b[0;37;40m",
+    "\u001b[0;36;40m- not a list\u001b[0;37;40m"
+  ],
+  "unclosed_fence/80/hash": [
+    "<l>code forever<t>",
+    "<l>- not a list<t>"
+  ]
+}
