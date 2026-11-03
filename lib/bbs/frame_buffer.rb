@@ -55,6 +55,26 @@ module BBS
       @cells = Array.new(@rows) { Array.new(@cols) { BLANK } }
       @cx    = 0
       @cy    = 0
+      @clip  = nil
+    end
+
+    # Runs the block with drawing clipped to the rectangle of +width+ ×
+    # +height+ cells whose top left is +x+, +y+ (1-based): what is written
+    # outside it is dropped, as if it were off the grid. Inside an outer
+    # clip the two rectangles meet. A view larger than its window draws
+    # itself shifted and stays in its bounds:
+    #
+    #   frame.clip(view.x, view.y, view.width, view.height) do
+    #     art.draw(frame, x: view.x, y: view.y - scroll)
+    #   end
+    #
+    # Returns the block's value.
+    def clip(x, y, width, height)
+      outer = @clip
+      @clip = meet(outer, [x - 1, y - 1, x - 1 + width, y - 1 + height])
+      yield
+    ensure
+      @clip = outer
     end
 
     # Moves the cursor to column +col+, row +row+ (1-based). Off-screen
@@ -109,7 +129,7 @@ module BBS
     protected
 
     # Returns whether the cursor is inside the grid.
-    def visible? = @cy >= 0 && @cy < @rows && @cx >= 0 && @cx < @cols
+    def visible? = inside?(0, 0, @cols, @rows) && (@clip.nil? || inside?(*@clip))
 
     # Returns the Cell at the 0-based +row+ and +col+.
     def cell_at(row, col)
@@ -117,6 +137,19 @@ module BBS
     end
 
     private
+
+    # Whether the cursor is in the rectangle from +left+, +top+ to +right+,
+    # +bottom+ (0-based, the right and bottom edges outside).
+    def inside?(left, top, right, bottom) = @cx >= left && @cy >= top && @cx < right && @cy < bottom
+
+    # The rectangle where +outer+ (or no clip, nil) and +inner+, each
+    # <tt>[left, top, right, bottom]</tt> 0-based with the right and bottom
+    # edges outside, meet.
+    def meet(outer, inner)
+      return inner if outer.nil?
+
+      [[outer[0], inner[0]].max, [outer[1], inner[1]].max, [outer[2], inner[2]].min, [outer[3], inner[3]].min]
+    end
 
     def put(char, sgr)
       @cells[@cy][@cx] = Cell.new(char, sgr) if visible?

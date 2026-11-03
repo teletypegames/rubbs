@@ -923,8 +923,13 @@ fb.vline(x:, y:, length:, char: '│', sgr:)
 fb.box(x:, y:, width:, height:, sgr:, fill_sgr:,
        style: :single|:double, title:, title_sgr:, title_indent:)
 fb.shadow(x:, y:, width:, height:, sgr:)
+fb.clip(x, y, width, height) { … }             # what the block writes outside the rectangle is dropped
 delta = fb.diff(prev_fb)                       # ANSI byte stream
 ```
+
+`clip` lets a view larger than its bounds draw itself shifted, a picture
+scrolled to the part that is chosen, without spilling over its window's frame;
+clips nest (the rectangles meet).
 
 The one set of ANSI text helpers of rubbs (all built on `BBS::Ansi::CSI_RE`):
 

@@ -10,6 +10,27 @@ class FrameBufferTest < Minitest::Test
 
   def row(buffer = @buffer) = (0...20).map { |c| buffer.send(:cell_at, 0, c).char }.join.rstrip
 
+  def test_clip_drops_what_is_written_outside_it
+    frame = BBS::FrameBuffer.new(6, 3)
+    frame.clip(2, 2, 3, 1) do
+      frame.move(1, 1)
+      frame.write('abcdef')
+      frame.move(1, 2)
+      frame.write('abcdef')
+    end
+    frame.move(1, 3)
+    frame.write('after')
+    assert_equal ['      ', ' bcd  ', 'after '], rows(frame)
+  end
+
+  def test_nested_clips_meet
+    frame = BBS::FrameBuffer.new(6, 1)
+    frame.clip(1, 1, 4, 1) { frame.clip(3, 1, 4, 1) { frame.move(1, 1).then { frame.write('abcdef') } } }
+    assert_equal ['  cd  '], rows(frame)
+  end
+
+  def rows(frame) = (0...frame.rows).map { |r| (0...frame.cols).map { |c| frame.send(:cell_at, r, c).char }.join }
+
   def test_write_drops_controls
     @buffer.move(1, 1)
     @buffer.write("a\eb\u0085c\u202Ed\u0000e\u007Ff\ng")
