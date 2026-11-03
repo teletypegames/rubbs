@@ -1685,9 +1685,13 @@ BBS::Goodbye.petscii(screen, title: 'feedia', color: YE, note: "The stories are 
 
 `BlockFont` is a 3×5 font (A–Z, 0–9, space and `. , ! ? - + : ' /`); `glyphs:`
 lays other shapes over it. `Goodbye.modern` writes "Thanks for calling …",
-the note, "More of us: teletypegames.org" and NO CARRIER; `Goodbye.petscii`
-draws the reversed bar, the note (or what its block writes), then `+++`,
-`ATH0` and NO CARRIER a moment apart.
+the note, "More of us: teletypegames.org", its QR code and NO CARRIER;
+`Goodbye.petscii` draws the reversed bar, the note (or what its block
+writes), the QR code in the middle, then `+++`, `ATH0` and NO CARRIER a
+moment apart. The code (`BBS::QR`) is of `Goodbye::QR_URL`,
+`HTTPS://TELETYPEGAMES.ORG`: in capitals it is alphanumeric and fits the
+smallest QR code, 13 lines. `qr:` takes another address (one that needs more
+than 15 lines goes without a code), `qr: nil` none.
 
 `BBS::DiscordWebhook` is plain Ruby and loads alone (`require
 'bbs/discord_webhook'`), for a board's domain layer:
