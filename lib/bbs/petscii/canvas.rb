@@ -2,11 +2,13 @@
 
 module BBS
   module Petscii
-    # The C64 screen as a grid of 40×25 cells in the uppercase/graphics
-    # character set, where the card suits, the balls, the rounded corners,
-    # the diagonals and the quarter blocks live. It turns into raw PETSCII:
-    # the whole screen once (#frame), then only what changes (#span, #patch,
-    # #update), because a C64 line behind a modem is slow.
+    # The C64 screen as a grid of 40×25 cells, by default in the
+    # uppercase/graphics character set, where the card suits, the balls,
+    # the rounded corners, the diagonals and the quarter blocks live; with
+    # <tt>charset: :lower</tt> in the lower/upper set, where text keeps its
+    # case. It turns into raw PETSCII: the whole screen once (#frame), then
+    # only what changes (#span, #patch, #diff, #update), because a C64 line
+    # behind a modem is slow.
     #
     # It bypasses the PETSCII Encoder of the session, which speaks the
     # lowercase set: send its bytes with <tt>session.write_raw</tt>. Its
@@ -27,9 +29,17 @@ module BBS
     #   canvas.text(2, 2, '●', :red)
     #   session.write_raw(canvas.update(before))  # only the changed cell
     #
+    # A screen of text in both cases, repainted by what changed:
+    #
+    #   shown  = nil
+    #   canvas = BBS::Petscii::Canvas.new(charset: :lower)
+    #   canvas.text(3, 1, 'Global Discovery', :light_green)
+    #   session.write_raw(shown ? canvas.diff(shown) : canvas.frame)
+    #   shown = canvas
+    #
     # Byte sizes to aim for on a slow line: a whole screen of art about
-    # 1.2 KB, one step of an animation under 200 bytes (#update picks the
-    # cheaper of a patch and a frame).
+    # 1.2 KB, one step of an animation under 200 bytes (#update and #diff
+    # pick the cheaper of a patch and a frame).
     class Canvas
       # The rows of the C64 screen.
       ROWS = 25
@@ -118,6 +128,22 @@ module BBS
       # The graphics that are a code of GLYPHS in reverse video: the full
       # block a reversed space, the upper half a reversed lower half …
       GLYPHS_REVERSED = { '█' => 0x20, '▀' => 0xa2, '◢' => 0xa9, '◣' => 0xdf, '▐' => 0xa1 }.freeze
+      # The PETSCII codes the lower/upper set shows differently from the
+      # uppercase one: the capitals (0xc1-0xda, graphics in the uppercase
+      # set), π, ◥ and the diagonals ◤ ◢ (0xa9, 0xdf), and the check mark
+      # (0xba).
+      LOWER_CHANGED = [*0xc1..0xda, 0xde, 0xdf, 0xa9, 0xba].freeze
+      # The graphics of the lower/upper set by the Unicode character they
+      # look like: GLYPHS without LOWER_CHANGED (the lines, the cross, the
+      # blocks, ▒ and the 0xa0-0xbf graphics stay), and the set's own
+      # BBS::Petscii::LOWERCASE_GRAPHICS.
+      LOWER_GLYPHS = GLYPHS.reject { |_, code| LOWER_CHANGED.include?(code) }
+                           .merge(Petscii::LOWERCASE_GRAPHICS).freeze
+      # GLYPHS_REVERSED of the lower/upper set.
+      LOWER_GLYPHS_REVERSED = GLYPHS_REVERSED.reject { |_, code| LOWER_CHANGED.include?(code) }.freeze
+      # The two character sets a Canvas draws in: +:upper+
+      # (uppercase/graphics) and +:lower+ (lower/upper).
+      CHARSETS = %i[upper lower].freeze
       # The ASCII codes the uppercase set shows as they are (0x5c is £ there,
       # so the backslash is not among them).
       ASCII_SHOWN = [*0x20..0x5b, 0x5d].freeze
@@ -137,26 +163,33 @@ module BBS
         end
       end
 
-      # The character set the last #feed left the screen in: +:upper+ or
-      # +:lower+.
+      # The character set of the screen, +:upper+ or +:lower+: the one
+      # #text draws in, #frame switches to and #to_s reads; the one it was
+      # created with, or the one the last #feed left the screen in.
       attr_reader :charset
 
-      # Creates an empty screen: every cell a space with no colour.
-      def initialize
+      # Creates an empty screen: every cell a space with no colour, in the
+      # character set +charset+ (+:upper+, the uppercase/graphics set, or
+      # +:lower+, the lower/upper set). Raises ArgumentError for another.
+      def initialize(charset: :upper)
+        raise ArgumentError, "not a character set: #{charset.inspect}" unless CHARSETS.include?(charset)
+
         @cells   = Array.new(ROWS) { Array.new(COLS) { blank } }
         @at      = [0, 0]
         @pen     = nil
         @rvs     = false
-        @charset = :upper
+        @charset = charset
       end
 
       # A copy with its own cells, to compare with after drawing (#update).
       def initialize_copy(source)
         super
         @cells = source.cells_copy
+        @at    = @at.dup
       end
 
       # Writes +text+ from +row+, +col+ (0-based) in +color+ (see ::color;
+      # in the screen's #charset, see ::code;
       # +nil+ sends no colour, so the cell takes the colour printed before
       # it);
       # a character of GLYPHS_REVERSED, or every one with +rvs+, in reverse
@@ -171,7 +204,7 @@ module BBS
           c = col + i
           next unless inside?(row, c)
 
-          code, reversed = Canvas.code(ch)
+          code, reversed = Canvas.code(ch, @charset)
           @cells[row][c] = Cell.new(code, color, rvs ^ reversed)
         end
         self
@@ -206,24 +239,11 @@ module BBS
         end
       end
 
-      # The bytes that turn +before+ (another Canvas, what the caller sees)
-      # into this screen: a #patch of the #changes, or the whole #frame when
-      # that is shorter; an empty String when nothing changed.
-      def update(before)
-        changed = changes(before)
-        return ''.b if changed.empty?
-
-        cheap = patch(changed)
-        whole = frame
-        cheap.bytesize <= whole.bytesize ? cheap : whole
-      end
-
       # The screen as text, a line a row, each cell the Unicode character it
-      # looks like (a reversed cell as it is printed, not inverted); for
-      # tests and logs.
+      # looks like in the screen's #charset (a reversed cell as it is
+      # printed, not inverted); for tests and logs.
       def to_s
-        looks = GLYPHS.invert
-        @cells.map { |row| row.map { |c| looks[c.code] || (c.code < 0x80 ? c.code.chr : '?') }.join.rstrip }.join("\n")
+        @cells.map { |row| row.map { |c| Canvas.look(c.code, @charset) }.join.rstrip }.join("\n")
       end
 
       protected

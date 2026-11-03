@@ -4,14 +4,15 @@ module BBS
   module Petscii
     class Canvas
       # The bytes that send a Canvas to a C64: the whole screen (#frame),
-      # a stretch of a row (#span), scattered cells (#patch), the cursor
-      # alone (#cursor). Each is raw PETSCII, a binary String for
+      # a stretch of a row (#span), scattered cells (#patch), what changed
+      # since another Canvas (#update, #diff), the cursor alone (#cursor). Each is raw PETSCII, a binary String for
       # <tt>session.write_raw</tt>.
       module Output
-        # The whole screen: the graphics set, a clear screen, then the rows,
-        # each cut after its last visible cell, as a binary String.
+        # The whole screen: the switch to its character set (UPPERCASE or
+        # LOWERCASE, see Canvas#charset), a clear screen, then the rows, each
+        # cut after its last visible cell, as a binary String.
         def frame
-          out  = [UPPERCASE, CLEAR]
+          out  = [@charset == :lower ? LOWERCASE : UPPERCASE, CLEAR]
           pen  = Pen.new
           last = last_visible_row
           (0..last).each do |row|
@@ -34,20 +35,39 @@ module BBS
           pen.close(out).pack('C*')
         end
 
-        # The cells at +positions+, [row, col] each, the cursor stepping to
-        # the nearest one left instead of from the top left each time: the
-        # cheap repaint of a few cells scattered over the screen. A binary
-        # String.
-        def patch(positions)
+        # The cells at +positions+, [row, col] each, as a binary String.
+        #
+        # [order] the order the cursor visits them in: +:nearest+ (the
+        #         default) steps to the nearest one left each time, the
+        #         cheap repaint of a few cells scattered over the screen;
+        #         +:rows+ goes row by row from the top, stepping right over
+        #         the cells that stay, the cheap repaint of blocks of text
+        #         (see #diff). Either way the cursor goes from HOME when
+        #         that is the shorter way.
+        def patch(positions, order: :nearest)
           out = [HOME, RVS_OFF]
           pen = Pen.new
           at  = [0, 0]
-          nearest_first(positions.uniq).each do |row, col|
+          visit_order(positions.uniq, order).each do |row, col|
             at = step_to(out, at, row, col)
             pen.emit(out, [@cells[row][col]])
           end
           pen.close(out).pack('C*')
         end
+
+        # The bytes that turn +before+ (another Canvas, what the caller sees)
+        # into this screen: a #patch of the #changes, or the whole #frame when
+        # that is shorter; an empty String when nothing changed.
+        def update(before) = cheaper(changes(before), :nearest)
+
+        # The bytes that turn +before+ (another Canvas, what the caller sees)
+        # into this screen, for a screen of text: a #patch of the #changes in
+        # <tt>order: :rows</tt>, or the whole #frame when that is shorter; an
+        # empty String when nothing changed. Cheaper than #update when blocks
+        # of text change (a list's lit row, a page turned).
+        #
+        #   session.write_raw(canvas.diff(shown))
+        def diff(before) = cheaper(changes(before), :rows)
 
         # The cursor moves to +row+, +col+, with nothing printed: HOME, then
         # down and right. A binary String.
@@ -103,7 +123,23 @@ module BBS
 
         private_constant :Pen
 
+        def cheaper(changed, order)
+          return ''.b if changed.empty?
+
+          cheap = patch(changed, order: order)
+          whole = frame
+          cheap.bytesize <= whole.bytesize ? cheap : whole
+        end
+
         def moves_to(row, col) = [HOME] + ([DOWN] * row) + ([RIGHT] * col)
+
+        def visit_order(positions, order)
+          case order
+          when :nearest then nearest_first(positions)
+          when :rows then positions.sort
+          else raise ArgumentError, "not an order: #{order.inspect}"
+          end
+        end
 
         # +positions+ in the order the cursor visits them, each time the
         # nearest one left.
