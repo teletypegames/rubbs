@@ -10,8 +10,9 @@ module BBS
   #
   # Steps share a context Hash that holds +:session_id+ and the answers of
   # #ask. A step that reads a line ends the flow when the caller hangs up.
-  # Most boards use a Flow as glue only: a #call step that runs the board's
-  # own screen, then another for the goodbye.
+  # Most boards never write one: BBS.board builds the flow of each face (an
+  # #app or a #face, then the #goodbye). A board writes one for what comes
+  # before its face (a banner, a sign-up), and BBS.board takes it as is.
   #
   #   FLOW = BBS::Flow.define do
   #     screen :welcome
@@ -112,13 +113,31 @@ module BBS
     # Leaves the innermost menu; the flow goes on after it.
     def exit_menu = add(Steps::EXIT_MENU)
 
-    # Calls the block with the context and the BBS::FlowRunner. Returning
-    # +:halt+ ends the flow; an error is logged and shown to the caller, and
-    # the flow goes on.
+    # Runs the block in the BBS::FlowRunner, where +session+, +context+,
+    # +write+ and +line+ are at hand. Returning +:halt+ ends the flow; a
+    # dropped line ends it too, quietly; any other error is logged and shown
+    # to the caller, and the flow goes on.
+    #
+    #   call { context[:caller_key] = session.caller_key }
     def call(&block) = add(Steps::Call.new(block))
 
     # Runs the windowed BBS::Application +definition+ on the session.
     def app(definition) = add(Steps::App.new(definition))
+
+    # Runs +face+, a BBS::Petscii::Face subclass, on the session: a new one
+    # with the session, the context and the board (BBS::Config#board), then
+    # its +run+.
+    def face(face) = add(Steps::Face.new(face))
+
+    # The goodbye screen of the caller's face (BBS::Goodbye.show) with the
+    # board's +note+ (a String, or a block given the context), and the
+    # +options+ of BBS::Goodbye.show; then the end of the flow.
+    def goodbye(note = nil, **options, &dynamic) = add(Steps::Goodbye.new(dynamic || note, options))
+
+    # Runs +flow+, another BBS::Flow, here in a runner of its own (with its
+    # own screens and the same context): when it halts (a refused +gate+),
+    # this flow goes on. Only a dropped line ends both.
+    def flow(flow) = add(Steps::Nested.new(flow))
 
     private
 

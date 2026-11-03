@@ -147,27 +147,64 @@ class WindowSpecTest < Minitest::Test
 
   def teardown = @session.fake_line.close
 
-  def test_a_form_gets_its_fields_and_callbacks_with_ctx
+  def test_a_form_runs_its_blocks_with_the_extras_and_the_services
     seen = nil
-    spec = BBS::WindowSpec.new(:compose, type: :form)
-    spec.title { |ctx| " #{ctx[:who]} " }
-    spec.prefill { { body: 'hello' } }
-    spec.field :body, label: 'Body'
-    spec.on_submit { |values, _form, ctx| seen = [values[:body], ctx[:db]]; :close }
+    spec = BBS::WindowSpec.new(:compose, :form) do
+      title { "To #{who}" }
+      prefill { { body: 'hello' } }
+      field :body, label: 'Body'
+      on_submit { |values| seen = [values[:body], db] }
+    end
     form = spec.open(@app, who: 'ada')
-    assert_equal ' ada ', form.title
-    form.instance_variable_get(:@options)[:on_submit].call({ body: 'x' }, form)
+    assert_equal 'To ada', form.title
+    assert_equal :close, form.instance_variable_get(:@options)[:on_submit].call({ body: 'x' }, form)
     assert_equal ['x', :the_db], seen
   end
 
-  def test_a_master_detail_window_gets_defaults_and_bound_labels
-    spec = BBS::WindowSpec.new(:list, type: :master_detail)
-    spec.title 'List'
-    spec.items { %w[a b] }
-    spec.item_label { |item, ctx| "#{item}@#{ctx[:db]}" }
+  def test_a_form_refusal_keeps_it_open_with_its_message
+    spec = BBS::WindowSpec.new(:compose, :form) do
+      field :body, label: 'Body'
+      errors empty: 'Write something first.'
+      on_submit { |values| values[:body].empty? ? :empty : :ok }
+    end
+    form = spec.open(@app)
+    assert_equal :keep, form.instance_variable_get(:@options)[:on_submit].call({ body: '' }, form)
+    assert_equal 'Write something first.', form.status_label.text
+  end
+
+  def test_an_extra_named_like_a_method_is_refused
+    spec = BBS::WindowSpec.new(:list, :master_detail) { items { [] } }
+    assert_raises(ArgumentError) { spec.open(@app, rows: 3) }
+  end
+
+  def test_a_master_detail_window_labels_and_wraps_in_the_app
+    spec = BBS::WindowSpec.new(:list, :master_detail) do
+      title 'List'
+      items { %w[a b] }
+      label { |item| "#{item}@#{db}" }
+      detail { |item| ["#{item} #{'word ' * 40}"] }
+    end
     win = spec.open(@app)
     assert_equal 'a@the_db', win.instance_variable_get(:@item_label).call('a')
-    assert_equal [], BBS::WindowSpec::DEFAULTS[:master_detail][:render_detail].call(:x, 10)
+    lines = win.instance_variable_get(:@render_detail).call('a', 30)
+    assert_operator lines.size, :>, 1
+    assert(lines.all? { |l| BBS::FrameBuffer.visible_width(l) <= 30 })
+    assert win.maximizable
+    assert_equal win, @app.window(:list)
+  end
+
+  def test_an_action_gets_the_selected_item_and_keeps_the_window
+    taken = []
+    spec = BBS::WindowSpec.new(:list, :master_detail) do
+      items { %w[a b] }
+      label :upcase
+      action('Open') { |item| taken << item }
+    end
+    win = spec.open(@app)
+    action = win.instance_variable_get(:@actions).first
+    assert_equal :keep, action[:on_click].call(win)
+    assert_equal ['a'], taken
+    assert_equal '&Open', action[:label]
   end
 end
 
@@ -188,8 +225,8 @@ class ApplicationTest < Minitest::Test
   def test_a_status_key_that_halts_ends_the_run
     pressed = []
     run_app("\eOP\e[21~") do
-      status_hint('F1', 'Help') { pressed << :help; nil }
-      status_hint('F10', 'Bye') { :halt }
+      command(:help, 'Help', key: 'F1') { pressed << :help }
+      command(:bye, 'Bye', key: 'F10') { log_off }
     end
     assert_equal [:help], pressed
     assert_includes @session.received, 'Help'

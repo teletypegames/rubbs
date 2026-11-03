@@ -1,3 +1,308 @@
+# Upgrading to rubbs 2.0
+
+2.0 makes rubbs a DSL: a board's code says what the board *is* (its name,
+its domain, its commands, menus, windows and screens) and rubbs does the
+wiring. A board on 1.x has glue in every file; on 2.0 most of it goes.
+`bbs/alexandria-bbs` is the reference: read its `bbs.rb`, `lib/domain/alexandria_bbs.rb`,
+`lib/ui/modern.rb`, `lib/ui/modern/*` and `lib/ui/petscii.rb` side by side
+with their 1.x versions (`git log -p`).
+
+Nothing of 1.x stays as a second way: the old forms raise `NoMethodError` or
+`ArgumentError`. The greps below find them; run them from the board's root:
+
+```sh
+grep -rnE '<pattern>' bbs.rb lib test
+```
+
+## 1. `bbs.rb`: `BBS.board`
+
+```ruby
+# 1.x
+bbs = FeediaBBS.new
+BBS.configure do |config|
+  config.log_tag          = 'feedia-bbs'
+  config.mouse            = true
+  config.mouse_on_connect = false
+  config.idle_seconds     = 600
+  config.flow = BBS::Terminal.flow(title: 'Feedia BBS', modern: UI::Modern.flow(bbs),
+                                   petscii: UI::Petscii.flow(bbs), splash: TTG::Logo.splash)
+end
+bbs.start
+BBS.start
+
+# 2.0
+BBS.board 'Feedia BBS', FeediaBBS do
+  preset  TTG::PRESET                    # splash, goodbye address + QR, User-Agent (ttg-common)
+  modern  UI::Modern::APP                # an Application definition …
+  petscii UI::Petscii                    # … or a BBS::Petscii::Face subclass, a Flow, or a block
+  goodbye "The stories are their publishers'."
+  idle 900                               # default 600
+  mouse false                            # default true on the modern face
+  on_start { |bbs| Web::Api.new(bbs).start }       # once at boot
+  on_session_end { |session, bbs| bbs.end_call(session.session_id) }
+end
+```
+
+- The log tag and the environment prefix come from the title
+  (`Feedia BBS` → `feedia-bbs`, `FEEDIA_BBS_`); when the technical name differs,
+  say it: `BBS.board 'WarpEngine BBS', WarpEngineBBS, slug: 'warp-engine-bbs'`.
+- The domain class is made once (`BBS.config.board`), its `start` called when
+  it has one, and its `services` are what the faces get.
+- A face given as a block is a Flow for what comes before the face:
+  `modern { |bbs| big_banner 'TTG WIKI'; app UI::Modern::APP }`.
+- The goodbye comes after each face by itself (`BBS::Goodbye.show`); never
+  call `BBS::Goodbye` from a face. `goodbye false` leaves it out.
+- One face only (`modern` without `petscii`): no terminal question.
+
+Grep: `BBS.configure`, `Terminal.flow`, `Goodbye\.`, `TTG::Logo.splash`.
+
+## 2. The domain object: `BBS::Domain`
+
+```ruby
+class FeediaBBS
+  include BBS::Domain
+
+  setting :refresh, 3600                    # FEEDIA_BBS_REFRESH, cast to the default's type
+  setting :languages, %w[en hu]             # an Array default splits on commas
+  path    :db, 'data/feedia.sqlite3'        # FEEDIA_BBS_DB, expanded against the board's root (Dir.pwd)
+
+  service(:feeds) { FeedService.new(FeedRepository.new(database(db, *FeedRepository::MIGRATIONS))) }
+  service(:inbox) { InboxService.new(feeds) }
+
+  background('feed refresh', every: -> { refresh }) { feeds.refresh }
+end
+```
+
+`services` (a Hash by name) and `start` (makes every service, begins the
+background jobs) come with it. `database(path, Schema)` or
+`database(path, *sql_steps)` is a migrated `BBS::SQLite`. Keep plain methods
+for anything else. Grep: `ENV.fetch`, `def services`, `ROOT =`, `def setting`.
+
+## 3. Flows
+
+- `call` blocks run in the `BBS::FlowRunner`: `call { context[:x] = session.caller_key }`.
+  No `|ctx, runner|`, no trailing `nil`, no `rescue IOError…` (a dropped line
+  ends the flow quietly). Grep: `call do |`, `call { |`.
+- `app DEFINITION`, `face FaceClass`, `goodbye 'note'`, `flow other_flow` are steps.
+- A hang-up is `BBS::Hangup` (an `IOError`); `BBS::LINE_DROPPED` lists the
+  errors of a dropped line for a `rescue *BBS::LINE_DROPPED`. Never write
+  `rescue IOError, Errno::EPIPE, Errno::ECONNRESET` or `raise IOError, 'hung up'`.
+
+## 4. The modern face: `Application.define`
+
+```ruby
+module UI
+  module Modern
+    APP = BBS::Application.define do
+      theme :synchronet
+      helpers { include Helpers }
+      init { context[:lang] ||= 'en' }
+
+      command(:search, 'Search…', key: 'F2') { search }            # menu item + key + statusbar hint, once
+      command(:random, 'Random article', key: 'F3', hint: 'Random') { random }
+      command(:secret, 'Supervisor', key: 'F9', hint: false) { unlock }   # a key without a hint
+      menu 'Wiki', :search, :random, :separator, :log_off            # entries: commands, :separator, :doors
+      menu('Board') { command :boards; item('Who is online') { who }; doors }
+      help about: ABOUT, reading: READING, keys: ['Space        vote']  # Help: About, Reading, Keys
+      status { "#{feeds.size} feeds" }                                # right end of the statusbar; clock added
+
+      desktop do
+        art  Logo::HALF_BLOCKS, top: 2                              # placed by words, re-placed on resize
+        line TAGLINE, bottom: 1
+        line(top: 3, align: :right, margin: 2) { "#{feeds.size} FEEDS" }
+        widget(height: Pharos::HEIGHT, middle: -12) { Pharos.new }  # made per call; ticked if it has #tick
+        button('Master', bottom: 0, align: :right) { master }
+        on_show { search }                                           # the first window
+      end
+
+      parts ResultsWindow, ArticleWindow                             # modules that `extend BBS::Part`
+    end
+  end
+end
+```
+
+Gone: `menubar do … end`, `status_hint`, `body`, `with_loading`,
+`services bbs.services` (the board's services come by themselves),
+`statusbar.right_text = …` with a clock in `on_tick`, `F10`/`Alt-X`
+(built in as the commands `:menu` and `:log_off`), the Keys text (the Keys
+page is written from the commands; only board-specific keys go in `keys:`).
+A command's label gets an `&` hotkey by itself when it has none.
+
+In helpers and window blocks, on the application:
+
+| 2.0 | was |
+|---|---|
+| `message(text, title: 'About')` | `BBS::Dialogs.message(self, text, title: ' About ')` |
+| `ask('Title:', title: 'Search') { \|text\| … }` | `Dialogs.input(self, prompt:, on_submit: ->(t) { … unless t.strip.empty? })` |
+| `confirm('Sure?') { … }` | `Dialogs.confirm(self, …, on_yes:)` |
+| `x = loading('Loading…', failed: NO_ANSWER) { … }` | `x = with_loading('…') { … }; return message(NO_ANSWER) unless x` |
+| `fail_with(text)` | `message(text); return` deep in a helper chain |
+| `report(result, WORDING)` | `case result when :x then message('…')` |
+| `qr(url, title: 'Scan me')` | `BBS::QR.ansi` + `rescue QR::TooLong` + `quiet: 1` + `Windows::Info.open` sizing |
+| `show(:article, article: a)` | `open_window(:article, article: a)` |
+| `window(:browser)&.selected`, `close_all`, `reload_details` | `windows.grep(MasterDetail).last…`, `close_window while top_window` |
+| `catalog` (a service by its name) | `services[:catalog]` |
+| `caller_key` | `BBS::RateLimit.caller_key(session)` |
+| `markdown(text, width)` | `BBS::Markdown.to_lines(text, width:, theme: theme)` |
+| `dim(s)`, `bright(s)`, `accent(s)`, `paint(:error, s)` | `"#{theme[:text_dim]}#{s}#{theme[:text]}"` |
+| `refresh_status` | `statusbar.right_text = status_text` |
+| `log_off` | `:halt` |
+| `with_line { \|session\| … }` (now `session.hand_over`) | `with_line` |
+
+`on_idle { … keep_on }` keeps a caller on (was: return `:keep`).
+
+Titles are plain: the frame pads (and cuts) them. Grep `title: ' `, `" #{`…`} "`.
+
+`BBS::Abort` (raised by `loading … failed:` and `fail_with`) ends the command
+quietly: the event loop takes it.
+
+## 5. Windows
+
+```ruby
+module UI::Modern::ArticleWindow
+  extend BBS::Part
+
+  window :article, :master_detail do          # the type is the 2nd argument
+    title      { article.title }              # extras of `show` are methods
+    list_width { [26, cols / 4].max }         # or 1/3r; height -8 = rows - 8
+    items      { article.sections }
+    label      :title                         # a Symbol, or a block |item|
+    detail     { |section, width| markdown(section.markdown, width) }   # lines; rubbs wraps long ones
+    meta       { |section| "#{article.url} · CC BY-SA" }
+    on_pick    { |section| … }                # Enter on the list
+    action('QR code') { |section| qr article.short_url }               # keeps the window; `close` closes it
+  end
+end
+```
+
+| 2.0 | 1.x |
+|---|---|
+| `window :x, :form do … end` (spec block evaluated in the spec) | `window(:x, type: :form) { \|w\| w.… }` |
+| blocks without `ctx`, in the application | `{ \|ctx\| ctx[:app].foo(ctx[:article]) }` |
+| `label` | `item_label` |
+| `detail` | `render_detail` |
+| `meta` | `bottom_meta` |
+| `on_pick` | `on_activate` |
+| `lines` (stream); `keep` in its `on_submit` keeps the typed text | `initial_lines`; return `:keep` |
+| `empty` | `empty_message` |
+| `action('Open') { \|item\| … }` | `action(label: '&Open') { \|win, ctx\| item = win.list_widget.selected_item; …; :keep }` |
+| info `button('Yes') { …; keep }` | `button(label:) { …; :keep }` |
+| form: `errors(bad_url: '…')` + `on_submit { \|values\| service.add(values) }` returning the error's key; `error!('…')`; otherwise it closes | `form.error('…'); :keep` / `:close` |
+| `maximizable` on by default (master/detail, stream, reader) | `w.maximizable true` |
+| `:reader` type: `lines { \|width\| … }`, `where { \|view\| … }`, `max_width 78`, `action('Contents') { \|reader\| reader.jump(i) }` | a hand-made `BBS::Window` subclass with `ButtonBar.attach/place` |
+
+An extra named like a method of the application (`show(:x, rows: …)`) raises
+`ArgumentError`: name it otherwise. In a window block `window` is the window,
+`selected` the selected item, `form` the form, `close`/`keep`/`error!` as above.
+
+## 6. The line-by-line face: `BBS::Petscii::Face`
+
+```ruby
+module UI
+  class Petscii < BBS::Petscii::Face        # the C64 colours, COLS, WIDTH are its constants
+    title('FEEDIA BBS') { "#{feeds.size} feeds" }
+
+    masthead do
+      art  PICTURE                          # lines as they are
+      logo 'FEEDIA', colors: LOGO_COLORS    # BlockFont.petscii
+      rule
+      line 'all the news that fits', color: WH
+    end
+
+    main_menu do                            # main_menu(back: 's') when ← should not log off
+      heading 'reading'
+      item('f', 'feeds', 'the list of feeds') { feed_list }
+      item('l', -> { "language: #{lang}" }, 'the next one') { next_language }   # a label that changes
+      log_off 'hang up. see you!'
+    end
+
+    # run is: show_masthead, then main_menu_loop (the menu until log off);
+    # override it for another shape (main_menu_choice, home, show_masthead).
+
+    private
+
+    def feed_list
+      each_pick('FEEDS', feeds.list, label: :title) { |feed| read(feed) }   # the title comes back by itself
+    end
+  end
+end
+```
+
+The face answers the screen's methods itself (`puts say title page pick ask
+edit pause choose actions menu within`) and the new ones: `alert(text)`
+(red + pause), `notice(text)` (green + pause), `prompt('name', hint:, max:)`
+(nil when empty), `confirm?(q)`, `number(label, range)`, `each_pick`,
+`markdown(text)` (C64 colours, indented), `qr(url)`, `rule_line`,
+`within(title, right) { … }` (puts the previous title back), `home` (the home
+title), `loading('working…', failed:) { … }`, `fail_with(text)`, `report(result,
+WORDING)`, `open_door(door)`, `caller_key`, the board's services as readers,
+`dim/bright/accent/paint` with the C64 palette. `BBS::Abort` in a main-menu
+item leaves the caller at the menu.
+
+Gone: `Colors.install(self)`, the `COLS`/`WIDTH` constants, the empty
+`class Screen < BBS::Petscii::Screen`, `MARKDOWN = { text: LG, … }`
+(`Screen::MARKDOWN`), `" #{DG}#{'─' * (COLS - 2)}#{LG}"` (`rule_line`), the
+`Selector.item(…, key: 'x', value: 'x')` arrays and `case` on the choice, the
+title restored after every sub-screen. `Petscii::Screen#key` raises
+`BBS::Hangup`.
+
+## 7. Smaller blocks
+
+More of the DSL, for what most boards needed:
+
+- `main_menu(home: :masthead, above: -> { "#{count} items" }, back: 's')`; the first
+  menu stays under the masthead of `run`; `each_of(-> { shelves }) { |shelf, i| item(…) }`
+  for items made each round; `item(…, if: -> { user })`; `about` may be a block.
+- `alert(text, color: YE)`, `fail_with(text, color:)`; a `BBS::Abort` inside `each_pick`
+  leaves the caller at that list.
+- `make_screen(session)` in a face for a screen of its own class or size.
+- `action('Reload') { … }` without a parameter runs on an empty list too; `meta 'text'`
+  takes a value; `maximized true`; a reader's `on_key(left: ->(reader, key) { … })` and
+  `reader.reload`; `window(:x).selected` on a master/detail.
+- `help({ 'Jargon File' => TEXT }, about: -> { "#{count} pages" }) { item('Rules') { … } }`;
+  `status(clock: :before)`; redeclaring `:log_off`/`:menu` keeps their place;
+  `loading(…, failed:, title: 'Feed')`; `board` (the domain object) in the application;
+  `doors { board.doors }` and `door(a_door)`; `command … key: 'Ctrl-S'`;
+  `desktop { widget(fill: true) { Dashboard.new } }`.
+- `setting :feed_list, 'x', env: 'FEEDS'`, `setting :irc, 'irc.libera.chat', blank: true`
+  (empty means nil), `background(…, if: -> { ttl.positive? })`, and a domain class without
+  `BBS.board` takes its prefix from its name (`FeediaBBS` → `FEEDIA_BBS_`) or
+  `env_prefix 'X_'`, so tools and tests need not set `BBS.config.env_prefix`.
+- `BBS.board`: `idle { |bbs| bbs.idle_seconds }`, `goodbye('note', clear: false, color: GN,
+  bar: 'thanks for reading', art: LOGO)`, `goodbye { |context| "#{minutes(context)} on line" }`;
+  a face given as a Flow or a block runs in its own runner, so a refusal (`gate`) still
+  reaches the goodbye.
+- `DR` (dark red) among the C64 colours; `Masthead#line(…, indent: 2)`;
+  `Snapshot.new(…, meta: { 'license' => 'CC0-1.0' })`.
+
+- `BBS::Preset` (splash, `url`, `qr`, `user_agent`); `BBS::Goodbye` takes the
+  title and the address from `BBS.config`. `Goodbye::URL` and `QR_URL` are gone.
+- `Config#user_agent` is `rubbs/<version>` plus the preset's.
+- `session.caller_key`, `session.hand_over { … }`.
+- `BBS::Door.new(name, program, label:, hint:, about:, petscii:)`: `about` for
+  a list of doors, `petscii` a program for a C64 line.
+- `BBS::Snapshot.new(seed:, path:, source:) { |records| … }` (`value`,
+  `generated_at`, `replace`, `refresh_every(3600, ttl:) { fetch }`) for a catalog
+  file kept whole in memory.
+- `BBS::Transfer.send(session, protocol, name, data)`, `.start`, `.result`,
+  `.label`, `PROTOCOLS`.
+- `BBS::Style[fg: 84, bg: 16, bold: true]` for an SGR by colour.
+- FakeOS `colors text: :green, dim: { fg: :green, faint: true }`.
+- `require 'bbs/test'`: `BBS::Test::Session` (keys in, output kept,
+  `petscii:`).
+- `BBS::Pages` / `BBS::Page`: a full-screen page app for both faces (a stack
+  of pages, keys declared with `key(:up) { … }`, timers with `every(1) { … }`,
+  `push`/`back`/`replace`/`quit` instead of `:redraw`/procs/`nil`, only the
+  changes repainted, `read_line`, `hand_over`). A board with its own TUI loop,
+  view stack or diff writer moves onto it (ttg-gate-bbs is the example).
+- `BBS::Petscii::Canvas.new(charset: :lower)` draws in the lower/upper set;
+  `Canvas#diff(before)` sends the cheaper of a patch and a full frame. A
+  `Canvas` subclass that filtered the glyphs for the lower set goes.
+- `BBS::Nodes.new.take { |node| … }`: the lowest free node number for a call.
+
+
+---
+
 # Upgrading to rubbs 1.0
 
 1.0 is the cleanup release: one way to do each thing. Dead code is gone, the

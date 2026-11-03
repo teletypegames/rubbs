@@ -4,6 +4,12 @@ require 'test_helper'
 require 'minitest/mock'
 
 class GoodbyeTest < Minitest::Test
+  QR_URL = 'HTTPS://EXAMPLE.ORG'
+
+  def setup = BBS.config.preset = BBS::Preset.new(url: 'example.org', qr: QR_URL)
+
+  def teardown = BBS.config.preset = BBS::Preset::NONE
+
   class Screen
     attr_reader :lines
 
@@ -16,7 +22,7 @@ class GoodbyeTest < Minitest::Test
 
   def test_modern_shows_the_qr_code_of_teletypegames
     text = BBS::Goodbye.modern_text(title: 'Feedia BBS')
-    assert_equal BBS::QR.ansi(BBS::Goodbye::QR_URL, height: 15).size, text.scan(BBS::QR::PEN).size
+    assert_equal BBS::QR.ansi(QR_URL, height: 15).size, text.scan(BBS::QR::PEN).size
     assert_operator text.index('More of us'), :<, text.index(BBS::QR::PEN)
     assert_operator text.index(BBS::QR::PEN), :<, text.index('NO CARRIER')
   end
@@ -27,7 +33,15 @@ class GoodbyeTest < Minitest::Test
   end
 
   def test_the_smallest_code
-    assert_equal 21, BBS::QR.modules(BBS::Goodbye::QR_URL).size
+    assert_equal 21, BBS::QR.modules(QR_URL).size
+  end
+
+  def test_without_a_preset_there_is_no_address_and_no_code
+    BBS.config.preset = BBS::Preset::NONE
+    text = BBS::Goodbye.modern_text(title: 'X', note: 'A note.')
+    refute_includes text, 'More of us'
+    refute_includes text, BBS::QR::PEN
+    assert_includes text, 'A note.'
   end
 
   def test_petscii_centres_the_qr_code_before_hanging_up

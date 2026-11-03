@@ -44,6 +44,8 @@ module BBS
       GN = Ansi::BRIGHT_GREEN
       # Light red.
       RD = Ansi::BRIGHT_RED
+      # Dark red.
+      DR = Ansi::RED
       # Purple.
       PU = Ansi::MAGENTA
       # Orange.

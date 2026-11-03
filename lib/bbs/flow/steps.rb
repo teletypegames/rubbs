@@ -79,11 +79,11 @@ module BBS
 
       # A block called with the context and the runner.
       Call = Struct.new(:block) do
-        # Calls the block: +:halt+ when it says so or the line drops, +nil+
-        # otherwise; an error is logged and shown to the caller.
+        # Runs the block in +runner+: +:halt+ when it says so or the line
+        # drops, +nil+ otherwise; an error is logged and shown to the caller.
         def run(runner)
-          block.call(runner.context, runner) == :halt ? :halt : nil
-        rescue IOError, Errno::EPIPE, Errno::ECONNRESET
+          runner.instance_exec(&block) == :halt ? :halt : nil
+        rescue *LINE_DROPPED
           :halt
         rescue StandardError => e
           BBS.log('flow call', "#{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
@@ -100,8 +100,45 @@ module BBS
         def run(runner)
           definition.run(session: runner.session, session_id: runner.session_id, context: runner.context)
           nil
-        rescue IOError, Errno::EPIPE, Errno::ECONNRESET
+        rescue *LINE_DROPPED
           :halt
+        end
+      end
+
+      # A BBS::Petscii::Face run on the line.
+      Face = Struct.new(:face) do
+        # Runs a new +face+ with the session, the context and the board.
+        # Returns +:halt+ when the line drops, +nil+ otherwise; an error is
+        # logged and the caller told.
+        def run(runner)
+          face.new(runner.session, runner.context, BBS.config.board).run
+          nil
+        rescue *LINE_DROPPED
+          :halt
+        rescue StandardError => e
+          BBS.log('face', "#{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
+          nil
+        end
+      end
+
+      # The goodbye screen (BBS::Goodbye.show): its +note+ (a String or a
+      # callable given the context) and its +options+.
+      Goodbye = Struct.new(:note, :options) do
+        # Shows it. Returns +:halt+: nothing comes after a goodbye.
+        def run(runner)
+          text = note.respond_to?(:call) ? note.call(runner.context) : note
+          BBS::Goodbye.show(runner.session, note: text, **(options || {}))
+          :halt
+        end
+      end
+
+      # Another BBS::Flow run in a runner of its own.
+      Nested = Struct.new(:flow) do
+        # Runs it with the session and the context. Returns +nil+: what
+        # comes after it (a goodbye on a line that has dropped) goes quietly.
+        def run(runner)
+          FlowRunner.new(runner.session, runner.session_id, flow, context: runner.context).run
+          nil
         end
       end
     end

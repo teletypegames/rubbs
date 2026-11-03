@@ -26,6 +26,10 @@ module BBS
     # highlighted, or +nil+.
     attr_reader :hint
 
+    # A longer text about the door for a list of doors, or +nil+; the program
+    # a PETSCII line gets instead of +program+, or +nil+ for the same one.
+    attr_reader :about, :petscii
+
     # Creates a door.
     #
     # [name]    the door's name, stored as a Symbol
@@ -35,7 +39,7 @@ module BBS
     # [hint]    a line about the door for the statusbar, or +nil+
     #
     # Raises ArgumentError when +program+ is none of the three.
-    def initialize(name, program, label: nil, hint: nil)
+    def initialize(name, program, label: nil, hint: nil, about: nil, petscii: nil)
       raise ArgumentError, "Door #{name.inspect}: not a FakeOS definition or a callable" unless
         program.is_a?(FakeOS::Definition) || program.is_a?(Flow) || program.respond_to?(:call)
 
@@ -43,6 +47,8 @@ module BBS
       @program = program
       @label   = label || name.to_s.upcase
       @hint    = hint
+      @about   = about
+      @petscii = petscii
     end
 
     # Hands the line to the program on a clean screen without mouse
@@ -70,15 +76,16 @@ module BBS
     private
 
     def start(session, context)
-      case @program
-      when FakeOS::Definition then FakeOS::Runner.new(session, @program, context: context).run
-      when Flow then run_flow(session, context)
-      else @program.call(session, context)
+      program = session.respond_to?(:petscii?) && session.petscii? && @petscii ? @petscii : @program
+      case program
+      when FakeOS::Definition then FakeOS::Runner.new(session, program, context: context).run
+      when Flow then run_flow(session, program, context)
+      else program.call(session, context)
       end
     end
 
-    def run_flow(session, context)
-      FlowRunner.new(session, context[:session_id], @program, context: context.dup).run
+    def run_flow(session, flow, context)
+      FlowRunner.new(session, context[:session_id], flow, context: context.dup).run
       session.write("#{Ansi::RESET}#{Ansi::CRLF}  #{Ansi::GREY}Press ENTER to return to the BBS...#{Ansi::RESET}")
       session.readline
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET

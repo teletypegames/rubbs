@@ -54,24 +54,34 @@ module BBS
     #
     # Returns a BBS::Flow that halts when the line drops at the question.
     #
-    #   BBS.configure { |c| c.flow = BBS::Terminal.flow(title: 'My board', modern: MODERN, petscii: PETSCII) }
+    # BBS.board builds it; a board does not call it.
     def self.flow(title:, modern:, petscii:, splash: nil)
       faces = { modern: modern, petscii: petscii }
       Flow.define do
-        call do |ctx, runner|
-          session   = runner.session
-          guess     = Terminal.guess(session)
-          forwarded = session.respond_to?(:forwarded_face) && session.forwarded_face
-          face      = forwarded || Question.new(session, title, default: guess).ask
+        call do
+          face = Terminal.pick(session, title, splash)
           next :halt if face.nil?
 
-          Terminal.switch(session, face)
-          next :halt if splash && !forwarded && !splash.continue?(session, face)
-
-          FlowRunner.new(session, ctx[:session_id], faces[face], context: ctx).run
+          FlowRunner.new(session, context[:session_id], faces[face], context: context).run
           nil
         end
       end
+    end
+
+    # The face of the call on +session+: the forwarded one, or the answer to
+    # the question titled +title+; the line switched to it and +splash+
+    # shown (not on a forwarded call). Returns +nil+ when the line drops at
+    # the question or the splash.
+    def self.pick(session, title, splash)
+      guess     = guess(session)
+      forwarded = session.respond_to?(:forwarded_face) && session.forwarded_face
+      face      = forwarded || Question.new(session, title, default: guess).ask
+      return nil if face.nil?
+
+      switch(session, face)
+      return nil if splash && !forwarded && !splash.continue?(session, face)
+
+      face
     end
 
     # Switches the line of +session+ to +face+: PETSCII on a C64, mouse

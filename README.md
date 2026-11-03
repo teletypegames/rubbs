@@ -1,23 +1,36 @@
 # rubbs
 
-A Ruby gem for building telnet BBS servers. From a one-screen line prompt to
-a full-blown Synchronet-style multi-window application — without leaving Ruby.
+A Ruby gem for building telnet BBS servers. A board says what it is (its
+name, its domain, its commands, menus, windows and screens) and rubbs does
+the wiring: the telnet line, the terminal question, a windowed face for a
+modern terminal, a line-by-line face for a Commodore 64, the goodbye.
 
 ```ruby
 require 'bbs'
 
-BBS.configure do |c|
-  c.flow = BBS::Flow.define do
-    big_banner 'My BBS'
-    ask :name, prompt: 'Your name'
-    say 'Welcome!', style: :success
-  end
+Bulletin = Struct.new(:text)
+
+class MyBBS
+  include BBS::Domain
+
+  setting :motd, 'Welcome!'                       # MY_BBS_MOTD, else 'Welcome!'
+  service(:bulletin) { Bulletin.new(motd) }       # a reader of the faces
 end
 
-BBS.start
+APP = BBS::Application.define do
+  command(:bulletin, 'Bulletin', key: 'F2') { message(bulletin.text, title: 'Bulletin') }
+  menu 'Board', :bulletin, :separator, :log_off
+end
+
+BBS.board 'My BBS', MyBBS do
+  modern APP
+  goodbye 'Come back soon.'
+end
 ```
 
 Connect with `telnet localhost 2323`.
+
+Upgrading from 1.x: see [UPGRADING.md](UPGRADING.md).
 
 ---
 
@@ -25,59 +38,64 @@ Connect with `telnet localhost 2323`.
 
 1. [Concepts](#1-concepts)
 2. [Installation & quick start](#2-installation--quick-start)
-3. [Server lifecycle](#3-server-lifecycle)
-4. [The Flow layer](#4-the-flow-layer)
-5. [The Application layer](#5-the-application-layer)
-6. [Widgets](#6-widgets)
-7. [Windows](#7-windows)
-8. [Pre-built window types (`BBS::Windows`)](#8-pre-built-window-types-bbswindows)
-9. [Dialogs](#9-dialogs)
-10. [Menubar, Statusbar, Focus](#10-menubar-statusbar-focus)
-11. [Theming and the palette](#11-theming-and-the-palette)
-12. [FrameBuffer & ANSI text](#12-framebuffer--ansi-text)
-13. [Markdown renderer](#13-markdown-renderer)
-14. [Banner & ERB screens](#14-banner--erb-screens)
-15. [Persistence and shared blocks (`Store`, `SQLite`, `HTTP`, `Cache`, `RateLimit`, `Text`)](#15-persistence-and-shared-blocks-store-sqlite-http-cache-ratelimit-text) — and QR codes (`BBS::QR`)
-16. [AI characters (`BBS::AI`)](#16-ai-characters-bbsai)
-17. [Doors (`BBS::Door`)](#17-doors-bbsdoor) — telnet gateways (`BBS::Gateway`) and file downloads (`BBS::Zmodem`, `BBS::Xmodem`)
-18. [Telnet, sessions & input model](#18-telnet-sessions--input-model)
-19. [Source layout](#19-source-layout)
-
-Upgrading from 0.x: see [UPGRADING.md](UPGRADING.md).
+3. [The board: `BBS.board` and `BBS::Domain`](#3-the-board-bbsboard-and-bbsdomain)
+4. [Server lifecycle](#4-server-lifecycle)
+5. [The Flow layer](#5-the-flow-layer)
+6. [The Application layer](#6-the-application-layer)
+7. [The line-by-line face: `BBS::Petscii::Face`](#7-the-line-by-line-face-bbspetsciiface)
+8. [Full-screen pages: `BBS::Pages` and `BBS::Page`](#8-full-screen-pages-bbspages-and-bbspage)
+9. [Widgets](#9-widgets)
+10. [Windows](#10-windows)
+11. [Declared windows (`window :name, :type`) and `BBS::Windows`](#11-declared-windows-window-name-type-and-bbswindows)
+12. [Dialogs](#12-dialogs)
+13. [Menubar, Statusbar, Focus](#13-menubar-statusbar-focus)
+14. [Theming, the palette and `BBS::Style`](#14-theming-the-palette-and-bbsstyle)
+15. [FrameBuffer & ANSI text](#15-framebuffer--ansi-text)
+16. [Markdown renderer](#16-markdown-renderer)
+17. [Banner & ERB screens](#17-banner--erb-screens)
+18. [Persistence and shared blocks (`Store`, `SQLite`, `Snapshot`, `HTTP`, `Cache`, `RateLimit`, `Text`, `Nodes`)](#18-persistence-and-shared-blocks-store-sqlite-snapshot-http-cache-ratelimit-text-nodes) — and QR codes (`BBS::QR`)
+19. [AI characters (`BBS::AI`)](#19-ai-characters-bbsai)
+20. [Doors (`BBS::Door`)](#20-doors-bbsdoor) — telnet gateways (`BBS::Gateway`) and file downloads (`BBS::Zmodem`, `BBS::Xmodem`, `BBS::Transfer`)
+21. [Telnet, sessions & input model](#21-telnet-sessions--input-model) — and testing a board (`bbs/test`)
+22. [Source layout](#22-source-layout)
 
 ---
 
 ## 1. Concepts
 
-rubbs ships one way to build each kind of screen. A `Flow` is the glue of a
-call (login, then the board, then the goodbye); a modern face is an
-`Application`, a line-by-line or C64 face a `Petscii::Screen` with its
-`Selector` menus.
+A board is declared, not wired. `BBS.board` names it, gives it its domain
+object and its faces, and starts the server; each face is declared in the
+layer made for it.
 
 | Layer | What it is | When to use |
 |---|---|---|
-| `BBS::Flow` | Line-oriented declarative dialogue (ask / say / menu / persist) | Login, registration, simple wizards |
-| `BBS::Application` | Widget framework: Menubar, Window, Button, TextInput, ListBox, … | Multi-window Synchronet-style BBSes |
-| `BBS::Petscii::Screen` + `BBS::Selector` | A line-by-line screen (a C64's 40×25, or a modern terminal) with cursor menus | The PETSCII face of a board |
+| `BBS.board` | The board: its title, its domain class, its faces, its goodbye | Once, in the board's `bbs.rb` |
+| `BBS::Domain` | The board's domain object: settings from the environment, files, services, background work | What the board knows and does, whatever the terminal |
+| `BBS::Application` | The windowed face: menubar, statusbar, desktop, windows, declared with `Application.define` | A modern terminal (ANSI, xterm colours, mouse) |
+| `BBS::Petscii::Face` | The line-by-line face: a title bar, a masthead, a main menu, the screen's helpers | A Commodore 64 (40×25 PETSCII), or a modern terminal line by line |
+| `BBS::Pages` | A full-screen page app for both faces: a stack of `BBS::Page`, repainted by what changed | A picture-led or full-screen face on either terminal |
+| `BBS::Flow` | Line-oriented steps (ask / say / menu / persist / call) | What comes before a face: a banner, a sign-up |
 
-Four building blocks sit beside them:
+Building blocks sit beside them:
 
 | Block | What it is | When to use |
 |---|---|---|
 | `BBS::FakeOS` | A character-mode OS simulator: boot script + command shell | A simulated machine the caller types into |
-| `BBS::Door` | Hands the line from an Application to a program and back | Games, simulated machines, anything full-line inside a menu-driven BBS |
+| `BBS::Door` | Hands the line from a face to a program and back | Games, simulated machines, anything full-line inside a board |
 | `BBS::AI` | A persona-driven chat with a small model, streamed to the terminal | A character the caller can talk to, e.g. in a FakeOS `on_unknown` |
-| `BBS::Petscii` | A Commodore 64 on the line: PETSCII out, the C64's keys in (`session.petscii!`) | A PETSCII face of a board, on the same Flows and doors |
-| `BBS::Terminal` | The first question of a two-faced board: modern (ANSI/xterm) or PETSCII (a C64) | One port for both faces (`Terminal.flow`) |
+| `BBS::Petscii` | A Commodore 64 on the line: PETSCII out, the C64's keys in (`session.petscii!`) | A PETSCII face of a board, on the same flows and doors |
+| `BBS::Terminal` | The first question of a two-faced board: modern (ANSI/xterm) or PETSCII (a C64) | Built by `BBS.board` when a board has both faces |
+| `BBS::Preset` | What a family of boards shares: splash, goodbye address and QR code, User-Agent | One per family of boards (`TTG::PRESET` in `ttg-common`) |
 
-The server boots a Telnet TCP listener, hands each connection a `Session`,
-which runs the configured `Flow`. Inside that flow you hand off to an
-`Application` or a `Petscii::Screen`, then return to the flow when the user exits.
+The server boots a telnet TCP listener and hands each connection a
+`Session`, which runs the root `Flow` that `BBS.board` built: the terminal
+question (with two faces), the face, then the goodbye.
 
 ```
-TCPServer → Session → FlowRunner ─┬→ Petscii::Screen + Selector
+TCPServer → Session → FlowRunner ─┬→ Terminal question (two faces) → splash
                                   ├→ Application#run ⇄ Door#run (FakeOS, …)
-                                  └→ FlowRunner (sub-flow, e.g. confirm-block)
+                                  ├→ Petscii::Face#run (or a BBS::Pages runner)
+                                  └→ Goodbye.show
 ```
 
 ---
@@ -90,81 +108,248 @@ TCPServer → Session → FlowRunner ─┬→ Petscii::Screen + Selector
 gem 'bbs', git: 'https://git.teletypegames.org/engines/rubbs.git'
 ```
 
-### Hello world — Flow only
+### A board with two faces
+
+The board's domain, a small windowed face, a small line-by-line face, and
+the board itself:
 
 ```ruby
 require 'bbs'
 
-BBS.configure do |c|
-  c.flow = BBS::Flow.define do
-    big_banner 'MY BBS', style: :success
-    ask :name, prompt: 'Name'
-    say 'Welcome!', style: :success
+class NewsBBS
+  include BBS::Domain
+
+  path    :db, 'data/news.sqlite3'            # NEWS_BBS_DB
+  service(:news) { NewsService.new(database(db, *NewsService::MIGRATIONS)) }
+end
+
+MODERN = BBS::Application.define do
+  theme :synchronet
+
+  command(:latest, 'Latest news', key: 'F2', hint: 'News') { show(:latest) }
+  menu 'News', :latest, :separator, :log_off
+  help about: 'News BBS, a rubbs board.'
+  status { "#{news.size} stories" }
+
+  desktop do
+    art  BBS::BlockFont.half_blocks('NEWS'), top: 2
+    line(bottom: 1) { "#{news.size} stories today" }
+    on_show { show(:latest) }
+  end
+
+  window :latest, :master_detail do
+    title  'Latest news'
+    items  { news.latest }
+    label  :title
+    detail { |story, width| markdown(story.body, width) }
   end
 end
 
-BBS.start
+class C64 < BBS::Petscii::Face
+  title('NEWS BBS') { "#{news.size} stories" }
+
+  masthead do
+    logo 'NEWS', colors: [YE, YE, OR, OR, RD]
+    line 'the news on your commodore', color: WH
+  end
+
+  main_menu do
+    item('l', 'latest news', 'newest first') { each_pick('LATEST', news.latest, label: :title) { |s| read(s) } }
+    log_off
+  end
+
+  private
+
+  def read(story) = page(story.title.upcase, markdown(story.body))
+end
+
+BBS.board 'News BBS', NewsBBS do
+  modern  MODERN
+  petscii C64
+  goodbye 'Stories from our newsroom.'
+end
 ```
 
-### Flow → Application
+`BBS.board` reads the settings from the environment (`NEWS_BBS_…`), makes
+the domain object, asks the caller's terminal, runs the face, says goodbye
+and serves callers until the process ends.
+
+### Something before the face
+
+A face given as a block is a Flow: the steps before the face, and the face
+as its last step.
 
 ```ruby
-require 'bbs'
-
-MAIN = BBS::Application.define do
-  theme BBS::Theme.synchronet
-  menubar do
-    menu '&File' do
-      item '&About' do BBS::Dialogs.message(self, 'Hello from rubbs!') end
-      item 'E&xit'  do :halt end
-    end
-  end
-  status_hint('F1', 'Help')  { BBS::Dialogs.message(self, 'No help yet.') }
-  status_hint('F10', 'Menu') { menubar.open(0) }
+BBS.board 'TTG Wiki', WikiBBS do
+  modern { big_banner 'TTG WIKI'; app MODERN }
+  petscii C64
 end
-
-BBS.configure do |c|
-  c.mouse        = true
-  c.idle_seconds = 600
-  c.flow = BBS::Flow.define do
-    big_banner 'MY BBS'
-    ask :username, prompt: 'Name'
-    app MAIN
-    say 'Goodbye!'
-  end
-end
-
-BBS.start
 ```
 
 ---
 
-## 3. Server lifecycle
+## 3. The board: `BBS.board` and `BBS::Domain`
+
+### `BBS.board`
+
+```ruby
+BBS.board 'Feedia BBS', FeediaBBS do
+  preset  TTG::PRESET                    # splash, goodbye address + QR, User-Agent
+  modern  UI::Modern::APP                # an Application definition …
+  petscii UI::Petscii                    # … or a BBS::Petscii::Face subclass, a Flow, or a block
+  goodbye "The stories are their publishers'."
+  idle 900                               # default 600
+  mouse false                            # default true on the modern face
+  on_start { |bbs| Web::Api.new(bbs).start }                      # once at boot
+  on_session_end { |session, bbs| bbs.end_call(session.session_id) }
+end
+```
+
+`BBS.board(title, domain = nil, slug: nil) { … }` evaluates the block in a
+`BBS::BoardDefinition`, applies it and starts the server; it does not
+return while the server runs.
+
+| Declaration | Effect |
+|---|---|
+| `preset(preset)` | The board's `BBS::Preset` (below). Default `BBS::Preset::NONE`. |
+| `modern(face, goodbye: true)` / `modern { \|bbs\| … }` | The face of a modern terminal. |
+| `petscii(face, goodbye: true)` / `petscii { \|bbs\| … }` | The face of a Commodore 64. |
+| `goodbye(note, clear:, color:, bar:, art:)` / `goodbye { \|context\| … }` | The board's own line on the goodbye screen (its sources, its licence), or a block for a line of each call; the options of `BBS::Goodbye.show` (modern: `clear`; C64: the bar's `color` and text, `art` lines under it). `goodbye false` leaves the goodbye to the faces. |
+| `idle(seconds)` / `idle { \|bbs\| … }` | Seconds before a quiet caller is dropped (default 600); a block gets the domain object. |
+| `mouse(on)` | Whether the modern face uses the mouse (default `true`). |
+| `on_start { \|board\| … }` | Run once at boot with the domain object, after its `start`: an HTTP API beside the telnet port, say. |
+| `on_session_end { \|session, board\| … }` | Run after each call, also when it ended with an error. |
+
+A face is one of:
+
+- a `BBS::Application` definition (`Application.define`): the windowed face;
+- a `BBS::Petscii::Face` subclass, or any class made with
+  `new(session, context, board)` that has a `run`: a line-by-line face, a
+  `BBS::Pages` runner;
+- a `BBS::Flow`: run as it is;
+- a block: a Flow defined by it and given the domain object, for what comes
+  before the face (`modern { |bbs| big_banner 'TTG WIKI'; app UI::Modern::APP }`).
+
+A face's flow runs in a runner of its own, so a refusal in it (a `gate`)
+still reaches the goodbye.
+
+`goodbye: false` on a face says that face writes its own goodbye; the
+others still get `BBS::Goodbye.show` after them. With one face only
+(`modern` without `petscii`) there is no terminal question.
+
+What `BBS.board` does with the declaration:
+
+- From the title come the log tag and the environment prefix:
+  `Feedia BBS` → `feedia-bbs` (`BBS.config.log_tag`) and `FEEDIA_BBS_`
+  (`BBS.config.env_prefix`). When the technical name differs, say it:
+  `BBS.board 'WarpEngine BBS', WarpEngineBBS, slug: 'warp-engine-bbs'`.
+- The domain class is made once (`BBS.config.board`) and its `start` called
+  when it has one; its `services` are what the faces get.
+- `BBS.config.title`, `preset`, `idle_seconds`, `mouse` and
+  `mouse_on_connect` (off when the board has a C64 face: the mouse's escape
+  sequence is garbage on a C64) are set from it.
+- The root flow is built: with two faces `BBS::Terminal.flow` (the
+  terminal question and the preset's splash) over the two faces' flows;
+  each face's flow is the face, then the `goodbye` step.
+
+`BBS.config` and `BBS.configure` stay the low-level settings underneath (see
+[§4](#4-server-lifecycle)); a board declared with `BBS.board` does not need
+them.
+
+### `BBS::Domain`
+
+The board's domain object, declared: its settings from the environment,
+its files, its services and its background work.
+
+```ruby
+class FeediaBBS
+  include BBS::Domain
+
+  setting :refresh, 3600                    # FEEDIA_BBS_REFRESH, cast to the default's type
+  setting :languages, %w[en hu]             # an Array default splits on commas
+  path    :db, 'data/feedia.sqlite3'        # FEEDIA_BBS_DB, expanded against the board's root
+
+  service(:feeds) { FeedService.new(FeedRepository.new(database(db, *FeedRepository::MIGRATIONS))) }
+  service(:inbox) { InboxService.new(feeds) }
+
+  background('feed refresh', every: -> { refresh }) { feeds.refresh }
+end
+```
+
+| Class macro | Effect |
+|---|---|
+| `setting(name, default = nil, env: nil, blank: false)` | An instance method reading `ENV["#{env_prefix}#{NAME}"]` (or the `env:` name after the prefix), else `default`. The value takes the default's type: an Integer, a Float, `true`/`false` (`1`, `true`, `yes`, `on`), a String; an Array default splits the value on commas. An empty variable counts as unset, or as `nil` with `blank: true`. |
+| `path(name, default, env:)` | A setting expanded against the board's root (`root`, the current directory unless set with `root=`). |
+| `service(name) { … }` | An instance method that makes the service with the block (evaluated in the domain object) on first use, so one service can use another. |
+| `background(name, every: nil, if: nil, **options) { … }` | Work that `start` begins with `BBS.background`: `every` is seconds, a block evaluated in the domain object, or `nil` for once; `if` a block that must answer true for it to begin; the other options are those of `BBS.background`. |
+| `env_prefix('X_')` | The prefix when `BBS.board` did not set one (a tool, a test); by default the class name's: `FeediaBBS` → `FEEDIA_BBS_`. |
+
+Instance methods:
+
+- `services` — every service by name, made now: what an Application and a
+  `Petscii::Face` get as readers.
+- `start` — makes every service and begins the background work.
+  `BBS.board` calls it once at boot. Returns `self`.
+- `database(path, Schema)` or `database(path, *sql_steps)` — a migrated
+  `BBS::SQLite`: a schema object with `migrate(db)`, or the SQL steps of
+  `BBS::SQLite#migrate`.
+
+Keep plain methods for anything else; the domain object is an ordinary
+class.
+
+### `BBS::Preset`
+
+What a family of boards has in common and rubbs does not know:
+
+```ruby
+TTG_PRESET = BBS::Preset.new(splash: TTG::Logo.splash, url: 'teletypegames.org',
+                             qr: 'HTTPS://TELETYPEGAMES.ORG', user_agent: '(+https://teletypegames.org)')
+```
+
+| Part | Used for |
+|---|---|
+| `splash` | A `BBS::Splash` shown after the terminal question (see [Two faces on one port](#two-faces-on-one-port-bbsterminal)). |
+| `url` | The "More of us:" address of the goodbye screen. |
+| `qr` | The text of the goodbye screen's QR code (`nil`: none). |
+| `user_agent` | What follows `rubbs/<version>` in the User-Agent of `BBS::HTTP`. |
+
+Every part is optional. The TTG boards use `TTG::PRESET` from `ttg-common`.
+
+---
+
+## 4. Server lifecycle
 
 ### `BBS.configure { |c| … }` / `BBS.config`
 
-`BBS::Config` is a value object accessed through these two singleton helpers.
-The `Server` reads it once at boot; per-session state lives on `BBS::Session`.
+`BBS::Config` is the low-level configuration underneath `BBS.board`, which
+sets most of it. The `Server` reads it once at boot; per-session state
+lives on `BBS::Session`. A board without `BBS.board` (a test, a tool) sets
+`flow` itself with `BBS.configure` and calls `BBS.start`.
 
 | Field | Default | Description |
 |---|---|---|
-| `flow` | — | The root `BBS::Flow` to run for each connection (required). |
+| `flow` | — | The root `BBS::Flow` to run for each connection (required). `BBS.board` builds it. |
 | `port` | `ENV["BBS_PORT"] \|\| 2323` | TCP port for `BBS::Server`. |
-| `mouse` | `false` | If true, sessions enable xterm SGR mouse reporting on negotiate. |
-| `mouse_on_connect` | `true` | With `mouse`, whether reporting starts on connect. `false` leaves it to the flow (`session.enable_mouse`), e.g. after asking whether the caller has a C64, which would print the escape sequence. Applications and doors still switch it on and off. |
-| `idle_seconds` | `nil` | Hard idle-timeout of the Application loop. It is also each connection's socket read/write timeout (900 s when `nil`), so a line that stays silent at a login prompt or inside a door is dropped too. Every session starts with this value; `session.idle_seconds = 3600` changes it for one caller (the loop and the socket timeout alike). |
-| `max_sessions` | `ENV["BBS_MAX_SESSIONS"] \|\| 100` | Connections served at once; one more is told to try later and closed, and the server logs `<log_tag>: BBS busy: …`. |
-| `max_sessions_per_ip` | `ENV["BBS_MAX_SESSIONS_PER_IP"] \|\| 6` | Connections served at once from one address; one more is told so and closed (`<log_tag>: BBS crowded: …`). Private, loopback and link-local peers (bbs-web proxying many callers from the Docker network) are not limited. |
-| `log_tag` | `ENV["BBS_LOG_TAG"] \|\| "bbs"` | What every `BBS.log` line starts with: the board's technical name, `feedia-bbs`. |
+| `title` | `nil` | The board's name as callers read it; set by `BBS.board`. The goodbye screen uses it. |
+| `log_tag` | `ENV["BBS_LOG_TAG"] \|\| "bbs"` | What every `BBS.log` line starts with: the board's technical name, `feedia-bbs`; set by `BBS.board` from the title. |
+| `env_prefix` | `nil` | The prefix of the board's own environment variables (`FEEDIA_BBS_`), read by `BBS::Domain#setting`; set by `BBS.board`. |
+| `preset` | `BBS::Preset::NONE` | The board's `BBS::Preset`. |
+| `board` | `nil` | The board's domain object, made once at boot by `BBS.board`: its `services` are the default services of an Application, and a `Petscii::Face` gets it. |
+| `mouse` | `false` | If true, sessions enable xterm SGR mouse reporting. `BBS.board` turns it on for a board with a modern face (`mouse false` turns it off). |
+| `mouse_on_connect` | `true` | With `mouse`, whether reporting starts on connect. `BBS.board` turns it off on a two-faced board and lets the terminal question switch the mouse on for a modern terminal. Applications and doors still switch it on and off. |
+| `idle_seconds` | `nil` | Hard idle-timeout of the Application loop. It is also each connection's socket read/write timeout (900 s when `nil`), so a line that stays silent at a login prompt or inside a door is dropped too. Every session starts with this value; `session.idle_seconds = 3600` changes it for one caller. `BBS.board` sets 600 unless `idle` says otherwise. |
+| `max_sessions` | `ENV["BBS_MAX_SESSIONS"] \|\| 100` | Connections served at once; one more is told to try later and closed, and the server logs `BBS busy: …`. |
+| `max_sessions_per_ip` | `ENV["BBS_MAX_SESSIONS_PER_IP"] \|\| 6` | Connections served at once from one address; one more is told so and closed (`BBS crowded: …`). Private, loopback and link-local peers (bbs-web proxying many callers from the Docker network) are not limited. |
 | `ai_concurrency` | `2` | `BBS::AI::Client` requests running at once in the process; the next waits up to 5 s, then gets `BBS::AI::Busy`. |
-| `user_agent` | `"rubbs/<version> (+https://teletypegames.org)"` | The `User-Agent` of `BBS::HTTP` requests. |
+| `user_agent` | `"rubbs/<version>"` + the preset's `user_agent` | The `User-Agent` of `BBS::HTTP` requests; `user_agent=` overrides it. |
 | `theme` | `nil` | Default `BBS::Theme` for Applications. |
-| `screens_dir` | `nil` | Directory for ERB templates used by `Flow#screen`. |
-| `on_session_end` | `nil` | `->(session) { … }` invoked from the server thread after each session ends, even on errors. |
+| `screens_dir` | `nil` | Directory for ERB templates used by `Flow#screen` when the flow has no `screens_dir` of its own. |
+| `on_session_end` | `nil` | `->(session) { … }` invoked from the server thread after each session ends, even on errors. `BBS.board`'s `on_session_end` sets it. |
 
 ### `BBS.start(port: …)`
 
-Boots a `BBS::Server` (one thread per client). Each thread:
+Boots a `BBS::Server` (one thread per client); `BBS.board` calls it. Each
+thread:
 1. Creates a `BBS::Session` (assigns a hex `session_id`).
 2. Performs Telnet negotiation (SGA, ECHO, NAWS — terminal size).
 3. Enables mouse reporting if `BBS.config.mouse` (and `mouse_on_connect`).
@@ -173,10 +358,10 @@ Boots a `BBS::Server` (one thread per client). Each thread:
 ### Logging and background work: `BBS.log`, `BBS.background`
 
 Every line the library and the board write to the log goes through one
-method, so the lines of eleven boards in one log read the same:
+method, so the lines of eleven boards in one log read the same. The tag is
+the board's technical name, which `BBS.board` takes from the title:
 
 ```ruby
-BBS.configure { |c| c.log_tag = 'feedia-bbs' }
 BBS.log('catalog refresh', 'done in 3.2 s')   # feedia-bbs: catalog refresh: done in 3.2 s
 BBS.log('catalog refresh', error)             # feedia-bbs: catalog refresh: SocketError: …
 ```
@@ -185,7 +370,8 @@ Work out of the callers' way (an index loaded at boot, a catalog refreshed
 every hour) runs in a `BBS::Background` thread: an error is logged and the
 block tried again after `retry_after` seconds, the pause doubling up to
 `max_retry`, so a service that is down costs a few log lines, not a crashed
-board or a busy loop.
+board or a busy loop. A domain object declares it with `background`
+([§3](#3-the-board-bbsboard-and-bbsdomain)); underneath it is:
 
 ```ruby
 BBS.background('index') { wiki.load_index }                     # until it succeeds once
@@ -206,18 +392,20 @@ whatever ends it.
 
 ---
 
-## 4. The Flow layer
+## 5. The Flow layer
 
 `BBS::Flow.define { … }` builds an immutable, line-oriented dialogue. Each
 step is a small object (`BBS::Flow::Steps`) that `BBS::FlowRunner` runs with
-a shared context hash keyed by Symbol field names. Most boards use a Flow as
-glue only: a `call` step that runs the board, then one for the goodbye.
+a shared context hash keyed by Symbol field names. Most boards never write
+one: `BBS.board` builds the flow of each face (an `app` or a `face` step,
+then `goodbye`). A board writes one for what comes before its face (a
+banner, a sign-up), as the block of `modern` or `petscii`.
 
 ### Step reference
 
 | Step | Signature | Effect |
 |---|---|---|
-| `screen` | `screen :name, **vars` | Render `<name>.erb` from the flow's `screens_dir`, or from `BBS.config.screens_dir` (vars resolved against the context if Symbols). |
+| `screen` | `screen :name, **vars` | Render the ERB file `name.erb` from the flow's `screens_dir`, or from `BBS.config.screens_dir` (vars resolved against the context if Symbols). |
 | `banner` | `banner text, style: :success` | Box-drawing banner. |
 | `big_banner` | `big_banner text, style:, font:` | FIGlet (Artii) ASCII art header. `font:` defaults to `'slant'`. |
 | `say` | `say text, style: :muted` | Print one line, then blank line. |
@@ -230,8 +418,24 @@ glue only: a `call` step that runs the board, then one for the goodbye.
 | `confirm` | `confirm(msg, denied:) { ... }` | Yes/No prompt; on "yes" run the steps of the block. |
 | `menu` | `menu(prompt, loop: false) { option … }` | A numbered `BBS::Selector` of the options, `prompt` on its status row. Each option is a list of steps; `loop: true` re-shows after each selection until `exit_menu`; Esc leaves. |
 | `exit_menu` | `exit_menu` | Leave the enclosing menu. |
-| `call` | `call { \|ctx, runner\| ... }` | Arbitrary code; runner exposes `write`/`readline(mask:)`/`session`/`context`. Return `:halt` to terminate. |
-| `app` | `app DEFINITION` | Hand off to a `BBS::Application`. |
+| `call` | `call { ... }` | Arbitrary code, run in the `BBS::FlowRunner`: `session`, `context`, `session_id`, `write`, `line`, `readline(mask:)` are at hand. Return `:halt` to end the flow. A dropped line ends the flow quietly; any other error is logged, the caller is told "Something went wrong." and the flow goes on. |
+| `app` | `app DEFINITION` | Run a `BBS::Application` definition (with its doors). |
+| `face` | `face FaceClass` | Run a `BBS::Petscii::Face` subclass (or any class made with `new(session, context, board)` that has a `run`). |
+| `goodbye` | `goodbye 'note'` | The goodbye screen of the caller's face (`BBS::Goodbye.show`) with the note, then the end of the flow. |
+| `flow` | `flow other_flow` | Add the steps of another `BBS::Flow` here. |
+
+```ruby
+call { context[:caller_key] = session.caller_key }
+```
+
+### Hang-ups: `BBS::Hangup`
+
+A dropped line is `BBS::Hangup`, an `IOError`: rubbs raises it where a read
+finds no caller, and a Flow step, an Application and a `Petscii::Face` end
+the call quietly on it, so a board never rescues it. `BBS::LINE_DROPPED`
+lists the errors of a dropped line (`IOError`, `Errno::EPIPE`,
+`Errno::ECONNRESET`) for the rare `rescue *BBS::LINE_DROPPED` that has to
+tell them from a bug.
 
 ### A flow's own screens
 
@@ -253,107 +457,195 @@ the `BBS::Ansi` palette).
 `ask … validate: :email` rejects with a built-in message and halts. `:non_empty`
 rejects empties. Pass a custom Proc for ad-hoc rules (must return truthy).
 
-### Example — login + menu
+### Example — login + menu, then the face
 
 ```ruby
-BBS::Flow.define do
-  screen :welcome, year: Time.now.year
-  ask :user, prompt: 'Login', validate: :non_empty, transform: :downcase
-  persist :user, store: USERS
+BBS.board 'Club BBS', ClubBBS do
+  modern do |club|
+    screen :welcome, year: Time.now.year
+    ask :user, prompt: 'Login', validate: :non_empty, transform: :downcase
+    persist :user, store: club.users
 
-  gate(denied: 'Banned user.') { |ctx| !banned?(ctx[:user]) }
+    gate(denied: 'Banned user.') { |ctx| !club.banned?(ctx[:user]) }
 
-  menu 'Choose:', loop: true do
-    option('Read messages') { call { |ctx, runner| Messages.new(runner.session, ctx[:user]).run } }
-    option('Quit') { exit_menu }
+    menu 'Choose:', loop: true do
+      option('Read messages') { call { Messages.new(session, context[:user]).run } }
+      option('Enter the club') { app UI::Modern::APP }
+      option('Quit') { exit_menu }
+    end
   end
 end
 ```
 
 ---
 
-## 5. The Application layer
+## 6. The Application layer
 
-`BBS::Application` is the windowed face: a widget event loop with menubar, status
-bar, a switchable window stack, mouse, focus traversal, themes and per-window ticks.
+`BBS::Application` is the windowed face: a widget event loop with a
+desktop, a menubar, a statusbar, a switchable window stack, mouse, focus
+traversal, themes and per-window ticks. It is declared with
+`Application.define`; `BBS.board` (or a Flow's `app` step) runs it.
 
-### Top-level build with `Application.define`
+### `Application.define`
 
 ```ruby
-MAIN = BBS::Application.define do
-  theme :synchronet do
-    accent "\e[1;33;40m"
-  end
+module UI
+  module Modern
+    APP = BBS::Application.define do
+      theme :synchronet
+      helpers { include Helpers }
+      init { context[:lang] ||= 'en' }
 
-  services chat: ChatService.new, boards: BoardService.new
+      command(:search, 'Search…', key: 'F2') { search }            # menu item + key + statusbar hint, once
+      command(:random, 'Random article', key: 'F3', hint: 'Random') { random }
+      command(:secret, 'Supervisor', key: 'F9', hint: false) { unlock }   # a key without a hint
+      menu 'Wiki', :search, :random, :separator, :log_off            # entries: commands, :separator, :doors
+      menu('Board') { command :boards; item('Who is online') { who }; doors }
+      help about: ABOUT, reading: READING, keys: ['Space        vote']  # Help: About, Reading, Keys
+      status { "#{feeds.size} feeds" }                                # right end of the statusbar; clock added
 
-  helpers do
-    def announce(text)
-      BBS::Dialogs.message(self, text, title: ' Notice ')
+      desktop do
+        art  Logo::HALF_BLOCKS, top: 2                              # placed by words, re-placed on resize
+        line TAGLINE, bottom: 1
+        line(top: 3, align: :right, margin: 2) { "#{feeds.size} FEEDS" }
+        widget(height: Pharos::HEIGHT, middle: -12) { Pharos.new }  # made per call; ticked if it has #tick
+        button('Master', bottom: 0, align: :right) { master }
+        on_show { search }                                           # the first window
+      end
+
+      parts ResultsWindow, ArticleWindow                             # modules that `extend BBS::Part`
     end
-  end
-
-  init do
-    @user = context[:username]
-  end
-
-  body do
-    add BBS::Widgets::Label.new(text: 'Background label', style_key: :text)
-  end
-
-  menubar do
-    menu '&File' do
-      item '&Quit', shortcut: 'Alt-X' do :halt end
-    end
-  end
-
-  status_hint('F10', 'Menu')  { menubar.open(0) }
-  status_hint('F1',  'Help')  { announce('No help yet') }
-
-  window :compose, type: :form do |w|
-    w.title 'Compose'
-    w.field :body, type: :textarea
-    w.on_submit { |values, form, ctx| ctx[:boards].post(values[:body]); :close }
   end
 end
 ```
+
+Every block of the declaration (a command, a menu item, `init`, `status`,
+the desktop's lines and buttons, the window blocks) runs in the
+Application: the helpers, the services (as readers by name) and the
+instance methods below are called bare.
 
 ### `Application.define` DSL
 
 | Method | Purpose |
 |---|---|
-| `theme(symbol_or_theme)` | Set the base theme (Symbol calls `BBS::Theme.<name>`; or pass a `Theme` instance). |
-| `theme(:base) { ... }` | Inside the block, any one-arg method call (`screen "\e[40m"`) overrides that style key. Use `inherit :neumanntronics` to switch base mid-block. `style :key, "\e[…"` is also available. |
-| `services(hash)` | Merge into the services hash exposed to window callbacks via `ctx`. Call multiple times to add more. |
-| `helpers { ... }` | Module-eval'd; methods become available on the live `Application` instance. |
-| `init { ... }` | Runs in the Application context after building, before `body`. |
-| `body { ... }` | Block evaluated against a `BodyContext` — call `add(widget)` to attach widgets to the root container. |
-| `menubar { menu '&X' do item '&Y' do … end end }` | Define the top menubar (see [§11](#11-menubar-statusbar-focus)). |
-| `status_hint(key, label, hidden: false) { ... }` | Append one status bar hotkey hint. `hidden: true` keeps the key working without showing it (room for `right_text`). |
-| `on_tick { ... }` | Runs in the Application context once a second while the caller is idle (a clock on `statusbar.right_text`, a counter). |
-| `on_idle { ... }` | Runs in the Application context when the caller reaches the idle limit. Return `:keep` to keep them on (a "still there?" dialog that got an answer); anything else drops the line. |
-| `on_door { \|door, context\| ... }` | Runs just before `Builder#run` hands the line to a door (who is where, a log line). |
-| `window(:name, type: :info\|:form\|:master_detail\|:stream) { \|w\| ... }` | Register a declarative window spec (see [§9](#9-pre-built-window-types-bbswindows)). |
-| `door(:name, program, label: nil, hint: nil)` | Declare a door the caller can step into (see [§18](#18-doors-bbsdoor)). Inside `menu`, `doors` adds one item per declared door, with its `hint` on the statusbar. |
+| `theme(name_or_theme) { … }` | The base theme: a preset name (`:synchronet`) or a `BBS::Theme`. In the block, any one-argument call naming a role (`accent "\e[1;33;40m"`) overrides it; `inherit :neumanntronics` switches the base mid-block, `style :key, "\e[…"` is the explicit form. A block alone starts from `BBS.config.theme`. |
+| `services(hash)` | The services of the application, replacing those of the board's domain object. Without any call the application gets `BBS.config.board.services`. Each service is a reader of its name on the application. |
+| `helpers { … }` | Module-eval'd: methods defined (or modules included) there become methods of the application and of its window blocks. |
+| `init { … }` | Runs in the application after it is built, before the desktop: per-call state (`context[:lang] \|\|= 'en'`). |
+| `command(name, label, key:, hint:, about:) { … }` | Something the caller can do, said once: `label` is its menu item (an `&` marks the hotkey; without one the menu picks a free letter), `key` its key anywhere (`'F2'`, `'Alt-R'`), `hint` its word on the statusbar (default: the label without `&` and `…`; `false` binds the key without showing it), `about` the statusbar line while its menu item is highlighted. |
+| `menu(label, *entries) { … }` | A menu of the menubar. Entries are command names, `:separator` and `:doors` (one item per door); the block adds more: `command :name`, `item(label, shortcut:, enabled:, hint:) { … }`, `separator`, `doors`. |
+| `help(titled = {}, about:, keys:, **pages) { … }` | The Help menu: the block's own items (an ItemsBuilder), `About` showing `about` (a String, or a lambda evaluated when chosen), one item per other page (`reading: READING` becomes "Reading"; a Hash with String titles keeps them: `{ 'Jargon File' => JARGON }`), and `Keys`, written from the commands and rubbs' own keys, with `keys` (lines of the board's own keys) added. |
+| `status(clock: true) { … }` | The text at the right end of the statusbar, refreshed every second; the clock (`HH:MM`) follows it, comes first with `clock: :before`, or is left out with `clock: false`. |
+| `desktop { … }` | What lies under the windows (below). |
+| `window(name, type) { … }` | A declared window, opened with `show(name, **extras)` (see [§11](#11-declared-windows-window-name-type-and-bbswindows)). |
+| `door(name, program, label:, hint:)` / `door(a_door)` | A door the caller can step into (see [§20](#20-doors-bbsdoor)); `doors` in a menu lists them. |
+| `doors { … }` | Doors made when the application is built (the block runs in it): `doors { board.doors }`. |
+| `parts(*modules)` | Replays the declarations of each `BBS::Part` (below). |
+| `on_tick { … }` | Runs in the application once a second while the caller is idle, after the status is refreshed (an animation, a poll). |
+| `on_idle { … }` | Runs in the application when the caller reaches the idle limit. Calling `keep_on` in it keeps them on (a "still there?" dialog that got an answer); otherwise the line drops. |
+| `on_door { \|door, context\| … }` | Runs just before the line goes to a door (who is where, a log line). |
+
+Built-in commands: `:menu` (F10, opens the first menu; only with a
+menubar) and `:log_off` (Alt-X, label `Log off`, hint `Bye`). Name them in
+a menu like any command (`menu 'Wiki', :search, :separator, :log_off`);
+declaring a command of the same name replaces one in its place. A `key` may be an F-key, `Alt-X`, `Ctrl-S`, `Esc` or `Tab`.
+
+### The desktop
+
+```ruby
+desktop do
+  art     Logo::HALF_BLOCKS, top: 2
+  line    TAGLINE, bottom: 1
+  line(top: 3, align: :right, margin: 2) { "#{feeds.size} FEEDS" }
+  widget(height: Pharos::HEIGHT, middle: -10) { Pharos.new }
+  button('Master', bottom: 0, align: :right) { master }
+  on_show { search }
+end
+```
+
+| Item | What it is |
+|---|---|
+| `art(lines, style: :accent, **place)` | Lines drawn as one block (a logo). |
+| `line(text, style: :text_dim, **place)` / `line(**place) { … }` | One line; a block gives the text, evaluated in the application at every repaint. |
+| `widget(height: 1, fill: false, **place) { … }` | A `BBS::Widget` of the board, made by the block for each call, or filling the whole desktop with `fill: true`; one with a `tick` method is ticked once a second. |
+| `button(label, **place) { … }` | A button that runs the block in the application. |
+| `on_show { … }` | Runs once the desktop is up: the first window or dialog. |
+
+Items are placed by words, in rows of the desktop: `top: n` (from the top),
+`bottom: n` (from the bottom), `middle: n` (from the middle, negative
+above); across, `align:` `:center` (default), `:left` or `:right`, with
+`margin:` columns from that edge. They are placed again when the terminal
+changes size. `app.desktop.widget(0)` is the first board widget made.
+
+### Parts: `BBS::Part`
+
+A piece of the declaration in a file of its own: a module that extends
+`BBS::Part` and declares with the same words as `Application.define`
+(`window`, `command`, `menu`, `helpers`, `door`, …); `parts` replays them.
+
+```ruby
+module UI::Modern::ArticleWindow
+  extend BBS::Part
+
+  window :article, :master_detail do
+    title { article.title }
+    items { article.sections }
+    label :title
+  end
+end
+```
 
 ### Application instance API
+
+What helpers, commands and window blocks call on the application.
 
 | Method | Purpose |
 |---|---|
 | `cols`, `rows` | Terminal size from NAWS (defaults 80×24). |
-| `theme` / `services` / `context` | Live state. |
-| `add(widget)` | Append to the root container. |
-| `open_window(window)` | Push a `Window` onto the stack and make it the active one. |
-| `open_window(:name, **extras)` | Open a registered `WindowSpec`; `extras` flow into the spec's `ctx`. |
-| `raise_window(window)` | Bring an open window to the front and make it the active one. |
-| `cycle_windows(step = 1)` | The next (or, with -1, the previous) switchable window to the front. |
-| `close_window(window = top_window)` | Pop a window. Calls its `on_close` if any. |
-| `top_window` | The active window, the target of input. |
-| `with_loading(text) { ... }` | Show a "Please wait" modal while the block runs in a thread; returns the block's value. |
-| `with_line { \|session\| ... }` | Hand the raw line to the block (a file transfer, say) on a clean screen without mouse reporting, then repaint everything; returns the block's value. |
-| `tick!` | Manually fire the periodic tick. |
-| `stop!` | Break out of the run loop. |
-| `open_door(:name)` | Leave through a declared door: returns `:halt`, and `Builder#run` opens the door. |
+| `theme` / `context` / `session` / `services` | Live state; each service is also a reader of its name (`feeds`). |
+| `message(text, title: 'Message', width: nil)` | A message box with OK. Returns the window. |
+| `ask(prompt, title: 'Input', value: '', width:) { \|text\| … }` | A box asking for a line; OK (or Enter) runs the block with the text, unless it is blank. |
+| `confirm(text, title: 'Confirm') { … }` | A Yes/No box; Yes runs the block. |
+| `loading(text = 'Working…', failed: nil, title: 'Sorry') { … }` | Runs the block in a thread under a "Please wait" box and returns its value. With `failed:`, a `nil` value or an error is told to the caller as `failed` (in a box titled `title`) and ends the command (`BBS::Abort`); without it the value comes back as it is and an error is raised. |
+| `fail_with(text, title: 'Sorry')` | Tells the caller `text` in a message box and ends the command (`BBS::Abort`). |
+| `report(result, messages, title: 'Message')` | Tells the caller what `result` (a Symbol a domain service answered) means: its text in `messages`, when there is one. Returns `result`. |
+| `qr(text, title: 'QR code')` | `text` (an address) as a QR code in a window as big as the screen allows: with a quiet zone when it fits, without one when only that fits, else a message that the screen is too small. |
+| `show(name, **extras)` | Opens the declared window `name` with `extras`, or pushes a `BBS::Window`. |
+| `window(name)` | The open window declared as `name` (the frontmost), or `nil`: `window(:browser)&.selected`. |
+| `close_all` | Closes every window. |
+| `reload_details` | Redraws the detail pane of every open master/detail window, after the data under them changed. |
+| `markdown(text, width = cols - 4)` | Markdown as lines in the theme's colours (`BBS::Markdown`). |
+| `caller_key` | The key the caller is known by for rate limits (`session.caller_key`). |
+| `board` | The board's domain object (`BBS.config.board`). |
+| `refresh_status` | Rewrites the right end of the statusbar now (the `status` block and the clock), e.g. after a setting changed. |
+| `log_off` | Ends the application: the flow goes on to the goodbye. Returns `:halt`. |
+| `dim(s)`, `bright(s)`, `accent(s)`, `paint(role, s)` | `s` in a theme role, back to the plain text colour after it (`BBS::Paint`; a `Petscii::Face` has the same words). |
+| `with_line { \|session\| … }` | Hands the raw line to the block on a clean screen without mouse reporting (`session.hand_over`), then repaints everything; returns the block's value. For a file transfer or a gateway. |
+| `open_door(name)` | Leaves through a declared door: returns `:halt`, and the application's run opens the door and builds the application again afterwards. |
+| `open_window(window_or_name, **extras)`, `close_window(window)`, `top_window`, `raise_window(window)`, `cycle_windows(step)` | The window stack underneath `show` and `close_all`. |
+| `add(widget)` | Appends a widget to the root container behind the windows. |
+| `tick!`, `stop!` | Fire the periodic tick by hand; break out of the run loop. |
+
+```ruby
+module Helpers
+  NO_ANSWER = 'Wikipedia did not answer. Try again later.'
+
+  def search
+    ask('Article title:', title: 'Search', width: 60) { |text| read(text) }
+  end
+
+  def read(title)
+    article = loading('Loading the article…', failed: NO_ANSWER) { articles.article(title, lang: lang) }
+    show(:article, article: article)
+  end
+end
+```
+
+`BBS::Abort` ends the command the caller started (a menu item, a key, a
+button) without an error: `loading … failed:` and `fail_with` raise it after
+telling the caller, and the event loop takes it quietly, so the caller stays
+where they were. Titles are plain (`title: 'Search'`): the frame pads and
+cuts them.
 
 ### Run loop
 
@@ -361,16 +653,18 @@ end
 
 1. Render full frame, diff against the committed buffer, write the delta.
 2. Wait for a key (`Session#readkey(timeout: 1.0)`).
-3. On `:idle` — fire `tick!` (which runs the `on_tick` block and `window.tick(self)`
-   for every open window), then check the idle-disconnect timeout: at the
-   session's `idle_seconds` the `on_idle` block runs, and unless it returns
-   `:keep` the loop shows a message and ends.
+3. On `:idle` — fire `tick!` (which refreshes the status, runs the
+   `on_tick` block, ticks the desktop's widgets and `window.tick(self)` for
+   every open window), then check the idle-disconnect timeout: at the
+   session's `idle_seconds` the `on_idle` block runs, and unless it calls
+   `keep_on` the loop shows a message and ends.
 4. Otherwise build an `Event` and dispatch (top window → menubar → statusbar
    → root focus manager).
 
-Return `:halt` from any handler to end the application (and, via Flow, the
-session). An exception in a handler is logged and the event dropped: it does
-not end the caller's session.
+Returning `:halt` from a handler (or `log_off`) ends the application, and
+the flow goes on to the goodbye. An exception in a handler is logged and
+the event dropped: it does not end the caller's session; a `BBS::Abort` is
+not even logged.
 
 `Builder#run(session:, session_id:, context:)` is `build(...).run` that also
 takes the caller through doors: when the application ended with `open_door`,
@@ -379,7 +673,224 @@ without one.
 
 ---
 
-## 6. Widgets
+## 7. The line-by-line face: `BBS::Petscii::Face`
+
+The face of a Commodore 64 (40×25 PETSCII), or of a modern terminal line by
+line, declared in a subclass: its title bar, its masthead and its main
+menu; its own methods say what each item does.
+
+```ruby
+module UI
+  class Petscii < BBS::Petscii::Face        # the C64 colours, COLS, WIDTH are its constants
+    title('FEEDIA BBS') { "#{feeds.size} feeds" }
+
+    masthead do
+      art  PICTURE                          # lines as they are
+      logo 'FEEDIA', colors: LOGO_COLORS    # BlockFont.petscii
+      rule
+      line 'all the news that fits', color: WH
+    end
+
+    main_menu do                            # main_menu(back: 's') when ← should not log off
+      heading 'reading'
+      item('f', 'feeds', 'the list of feeds') { feed_list }
+      item('l', -> { "language: #{lang}" }, 'the next one') { next_language }   # a label that changes
+      log_off 'hang up. see you!'
+    end
+
+    private
+
+    def feed_list
+      each_pick('FEEDS', feeds.list, label: :title) { |feed| read(feed) }   # the title comes back by itself
+    end
+  end
+end
+```
+
+`BBS.board` (or a Flow's `face` step) makes one per call with the session,
+the context and the board's domain object, whose services become readers of
+the face, and calls `run`: the masthead, then the main menu until the caller
+logs off. The C64 colours (`WH YE CY LG GR DG LB BL GN RD PU OR`, `RV RO`,
+see `BBS::Petscii::Colors`), `COLS` and `WIDTH` are constants of every
+subclass, so classes nested in it see them too.
+
+### The declaration
+
+| Class method | What it declares |
+|---|---|
+| `title(text) { … }` | The home title bar: `text`, and the block's text (evaluated in the face) at its right end. |
+| `masthead { … }` | What the call starts with, on a cleared screen: `art(lines)` (lines as they are), `logo(word, colors:, glyphs: {}, indent: 2)` (`BBS::BlockFont.petscii`, one colour per row), `line(text, color: LG, indent: 1)` or `line { … }`, `rule` (a dim rule across), `gap(count = 1)` (empty lines). The first main menu goes under it. |
+| `main_menu(hint: MENU_HINT, back: nil, home: :title, above: nil) { … }` | The main menu, a `BBS::Selector`: `item(key, label, about = nil, color: nil, if: nil) { … }` (a label or an about may be a lambda, for one that changes; `if` hides the item when it answers false; the block runs in the face), `each_of(source) { \|object, i\| item(…) }` (items made each round from what the lambda `source` gives), `heading(label = '')`, `log_off(about, label: 'log off', key: 'q')`. `back` is the key of the item ← (RUN/STOP) takes; by default the log-off item. `home` is what each round draws above the menu: the home title bar, or `:masthead`; `above` a lambda whose lines come between that and the menu. An item without a block only returns its key from `main_menu_choice`. |
+
+The main menu's cursor starts on the item taken last. A `BBS::Abort` in an
+item (from `fail_with` or `loading … failed:`) leaves the caller at the menu.
+
+### Another shape: overriding `run`
+
+`run` is `show_masthead`, then `main_menu_loop`. A face with another shape
+overrides it with the same pieces: `home` (the home title bar),
+`show_masthead`, `main_menu_choice` (the menu once; `:log_off` when the
+caller logs off, the key of an item without a block), `main_menu_loop`.
+
+```ruby
+def run
+  context[:lang] ||= articles.languages.first
+  show_masthead
+  loop do
+    query = prompt(language_name, hint: 'return alone: menu', max: 80)
+    next look_up(query) if query
+    break if main_menu_choice == :log_off
+  rescue BBS::Abort
+    home
+  end
+end
+```
+
+### The face's methods
+
+The face answers the methods of its `BBS::Petscii::Screen` itself (see
+[The screen of a line-by-line board](#the-screen-of-a-line-by-line-board-bbspetsciiscreen)):
+
+| Method | What it does |
+|---|---|
+| `puts`, `say(text, color:)`, `write`, `cls`, `bell` | Text out; `say` wraps a paragraph to 38 columns. |
+| `title(text, right)` / `title` | A reversed title bar on a cleared screen; without arguments the home one. |
+| `rule`, `rule_line` | A dim rule written, or as a line for a list of lines. |
+| `page(heading, lines, right:, wait:, room:, numbers:)` | Lines a screenful at a time under a title. |
+| `pick(heading, items, …) { … }`, `each_pick(heading, items, label:, **options) { \|item\| … }` | A numbered list; `each_pick` again and again until the caller goes back, the title put back after each. |
+| `menu`, `actions`, `choose` | A cursor menu at the cursor, a row of keys, one key of a few. |
+| `ask`, `prompt(label, hint:, text:, max:, mask:)`, `edit` | A line field (`prompt` returns `nil` for an empty answer), the full-screen editor. |
+| `alert(text, color: RD)`, `notice(text)` | Red (or `color`) / green, then a pause. |
+| `confirm?(question)`, `number(label, range)` | y/n; a whole number in a range or `nil`. |
+| `pause`, `key` | Wait for a key; read one (`BBS::Hangup` when the line drops). |
+| `within(title, right) { … }` | Runs the block under a title, then puts the previous title back. |
+| `markdown(text)` | Markdown as lines in the C64 colours, indented. |
+| `qr(url)` | A QR code in the middle of the screen, or an alert when it does not fit. |
+| `loading(text = 'working…', failed: nil) { … }` | Says `text` dimmed, runs the block; with `failed`, a `nil` value or an error ends the command with `fail_with(failed)`. |
+| `fail_with(text)` | `alert(text)`, then `BBS::Abort`. |
+| `report(result, messages)` | The text of `result` in `messages`: green for `:ok`, red otherwise. |
+| `open_door(door)` | Hands the line to a `BBS::Door` and back. |
+| `caller_key` | The key the caller is known by for rate limits. |
+| `make_screen(session)` | Override for a screen of its own class or size (a `BBS::Petscii::Screen` by default). |
+| `each_pick` + `BBS::Abort` | An Abort in an `each_pick` block (`fail_with`, `loading … failed:`) leaves the caller at that list. |
+| `dim`, `bright`, `accent`, `paint(role, text)` | The roles of `BBS::Paint` in the C64 palette (`Face::ROLES`). |
+| `screen`, `session`, `context`, `board` | The screen, the line, the call's context, the domain object. |
+
+---
+
+## 8. Full-screen pages: `BBS::Pages` and `BBS::Page`
+
+A full-screen "page app" for both faces: a stack of `BBS::Page` objects,
+the top one on the screen. The runner reads the keys, gives each to the
+page (and to its own key map after), repaints after it by sending only the
+cells that changed, and runs the timers of `every` while the caller is
+silent.
+
+On a modern terminal a page draws into a `BBS::FrameBuffer` the size of the
+terminal (1-based cells) and the runner writes its `diff`; on a C64 (a
+session in PETSCII mode, or `face: :petscii`) it draws into a
+`BBS::Petscii::Canvas` (0-based) in `charset` and the runner writes the
+canvas's `diff` raw.
+
+```ruby
+class Board < BBS::Page
+  key(:enter, 'd')  { hand_over { dial(board) } }
+  key('b')          { show(Banner.new(board)) }
+  key(:escape, 'q') { back }
+
+  def initialize(board) = @board = board
+
+  def draw(screen)
+    print_lines(screen, [@board.name, '', 'RETURN dials   Q back'], x: 3)
+  end
+end
+
+BBS::Pages.new(session).run(Board.new(board))
+```
+
+### A page
+
+| Method | What it is |
+|---|---|
+| `draw(screen)` | Draws the page on a fresh screen for every repaint: a `FrameBuffer` or a `Petscii::Canvas`. It should only draw. |
+| `enter` | Called when the page comes on top by `push`, `replace` or `reset`. |
+| `resume` | Called when the page is on top again after the one over it went `back`: the place to reload what that one may have changed. |
+| `handle(key)` | Answers a key with the class's key map; returns the binding that took it, `nil` when none did. |
+| `push(page)`, `back`, `replace(page)`, `quit(value)` | Navigation, by the runner. |
+| `show(page) { \|key\| … }` | Shows `page` over this one until the block answers a key with something not `nil` (`false` counts); without a block the first key is the answer. |
+| `read_line(label, text:, max:, hint:)` | Reads a line (a `BBS::Pages::Line`, kept in `pages.line` while it is read, so the screen can draw it); the text on RETURN, `nil` when given up. |
+| `hand_over { … }` | Gives the screen and the keys to the block (a gateway, a banner played as it came); the next repaint is the whole screen. |
+| `redraw(whole: false)` | Repaints now. |
+| `print_lines(frame, lines, x:, y:, limit:, clear:)` | Writes lines of ANSI text into a `FrameBuffer`, one a row. |
+| `session`, `pages` | The line and the runner. |
+
+### Keys and timers: `BBS::Pages::Keymap`
+
+```ruby
+class ListPage < BBS::Page
+  key(:up)        { move(-1) }
+  key('q', 'Q')   { back }
+  key(/\A\d\z/)   { |digit| open(digit.to_i) }
+  every(0.5)      { redraw }
+end
+```
+
+`key(*keys) { |key| … }` binds Symbols (`:up`, `:enter`, `:escape`, see
+`Session#readkey`), one-character Strings (case counts) or Regexps that
+match a String key; the block runs in the instance and can call `pass` to
+leave the key to the next binding. `every(seconds) { … }` runs while the
+page is shown and the caller is silent. Both are inherited, a subclass's
+own keys looked at first. `cursor(row, col)`, called while drawing, says
+where the caller's cursor rests after a repaint.
+
+### The runner
+
+`BBS::Pages.new(session, face: nil, charset: :upper)`: `face` is `:modern`
+or `:petscii` (default `:petscii` on a PETSCII line), `charset` the canvas's
+character set on a C64 (`:upper` or `:lower`). `run(page)` runs from
+`page` until `quit` (returning its value) or until the caller is silent
+past the session's idle time while a timer polls (`nil`); a hang-up raises
+`BBS::Hangup`. `start(page)` and `press(key)` drive it one key at a time,
+for a test. Navigation: `push`, `back` (with one page left, `quit`),
+`replace`, `reset`, `quit`; `page` is the one on top, `stack` all of them.
+
+A subclass is the app around the pages: it draws a frame around them
+(`draw`, calling `super`), takes keys before the page (`handle`), and
+declares keys of its own for the ones no page takes, and timers:
+
+```ruby
+class Gate < BBS::Pages
+  key('q') { quit }
+  every(0.5) { redraw }
+
+  def draw(canvas)
+    canvas.text(0, 1, Time.now.strftime('%H:%M'), :grey)
+    super
+  end
+end
+
+Gate.new(session, charset: :lower).run(Home.new)
+```
+
+`BBS.board` takes as a face any class made with `new(session, context,
+board)` that has a `run`, so a page app is a face through a small class:
+
+```ruby
+class GateFace
+  def initialize(session, _context, board) = (@session, @board = session, board)
+
+  def run = Gate.new(@session, charset: :lower).run(Home.new(@board))
+end
+
+BBS.board 'Gate BBS', GateBBS do
+  modern  GateFace
+  petscii GateFace
+end
+```
+
+---
+
+## 9. Widgets
 
 All widgets inherit from `BBS::Widget` (see `bbs/widget.rb`). They have:
 
@@ -441,7 +952,7 @@ Up/Down/PgUp/PgDn/Home/End scrolls. Built-in right-side scrollbar.
 `#focusable_descendants`, `#hit_test(x, y)`. Theme propagates to children. A
 `BBS::Window` is the container a board lays its widgets out in.
 
-## 7. Windows
+## 10. Windows
 
 `BBS::Window < Container` — a top-level container with title bar, shadow,
 close gadget, and its own `FocusManager`. Windows stack; the top one is the
@@ -449,18 +960,21 @@ active one and gets the input first, and the caller can switch between them
 (see *Switching windows* below).
 
 ```ruby
-win = BBS::Window.new(title: ' Inbox ', modal: false,
+win = BBS::Window.new(title: 'Inbox', modal: false,
                       shadow: true, close_key: :escape,
                       on_close: ->(w) { puts 'closing' })
 win.layout(10, 5, 60, 18)
 win.add(some_widget)
 win.reset_focus
-app.open_window(win)
+show(win)                                  # Application#show takes a Window too
 ```
+
+A board usually declares its windows instead (see [§11](#11-declared-windows-window-name-type-and-bbswindows));
+`BBS::Window` is for a window of its own kind.
 
 | Field | Default | Description |
 |---|---|---|
-| `title` | `nil` | Centered title in the top border. |
+| `title` | `nil` | Centered title in the top border; plain text, the frame pads it and cuts it to fit. |
 | `modal` | `false` | A modal window (the `Dialogs`) keeps the front until it closes: while one is open, no window switching. The other windows, the `BBS::Windows` types included, can be switched. |
 | `shadow` | `true` | Draw the drop shadow. |
 | `on_close` | `nil` | Called once when the window is closed (by `Application#close_window`); pass `false` to suppress the close gadget. |
@@ -482,7 +996,8 @@ Mouse-clicks elsewhere inside the window focus the hit widget.
 
 ### Maximizing
 
-A window with `maximizable: true` (in the window DSL: `w.maximizable true`)
+A window with `maximizable: true` (a declared window: on by default for
+master/detail, stream and reader; `maximizable true` in the spec for others)
 that is `resizable?` gets a zoom gadget in its top right corner, Turbo Vision
 style: `[↑]` fills the desktop between the menubar and the statusbar
 (`app.desktop_rect`), `[↕]` puts it back. **F5**, **Alt-Enter** and a
@@ -490,7 +1005,7 @@ style: `[↑]` fills the desktop between the menubar and the statusbar
 code and `maximized?` tells. A maximized window stays maximized when the
 terminal is resized.
 
-`resizable?` windows are `MasterDetail`, `Stream`, `Form` (a single textarea
+`resizable?` windows are `MasterDetail`, `Stream`, `Reader`, `Form` (a single textarea
 without `:rows` takes the height left over) and an `Info` with `scroll: true`;
 a static `Info` stays as it is, so `maximizable` has no effect on it. A custom
 window joins in by returning true from `resizable?` and implementing
@@ -537,21 +1052,144 @@ order they were last used, Turbo Vision style:
 
 ---
 
-## 8. Pre-built window types (`BBS::Windows`)
+## 11. Declared windows (`window :name, :type`) and `BBS::Windows`
 
-Higher-level windows you can open imperatively with `.open(app, …)`, or
-register declaratively with the window DSL.
+A board declares its windows in `Application.define` (or in a `BBS::Part`)
+and opens them by name with `show`. The spec block is evaluated in a
+`BBS::WindowSpec`; each attribute takes a value or a block.
 
-### `BBS::Windows::Info`
+```ruby
+module UI::Modern::ArticleWindow
+  extend BBS::Part
+
+  window :article, :master_detail do          # the type is the 2nd argument
+    title      { article.title }              # the extras of `show` are methods
+    list_width { [26, cols / 4].max }         # or 1/3r; a negative height counts from the screen's
+    items      { article.sections }
+    label      :title                         # a Symbol, or a block |item|
+    detail     { |section, width| markdown(section.markdown, width) }   # lines; rubbs wraps long ones
+    meta       { |section| "#{article.url} · CC BY-SA" }
+    on_pick    { |section| read_more(section) }    # Enter on the list
+    action('QR code') { |section| qr article.short_url, title: 'Scan the article' }
+  end
+end
+
+show :article, article: found
+```
+
+### Where the blocks run: `BBS::WindowContext`
+
+A block runs when the window opens (or, for the callbacks, when the caller
+acts) in a `BBS::WindowContext`:
+
+- the application: its helpers, services and methods are called bare
+  (`markdown`, `qr`, `articles`, `cols`);
+- the `extras` of `show` as methods (`show :article, article: a` → `article`);
+- `window` (the window, once open), `selected` (the selected item of a
+  master/detail), `form` (the form whose `on_submit` runs), `close`,
+  `keep` and `error!` (below); `extras` is the Hash, `app` the application.
+
+An extra may not be named like a method of the application: `show(:x,
+rows: 3)` raises `ArgumentError` ("window extras named like application
+methods"), so a helper never hides an extra or the other way round. Name it
+otherwise (`line_count:`).
+
+### Types and attributes
+
+| Type | Window | Attributes |
+|---|---|---|
+| `:info` | `BBS::Windows::Info`: text and buttons | `body`, `scroll`, `padding`, `button` |
+| `:form` | `BBS::Windows::Form`: fields and Save/Cancel | `field`, `hint`, `prefill`, `on_submit`, `on_cancel`, `errors`, `submit_label`, `cancel_label` |
+| `:master_detail` | `BBS::Windows::MasterDetail`: a list and the picked item | `items`, `label`, `detail`, `meta`, `on_pick`, `action`, `list_width`, `empty`, `close_button`, `close_label` |
+| `:stream` | `BBS::Windows::Stream`: a log and an input line | `lines`, `placeholder`, `buffer_size`, `on_submit`, `on_poll`, `close_button`, `close_label` |
+| `:reader` | `BBS::Windows::Reader`: a long text to page through | `lines`, `where`, `max_width`, `action` |
+
+Every type takes:
+
+| Attribute | Notes |
+|---|---|
+| `title` | Plain text; the frame pads it and cuts it. |
+| `width`, `height` | Columns and rows; a negative number counts back from the screen's size (`height -8` = rows − 8). |
+| `maximizable` | On by default for `:master_detail`, `:stream` and `:reader`; `maximizable false` turns it off, `maximizable true` turns it on for the others. |
+| `accent` | A Hash of frame style roles (`window_border`, `window_title`, `window_title_focused`) in other colours than the theme's: the window's frame wears them, its widgets keep the theme. Marks which part of the board a window belongs to. |
+
+The attributes of each type:
+
+| Attribute | Type | Value or block |
+|---|---|---|
+| `body` | info | Body items (see `Windows::Info` below). |
+| `scroll` | info | `true`: the whole body in one scroll view. |
+| `padding` | info | `{ sides:, top:, bottom: }`. |
+| `button(label, **opts) { … }` | info | A button in place of OK. The block runs, then the window closes unless the block calls `keep`. |
+| `field(key, **opts)` | form | A field descriptor (`label`, `type`, `max_length`, `rows`, `password`, …); a `value` block is evaluated when the form opens; a field without a value takes it from `prefill`. |
+| `prefill { … }` | form | A Hash of field values. |
+| `hint`, `submit_label`, `cancel_label` | form | |
+| `on_submit { \|values\| … }` | form | Runs on Save. Returning a key of `errors` shows its message and keeps the form open; `error!('…')` does the same with any text; `keep` keeps it open; otherwise it closes. |
+| `errors(key: 'message', …)` | form | The messages of the refusals `on_submit` may return. |
+| `on_cancel { … }` | form | |
+| `items { … }` | master_detail | The list. |
+| `label` | master_detail | How an item is named: a Symbol (a method of the item) or a block `\|item\|`. |
+| `detail { \|item, width\| … }` | master_detail | The lines of the picked item; rubbs wraps the long ones. |
+| `meta { \|item\| … }` / `meta 'text'` | master_detail | The line under the detail. |
+| `maximized true` | all | Opens the window full screen. |
+| `on_pick { \|item\| … }` | master_detail | Enter (or a double click) on the list. |
+| `action(label, **opts) { \|item\| … }` | master_detail | A button under the list, run with the selected item (not on an empty list; a block without a parameter runs always); the window stays open unless the block calls `close`. `opts` are those of `ButtonBar` (`align`, `key`). An `&` is put before the label when it has none, so its first letter is the hotkey. |
+| `list_width` | master_detail | Columns, or a Rational of the screen's width (`1/3r`). |
+| `empty` | master_detail | The text of an empty list. |
+| `lines` | stream | The lines it starts with. |
+| `placeholder`, `buffer_size` | stream | The input's placeholder; the most lines kept (500). |
+| `on_submit { \|text\| … }` | stream | Enter on a non-empty line; the input is cleared after it. |
+| `on_poll { … }` | stream | Every second while idle: an Array of new lines (or `nil`). |
+| `lines { \|width\| … }` | reader | The text, made for the width it gets (again when the width changes), or an Array. |
+| `where { \|view\| … }` | reader | The position line under the text (default "line a/b · n%"); `view` is the `Widgets::ScrollView`. |
+| `max_width` | reader | The widest the window gets. |
+| `action(label) { \|reader\| … }` | reader | A button; the block gets the reader (`reader.jump(index)`, `reader.lines = …`, `reader.reload`). |
+| `on_key(left: ->(reader, key) { … })` | reader | The reader's own keys, before the text sees them. |
+
+```ruby
+window :compose, :form do
+  title  { "Post to #{board.title}" }
+  width  70
+  field  :body, type: :textarea, max_length: 1000
+  prefill { { body: draft&.body || '' } }
+  errors empty: 'Write something first.', too_fast: 'One post a minute, please.'
+  on_submit { |values| posts.add(board.id, caller_key, values[:body]) }   # :ok closes, :empty / :too_fast refuse
+end
+
+window :rfc, :reader do
+  title     { "#{rfc.name}: #{rfc.title}" }
+  max_width 78
+  lines     { |width| styled(rfc, width) }
+  action('Contents') { |reader| contents(reader, rfc) }
+end
+
+window :about, :info do
+  title  'About'
+  body   [{ text: 'News BBS', style: :accent, align: :center }, :spacer, ABOUT]
+  button('Show the QR code') { qr 'https://example.org' }
+  button('Close')
+end
+```
+
+Block attributes are evaluated each time the window opens, so they reflect
+the current extras and state.
+
+### `BBS::Windows`: the window classes
+
+The declared windows are these classes. A board can also open one
+imperatively with `.open(app, …)` from a helper, for a window that is not
+worth a name; the options are those of each class's RDoc.
+
+#### `BBS::Windows::Info`
 
 Centered info / splash / message dialog.
 
 ```ruby
 BBS::Windows::Info.open(app,
-  title: ' Welcome ',
+  title: 'Welcome',
   width: 70, height: 20,
   body: [
-    { text: 'rubbs v1.0', style: :accent, align: :center },
+    { text: 'rubbs v2.0', style: :accent, align: :center },
     :spacer,
     :rule,
     { kv: [['Online', '5'], ['Ruby', RUBY_VERSION]] },
@@ -574,101 +1212,44 @@ Body item types: `String` (label), `:spacer`/`''`/`nil` (blank row), `:rule`
 Default buttons: a single centered `[ &Close ]` if `buttons:` is `nil`.
 Pass `buttons: []` for none.
 
-### `BBS::Windows::Form`
+#### `BBS::Windows::Form`
 
-Labeled multi-row form with inline validation.
+Labeled multi-row form with inline validation. Field types: `:input`
+(default, single-line `TextInput`), `:textarea` (multi-line, label ignored;
+one without `:rows` takes the height left over), `:checkbox` (label part of
+widget). In the form: `values` (the field values as a Hash), `error('msg')`
+(the status line red), `info('msg')` (the status line in the input label
+colour; `info('')` wipes it). Buttons: a `[ &Save ]` / `[ &Cancel ]` pair
+by default (`submit_label`, `cancel_label`).
 
-```ruby
-BBS::Windows::Form.open(app,
-  title: ' Profile ',
-  hint:  'Edit your info:',
-  fields: [
-    { key: :name,    label: 'Name',     value: 'Joe', max_length: 80 },
-    { key: :pw,      label: 'Password', value: '',    password: true },
-    { key: :bio,     label: 'Bio',      type: :textarea, rows: 8 },
-    { key: :public,  label: 'Public',   type: :checkbox, value: false },
-  ],
-  on_submit: ->(values, form) {
-    return (form.error('Name is required.'); :keep) if values[:name].empty?
-    User.save(values); :close
-  },
-  on_cancel: ->(form) { … })
-```
+#### `BBS::Windows::MasterDetail`
 
-Field types: `:input` (default, single-line `TextInput`), `:textarea`
-(multi-line, label ignored), `:checkbox` (label part of widget).
+Two-pane browser: ListBox on the left, ScrollView on the right. The detail
+is drawn whenever the selection changes. A `[ &Close ]` button is appended
+unless `close_button: false`; the actions render to the left of it.
+`replace_items(items, title: nil)` swaps the list in place and selects the
+first item (a file browser changing folders); `reload_detail(keep_scroll:
+true)` redraws the detail after its data changed (`reload_details` on the
+application does it for every open one). Exposes `list_widget`,
+`detail_view`, `meta_label`.
 
-Form methods callable from `on_submit`:
+#### `BBS::Windows::Stream`
 
-- `form.values` — current field values as a Hash.
-- `form.error('msg')` — paint the status line red.
-- `form.info('msg')` — paint the status line cyan-ish (input_label color).
-- `form.info('')` — wipe the status line.
+Scrolling history pane + single-line input + idle-tick polling, for chat and
+log views. `buffer_size` caps the in-memory history (older lines drop off).
+Exposes `history` (ScrollView) and `input` (TextInput).
 
-Returning `:keep` from `on_submit` leaves the window open; any other return
-closes it.
+#### `BBS::Windows::Reader`
 
-Buttons: a `[ &Save ]` / `[ &Cancel ]` pair by default. Override labels with
-`submit_label:` / `cancel_label:`.
+A long text to read: its lines in a scroll view (arrows, PgUp/PgDn,
+Home/End, the wheel), a line under it that says where the reader is, and
+buttons (Close added). As wide as the desktop allows up to `max_width`, as
+tall as the desktop less a row above and below; resizable and maximizable.
+`jump(index)` moves the text so that line `index` (0-based) is the second
+row; `lines = new_lines` replaces the text and goes to the top; `view` is
+the scroll view.
 
-### `BBS::Windows::MasterDetail`
-
-Two-pane browser: ListBox on the left, ScrollView on the right.
-
-```ruby
-BBS::Windows::MasterDetail.open(app,
-  title: ' Game Catalog ',
-  items: services[:games].all,
-  item_label:    ->(g)     { g.title },
-  render_detail: ->(g, w)  { GameCard.lines(g, w) },
-  bottom_meta:   ->(g)     { "#{g.players} players  #{g.year}" },
-  list_width: 30,
-  empty_message: '  (no games)',
-  actions: [
-    { label: '&New', on_click: ->(win) { … } },
-  ],
-  close_label: '&Close')
-```
-
-`render_detail` is called whenever the selection changes; it receives
-`(item, inner_width)` and returns an Array of ANSI-styled strings. Returning
-nil shows nothing.
-
-A `[ &Close ]` button is appended unless `close_button: false`. Other
-`actions:` render to the left of close.
-
-`on_activate: ->(item, window) { … }` runs when the caller presses Enter on a
-list item. `replace_items(items, title: nil)` swaps the list in place and
-selects the first item — a file browser changing folders. In the window DSL
-the block is `w.on_activate { |item, window, ctx| … }`.
-
-Exposes `list_widget`, `detail_view`, `meta_label` for live manipulation.
-
-### `BBS::Windows::Stream`
-
-Scrolling history pane + single-line input + idle-tick polling. Built for
-chat / log views.
-
-```ruby
-BBS::Windows::Stream.open(app,
-  title: ' Live Chat ',
-  initial_lines: chat.history.map { format_line(_1) },
-  placeholder: 'Type and press Enter…',
-  buffer_size: 500,
-  on_submit: ->(text, app) { chat.send(text); :keep },
-  on_poll:   ->(app)       { chat.drain(app.session_id) })
-```
-
-`on_submit` is called when the user hits Enter on a non-empty line. Returning
-`:keep` keeps the input as-is; otherwise the input is cleared.
-
-`on_poll` is invoked from the 1 Hz idle tick. Return an Array of new lines
-to append (or nil/[]).
-
-`buffer_size:` caps the in-memory history (older lines drop off). Exposes
-`history` (ScrollView) and `input` (TextInput).
-
-### `BBS::Windows::ButtonBar`
+#### `BBS::Windows::ButtonBar`
 
 Layout helper used by the other window types. Pass it a window, app and an
 Array of button descriptors:
@@ -686,71 +1267,20 @@ BBS::Windows::ButtonBar.attach(window, app, [
 Returns `{ widgets:, primary:, by_key: }`. Default alignment is `:center` for
 a single button, `:right` otherwise. `cancel: true` is informational (ESC
 already closes via `Window#close_key`). `keep_open: true` keeps the window
-open after click; otherwise it closes unless `on_click` returns `:keep`.
-
-### Window DSL — `window :name, type: :form do |w| … end`
-
-Inside `Application.define`, register a `WindowSpec` keyed by a name. Block
-callbacks receive a `ctx` hash combining the app's services, app context,
-and any extras passed to `open_window`.
-
-```ruby
-MAIN = BBS::Application.define do
-  services boards: BoardService.new
-
-  window :compose, type: :form do |w|
-    w.title  { |ctx| " Post to #{ctx[:board].title} " }
-    w.width  70
-    w.field  :body, type: :textarea, max_length: 1000
-    w.prefill { |ctx| { body: ctx[:draft]&.body || '' } }
-    w.on_submit do |values, form, ctx|
-      case ctx[:boards].post(ctx[:board].id, ctx[:username], values[:body])
-      when :empty then form.error('Message cannot be empty.'); :keep
-      else :close
-      end
-    end
-  end
-end
-
-# Later:
-app.open_window(:compose, board: current_board)
-```
-
-DSL inside the block:
-
-| Attr / method | Applies to | Notes |
-|---|---|---|
-| `title`, `width`, `height`, `padding` | all | Scalar or `{ |ctx| ... }` block. |
-| `accent` | all | A Hash of frame style roles (`window_border`, `window_title`, `window_title_focused`) in other colours than the theme's: the window's frame wears them, its widgets keep the theme. Mark which part of the board a window belongs to. |
-| `body` | info | Array of body items. |
-| `scroll`, `close_button`, `close_label` | info, master_detail, stream | |
-| `button(**opts) { |win, ctx| ... }` | info | Custom buttons list. |
-| `field key, **opts` | form | Field descriptor. |
-| `prefill { |ctx| {...} }` | form | Pre-populate fields. |
-| `hint`, `submit_label`, `cancel_label` | form | |
-| `on_submit { |values, form, ctx| ... }` | form, stream | |
-| `on_cancel { |form, ctx| ... }` | form | |
-| `items { |ctx| ... }`, `item_label { |item, ctx| ... }` | master_detail | |
-| `render_detail { |item, width, ctx| ... }` | master_detail | |
-| `bottom_meta { |item, ctx| ... }` | master_detail | |
-| `list_width`, `empty_message` | master_detail | |
-| `action(**opts) { |win, ctx| ... }` | master_detail | Extra button. |
-| `initial_lines { |ctx| ... }`, `placeholder`, `buffer_size` | stream | |
-| `on_poll { |app, ctx| ... }` | stream | |
-
-Block attrs that return blocks at the DSL level (`title { |ctx| … }`) are
-re-evaluated each time the window opens, so they reflect the current `ctx`.
-
-Open with `app.open_window(:name, key: value, …)`. Extras flow into `ctx`.
+open after a click; otherwise it closes. The declared windows' `action`s
+are `keep_open` buttons.
 
 ---
 
-## 9. Dialogs
+## 12. Dialogs
 
-Quick imperative helpers in `BBS::Dialogs`:
+In an Application the dialogs are its methods: `message(text, title:)`,
+`ask(prompt, title:) { |text| … }`, `confirm(text) { … }` and `loading(text)
+{ … }` (see [§6](#6-the-application-layer)). Underneath are the helpers of
+`BBS::Dialogs`, for code outside an application's blocks:
 
 ```ruby
-BBS::Dialogs.message(app, 'Saved!', title: ' Done ', width: 40)
+BBS::Dialogs.message(app, 'Saved!', title: 'Done', width: 40)
 
 BBS::Dialogs.confirm(app, 'Delete this message?',
   on_yes: -> { Msg.delete(id) },
@@ -763,60 +1293,64 @@ BBS::Dialogs.input(app, prompt: 'New name:', value: '',
 `BBS::Dialogs.centred_window(app, width:, height:, title:)` is the underlying
 helper to build a centered, modal `Window`.
 
-For richer windows prefer the `BBS::Windows::*` window types
-described in [§9](#9-pre-built-window-types-bbswindows).
+For richer windows declare a window
+(see [§11](#11-declared-windows-window-name-type-and-bbswindows)).
 
 ---
 
-## 10. Menubar, Statusbar, Focus
+## 13. Menubar, Statusbar, Focus
+
+The menubar and the statusbar of an Application are written from its
+commands: a command is said once, and its menu item, its key and its hint
+on the statusbar come from it.
 
 ### `BBS::Menubar`
 
 ```ruby
-menubar do
-  menu '&File' do
-    item '&Open',    shortcut: 'Ctrl-O' do … end
-    item '&Save',    shortcut: 'Ctrl-S', enabled: -> { current_doc } do … end
-    separator
-    item 'E&xit' do :halt end
-  end
-  menu '&Help' do
-    item '&About' do BBS::Dialogs.message(self, 'rubbs') end
-  end
+command(:open, 'Open…', key: 'F3') { open_file }
+command(:save, 'Save',  key: 'F2', about: 'Write the file to disk') { save }
+command(:find, 'Find…', key: 'F7') { find }
+menu 'File', :open, :save, :separator, :log_off
+menu('Edit') do
+  item('Undo', enabled: -> { history.any? }) { undo }
+  separator
+  command :find
 end
+help about: 'My editor, a rubbs board.'
 ```
 
-- Ampersand in label marks the hotkey letter (Alt+letter from anywhere, plain
-  letter while the menu is open).
-- `shortcut:` is informational — it's drawn on the right of the menu item.
-  Bind the actual shortcut via a `status_hint` or a custom key handler.
-- `hint:` is a line about the item: while the item is highlighted, the
-  statusbar shows it in place of its hints (`item '&News', hint: 'The latest
-  releases' do … end`). A door's `hint:` (see `door`) does the same for its
-  item in `doors`.
-- F10 opens the first menu; ESC closes.
-- Block `&block` runs in the Application's context (call `open_window`,
-  `cols`, etc.). Returning `:halt` ends the session.
+- Each `menu` adds a menu; `help` adds the Help menu last (About, the other
+  pages, Keys).
+- An `&` in a label marks the hotkey letter (Alt+letter from anywhere, plain
+  letter while the menu is open). A label without one gets one: the first
+  letter not taken in that menu. A menu's own label gets one the same way.
+- A command's `key` is drawn on the right of its item and works anywhere.
+- A command's `about` (an item's `hint:`) is a line about it: while the item
+  is highlighted, the statusbar shows it in place of its hints. A door's
+  `hint:` does the same for its item under `doors`.
+- `enabled:` takes a block, evaluated in the application each time the menu
+  opens.
+- F10 (the built-in `:menu` command) opens the first menu; Esc closes.
+- The blocks run in the application. Returning `:halt` (or calling
+  `log_off`) ends the face.
 
 When the menubar is open, all events are routed to it first — its keys cannot
 leak through to underlying windows.
 
 ### `BBS::Statusbar`
 
-```ruby
-status_hint('F10', 'Menu')   { menubar.open(0) }
-status_hint('F1',  'Help')   { announce 'No help yet' }
-status_hint('Alt-X', 'Quit') { :halt }
-```
+Every command with a `key` shows its hint on the statusbar, left-aligned,
+the built-in ones after the board's (`F10 Menu`, `Alt-X Bye`); `hint:
+false` keeps the key working without showing it. The right end is the
+`status` block's text and the clock, refreshed every second
+(`refresh_status` does it at once).
 
-Renders left-aligned hints. While `statusbar.message` is set, the bar shows
-that line instead, across its whole width; the Application sets it to the hint
-of the highlighted menu item (`Menubar#selected_hint`) on every render.
-Optional `statusbar.right_text = '...'` for a right-aligned indicator (set after build via `app.statusbar.right_text=`, in
-`init` and again in `on_tick` for a clock).
-Mouse-click on a hint fires its handler. Key matching is forgiving:
-`F10` → `:f10`, `Alt-X` → `:alt_x`, `Esc` → `:escape`, `Tab` → `:tab`, anything
-else uses case-insensitive name match.
+While `statusbar.message` is set, the bar shows that line instead, across
+its whole width; the Application sets it to the hint of the highlighted menu
+item (`Menubar#selected_hint`) on every render. A mouse click on a hint
+runs its command. Key matching is forgiving: `F10` → `:f10`, `Alt-X` →
+`:alt_x`, `Esc` → `:escape`, `Tab` → `:tab`, anything else uses
+case-insensitive name match.
 
 ### `BBS::FocusManager`
 
@@ -832,7 +1366,7 @@ Key behavior:
 
 ---
 
-## 11. Theming and the palette
+## 14. Theming, the palette and `BBS::Style`
 
 A `BBS::Theme` maps style roles to ANSI SGR strings. The presets are data,
 one Hash each in `BBS::Theme::PRESETS`, and `BBS::Theme.fetch(name)` builds
@@ -870,7 +1404,7 @@ role is refused):
 
 ```ruby
 # 1. Use a preset
-theme BBS::Theme.synchronet
+theme :synchronet
 
 # 2. Override per-key with the DSL block
 theme :nortoncommander do
@@ -902,9 +1436,36 @@ them: `BBS::Selector::COLORS` (`text key bar heading about hint`), the
 Flow's `FlowRunner::STYLES`, a FakeOS's `colors`. On a canvas the same roles
 turn into C64 codes (`BBS::Petscii::Canvas.color(YE) == Canvas::YELLOW`).
 
+The roles of `BBS::Paint` (`dim`, `bright`, `accent`, `paint(:error, s)`)
+are the same words on both faces: an Application paints with its theme's
+`text_dim`, `text_bright`, `accent` …, a `Petscii::Face` with the C64
+palette (`Petscii::Face::ROLES`), so a line built with them reads the same
+on either.
+
+### `BBS::Style`: SGR by colour
+
+A board names its own colours once by what they are, not by their escape
+sequence, and writes the names. A style is a frozen String, so it goes into
+text as it is and into a `BBS::FrameBuffer` as an `sgr:`.
+
+```ruby
+ACCENT = BBS::Style[fg: 84]                       # "\e[38;5;84m"
+LIT    = BBS::Style[fg: 84, bg: 16, bold: true]
+WARN   = BBS::Style[fg: :bright_red, bold: true]  # "\e[1;91m"
+SKY    = BBS::Style[fg: [120, 180, 255]]          # true colour
+session.write(BBS::Style.paint(ACCENT, 'Online')) # the style, the text, BBS::Style::RESET
+```
+
+`fg:` and `bg:` take an xterm-256 index (0–255), a name (`black red green
+yellow blue magenta cyan white default`, `bright_` before it for the
+bright one) or `[r, g, b]`; the attributes are `bold faint italic underline
+blink reverse`, each `true` when wanted. An unknown colour or attribute
+raises `ArgumentError`. A FakeOS's `colors` take the same names
+(see [§20](#20-doors-bbsdoor)).
+
 ---
 
-## 12. FrameBuffer & ANSI text
+## 15. FrameBuffer & ANSI text
 
 `BBS::FrameBuffer` is the offscreen grid an Application draws into. Cells
 hold `(char, sgr)` pairs; `diff` computes the minimal ANSI byte stream to
@@ -942,11 +1503,13 @@ The one set of ANSI text helpers of rubbs (all built on `BBS::Ansi::CSI_RE`):
 
 ---
 
-## 13. Markdown renderer
+## 16. Markdown renderer
 
 `BBS::Markdown.to_lines(text, width:, theme:)` → Array of ANSI strings,
 one per terminal line. Feed it into a `BBS::Widgets::ScrollView` or an
-`Info` window with `scroll: true`.
+`Info` window with `scroll: true`. In an Application `markdown(text, width)`
+renders in its theme (a master/detail's `detail` block returns it); in a
+`Petscii::Face` `markdown(text)` renders in the C64 colours, indented.
 
 Supports:
 
@@ -967,7 +1530,7 @@ background.
 
 ---
 
-## 14. Banner & ERB screens
+## 17. Banner & ERB screens
 
 ### `BBS::Banner`
 
@@ -985,7 +1548,7 @@ The plain variant draws a box-drawing banner; the big variant uses the
 For `Flow#screen :name, **vars`:
 
 ```ruby
-BBS.configure { |c| c.screens_dir = 'screens' }
+WELCOME = BBS::Flow.define(screens_dir: 'screens') { screen :welcome }
 
 # screens/welcome.erb
 <%= clr %><%= banner 'Welcome' %>
@@ -997,7 +1560,7 @@ The ERB context exposes color helpers (`green`, `yellow`, `cyan`, `white`,
 and `big_banner(text, font:)`. Instance variables are populated from
 `vars` (resolved against `@ctx` if the value is a Symbol).
 
-## 15. Persistence and shared blocks (`Store`, `SQLite`, `HTTP`, `Cache`, `RateLimit`, `Text`)
+## 18. Persistence and shared blocks (`Store`, `SQLite`, `Snapshot`, `HTTP`, `Cache`, `RateLimit`, `Text`, `Nodes`)
 
 The parts every content board needs, so a board writes none of them by hand.
 
@@ -1050,6 +1613,39 @@ USERS.delete(sid)
 - Headers `session_id` and `timestamp` are filled automatically when present;
   a header added later becomes a new column.
 - Values are cleaned with `BBS::Text.clean`; `find` / `all` return Hashes.
+
+A domain object opens its SQLite files with `database(path, …)`
+([§3](#3-the-board-bbsboard-and-bbsdomain)), migrated in one call.
+
+### `BBS::Snapshot`
+
+A catalog kept as one gzipped JSON file and held in memory whole: the seed
+that ships with the board, the fresher copy a refresh writes into `data/`,
+whichever is newer read at start, and a new one swapped in at once when a
+refresh lands. The block turns the records (a Hash) into what the board
+reads.
+
+```ruby
+CATALOG = BBS::Snapshot.new(seed: 'config/catalog.json.gz', path: 'data/catalog.json.gz',
+                            source: 'Wikidata (CC0 1.0)') do |records|
+  records['series'].map { |r| SeriesModel.from_record(r) }
+end
+CATALOG.value                                   # what the block made of the newest records
+CATALOG.generated_at                            # when those were fetched
+CATALOG.replace(fresh_records)                  # written to path, swapped in
+CATALOG.refresh_every(3600, ttl: 7 * 86_400) { CatalogImport.fetch }
+```
+
+- A file that cannot be read is logged and passed over; with neither, the
+  value is the block's of an empty Hash (`generated_at` is
+  `BBS::Snapshot::NEVER`).
+- `replace(records)` writes the file atomically (`Snapshot.write(path,
+  records, at, source:)`, which a board's import tool uses for the seed)
+  and raises when it cannot; the old value stays then.
+- `refresh_every(every, ttl:) { … }` checks every `every` seconds in a
+  `BBS.background` thread and fetches with the block when the records are
+  older than `ttl`; a block that answers `nil` (or empty) or raises leaves
+  the old records, and the error is logged. `age` is their age in seconds.
 
 ### `BBS::HTTP`
 
@@ -1106,13 +1702,13 @@ BBS.background('catalog', every: 3600) { CATALOG.refresh(:all) { repository.load
 
 ```ruby
 TIPS = BBS::RateLimit.new(limit: 3, per: 3600)
-key  = BBS::RateLimit.caller_key(session)
+key  = session.caller_key                # caller_key in an Application or a Petscii::Face
 TIPS.allow?(key)   # => true, and counted; false when over the limit
 TIPS.wait(key)     # => seconds until the next event is allowed (0.0 now)
 ```
 
 A sliding window per key, thread-safe; quiet keys are forgotten.
-`caller_key(session)` is the caller's IP address on the internet, and
+`BBS::RateLimit.caller_key(session)` (`session.caller_key`) is the caller's IP address on the internet, and
 `line:<session id>` behind a local proxy (bbs-web), whose address is shared.
 
 - Several limits at once (the caller's and the whole board's) are checked
@@ -1209,15 +1805,23 @@ zone go around the code (`quiet:`). A text that does not fit the room
 raises `BBS::QR::TooLong` (an `ArgumentError`): say so, and show the address
 as text.
 
-```ruby
-# A C64 screen (BBS::Petscii::Screen)
-screen.title('SCAN THE LINK')
-BBS::QR.petscii(item.link).each { |line| screen.puts(" #{line}") }
-screen.pause
+The faces draw one with a word, sized to the screen and with the
+`TooLong` case handled:
 
-# A window of a modern board
-BBS::Windows::Info.open(app, title: ' Scan me ', width: 46,
-                             body: BBS::QR.ansi(item.link, width: 42, height: 20))
+```ruby
+# A Petscii::Face (or a BBS::Petscii::Screen): centred, or an alert when it does not fit
+title('SCAN THE LINK')
+pause if qr(item.link)
+
+# An Application: a window as big as the screen allows
+qr item.link, title: 'Scan me'
+```
+
+Underneath:
+
+```ruby
+BBS::QR.petscii(item.link).each { |line| screen.puts(" #{line}") }
+BBS::QR.ansi(item.link, width: 42, height: 20)   # lines for a window body
 ```
 
 `BBS::QR.modules(text, level: :l, max_version: 40)` is the bare matrix, rows
@@ -1238,9 +1842,21 @@ of `true` for a dark module, for a drawing of a board's own.
 The frame buffer stores no control character either, so text from a service
 cannot move or restyle the caller's screen.
 
+### `BBS::Nodes`
+
+The node numbers of a board: each call gets the lowest number no other call
+has, for the length of the call, the way a multi-line BBS showed "Node 2".
+Thread-safe; one instance is shared by the calls it counts.
+
+```ruby
+NODES = BBS::Nodes.new
+NODES.take { |node| run_call(node) }   # the number is free again when the block ends, however it ends
+NODES.taken                            # => [1, 3], lowest first
+```
+
 ---
 
-## 16. AI characters (`BBS::AI`)
+## 19. AI characters (`BBS::AI`)
 
 A character a caller can talk to: a persona read from a YAML file, a small
 model behind any OpenAI-compatible chat endpoint (llama.cpp's `llama-server`,
@@ -1298,7 +1914,7 @@ fallback:                  # canned replies, tried top to bottom
 
 ---
 
-## 17. Doors (`BBS::Door`)
+## 20. Doors (`BBS::Door`)
 
 A door is a program the caller steps into from the BBS, as in the doors of the
 old boards: the BBS hands the telnet line over, the program talks to the
@@ -1308,30 +1924,30 @@ is a `BBS::FakeOS` definition (see the comment in `bbs/fake_os.rb`), a
 
 ```ruby
 APP = BBS::Application.define do
-  door :sermo, Sermo::OS,                       label: '&SERMO'
-  door :dice,  ->(session, ctx) { DiceGame.new(session).play }, label: '&Dice'
+  door :sermo, Sermo::OS, label: 'SERMO', hint: 'A machine that talks back'
+  door :dice,  ->(session, ctx) { DiceGame.new(session).play }, label: 'Dice'
 
-  menubar do
-    menu '&Doors' do
-      doors                                     # one item per declared door
-    end
-  end
-
-  status_hint('F5', 'SERMO') { open_door(:sermo) }
+  command(:sermo, 'SERMO', key: 'F5') { open_door(:sermo) }
+  menu 'Doors', :doors                          # one item per declared door
 end
 
-BBS.config.flow = BBS::Flow.define do
-  ask :username, prompt: 'Name'
-  call do |ctx, runner|
-    APP.run(session: runner.session, session_id: ctx[:session_id], context: ctx)
-    nil
-  end
+BBS.board 'Door BBS', DoorBBS do
+  modern { ask :username, prompt: 'Name'; app APP }
 end
 ```
 
 - `open_door(:name)` ends the application with `:halt` and leaves the door in
-  `context[:door]`. `APP.run` then runs the door and builds the application
+  `context[:door]`. The application's run (`Builder#run`, what `BBS.board`
+  and the `app` step call) then runs the door and builds the application
   again; a plain `APP.build(...).run` would only end.
+- A `Petscii::Face` steps through a door with `open_door(door)`, a
+  `BBS::Door` it holds: the line goes to the program and comes back to the
+  face.
+- `BBS::Door.new(name, program, label:, hint:, about:, petscii:)`: `label`
+  is its menu item (default the name in capitals), `hint` a line for the
+  statusbar while the item is highlighted, `about` a longer text for a list
+  of doors, `petscii` the program a PETSCII line gets instead of `program`
+  (a version drawn for 40 columns), `nil` for the same one.
 - `Door#run(session, context)` clears the screen and switches mouse reporting
   off for the program, and switches it back on (if `BBS.config.mouse`) when it
   returns. It can be used without an Application. An exception in the program
@@ -1345,6 +1961,10 @@ end
   cannot overwrite the BBS's keys (`:username`, …). A flow has no exit command,
   so when it ends the door asks for ENTER before handing the line back. Give
   the flow its own `screens_dir` when it comes with screens.
+- A FakeOS names its colours by role with `colors`: each a colour name or
+  an xterm-256 index (`BBS::Style`, the text colour), a Hash of
+  `BBS::Style[]` options or an SGR String:
+  `colors text: :green, accent: :bright_green, dim: { fg: :green, faint: true }`.
 - A FakeOS with a coloured screen sets `colors base:`: every reset returns to
   it and `cls` fills the screen with it, so a background survives the prompt,
   the caller's echo and new lines. Give each colour role the same background,
@@ -1476,9 +2096,32 @@ end
   gives up meanwhile, and two CANs from the terminal cancel at any time. A
   block goes again on a NAK or 20 s of silence, at most 10 times.
 
+### One call for either protocol (`BBS::Transfer`)
+
+A file sent by the protocol the caller's terminal receives with, and what
+to tell the caller before and after. XMODEM carries no file name, so the
+terminal asks for one: `start` says which.
+
+```ruby
+protocol = :xmodem_1k                                  # a key of BBS::Transfer::PROTOCOLS
+say(BBS::Transfer.start(protocol, 'GAME.PRG', data.bytesize))
+result = BBS::Transfer.send(session, protocol, 'GAME.PRG', data)
+say(BBS::Transfer.result(result, protocol, 'GAME.PRG'))
+```
+
+- `PROTOCOLS` is `{ zmodem: 'ZMODEM', xmodem_1k: 'XMODEM-1K', xmodem:
+  'XMODEM' }`; `label(protocol)` is the name.
+- `send(session, protocol, name, data)` returns `:ok`, `:cancelled` or
+  `:timeout`, and raises `BBS::Hangup` when the line drops.
+- `start(protocol, name, size, save_as: name)` is the sentence before the
+  transfer (for XMODEM: start the download and save it as `save_as`);
+  `result(result, protocol, name)` the one after it (for XMODEM: the file
+  can be longer by up to a block).
+- In an Application, run it inside `with_line`.
+
 ---
 
-## 18. Telnet, sessions & input model
+## 21. Telnet, sessions & input model
 
 ### `BBS::Session`
 
@@ -1498,7 +2141,14 @@ session.enable_mouse / disable_mouse
 session.settle(timeout: 1.5) # wait for the telnet answers (NAWS), drop typeahead; self or nil
 session.petscii!         # from here on the line speaks PETSCII to a C64
 session.petscii?
+session.caller_key       # the key the caller is known by for rate limits (BBS::RateLimit.caller_key)
+session.hand_over { |s| … }  # lend the line: mouse off, screen cleared (modern), the mouse back after
 ```
+
+`hand_over` is what an Application's `with_line` and a gateway or file
+transfer use; it returns the block's value. `readkey` returns `nil` when
+the caller has gone; the screens, faces and pages raise `BBS::Hangup` (an
+`IOError`) for it, and the flow ends the call quietly.
 
 Telnet options negotiated on connect: `SGA` (suppress go-ahead), `ECHO`
 (server-side echo), `NAWS` (terminal size, clamped to 20–255 × 8–100). A line
@@ -1666,25 +2316,19 @@ items = [S.heading("\e[1;32m\e[7m messages \e[27m"),
 S.new(session, items, width: 39, columns: 2, height: 3).run
 ```
 
-### The screen of a line-by-line C64 board (`BBS::Petscii::Screen`)
+### The screen of a line-by-line board (`BBS::Petscii::Screen`)
 
-What every line-by-line C64 board writes for itself: the 40×25 screen of one
-call and the ways such a board talks. The colours are two-letter ANSI
-constants in `BBS::Petscii::Colors` (`WH YE CY LG GR DG LB BL GN RD PU OR`,
-`RV`/`RO` reverse on/off), which the PETSCII line turns into the C64's own.
+What every line-by-line C64 board writes on: the 40×25 screen of one call
+and the ways such a board talks. A `BBS::Petscii::Face`
+([§7](#7-the-line-by-line-face-bbspetsciiface)) makes one per call and
+answers its methods itself, so a face writes `title(…)`, `page(…)`,
+`pick(…)` bare; a door or a tool can make one on a session. The colours are
+two-letter ANSI constants in `BBS::Petscii::Colors` (`WH YE CY LG GR DG LB
+BL GN RD PU OR`, `RV`/`RO` reverse on/off), which the PETSCII line turns
+into the C64's own.
 
 ```ruby
-module UI
-  module Petscii
-    BBS::Petscii::Colors.install(self)   # bare WH, LG … in every class nested here
-
-    class Screen < BBS::Petscii::Screen  # or: Screen = BBS::Petscii::Screen
-      def banner(text) = puts(" #{YE}#{text}#{LG}")   # the board's own methods
-    end
-  end
-end
-
-screen = UI::Petscii::Screen.new(runner.session)
+screen = BBS::Petscii::Screen.new(session)
 screen.title('the shelves', 'q: back')          # CLR + reversed title bar
 screen.say('A paragraph, wrapped to 38 columns.', color: GR)
 screen.page('chapter 1', lines, numbers: true)  # 20 lines a page, RETURN for more
@@ -1693,6 +2337,7 @@ key  = screen.actions(%w[r read], %w[q back])       # a row of keys, cursor menu
 name = screen.ask(' name> ', max: 20)               # BBS::Field
 text = screen.edit('', title: 'TIP', single_line: true, max: 200)   # BBS::Editor
 screen.choose(' sure? (y/n) ', %w[y n], back: 'n')  # one key of a few, a prompt
+screen.within('SCAN THE LINK') { screen.pause if screen.qr(url) }   # the title before it comes back
 ```
 
 The screen's menus are `BBS::Selector` configurations: `pick` a numbered
@@ -1701,17 +2346,24 @@ list under a title, `menu` a selector at the cursor, `actions` a row of keys.
 takes `commands:` (`{ 's' => 'search' }`, the key returned) and
 `item_commands:` (`{ 'd' => 'discard' }`, `[key, item]` returned for the lit
 item); both are listed on the hint row. Underneath, `BBS::Selector.new` takes
-`exits:` and `item_exits:` the same way. The
-colour of `say` and `rule` is a keyword (`say(text, color: RD)`).
+`exits:` and `item_exits:` the same way. The colour of `say` and `rule` is a
+keyword (`say(text, color: RD)`).
 
-`Colors.install(mod)` is needed for a namespace module because Ruby looks a
-bare constant up in the lexically enclosing modules, not in what they include;
-a class can simply `include BBS::Petscii::Colors` (the Screen does, so its
-subclasses have the names). On a C64 the screen makes titles, paragraphs and
-list labels `plain` (`BBS::Petscii.plain`: typography and accents become
-ASCII, so a line wraps where it is counted). `Screen.new(session, cols: 80,
-rows: 24)` serves a modern terminal too: there it clears with ANSI and leaves
-the text alone.
+The short sentences (`BBS::Petscii::Screen::Helpers`): `alert(text)` (red,
+then a pause), `notice(text)` (green, then a pause), `prompt(label, hint:,
+text:, max:, mask:)` (a field after a white label and `>`; `nil` when
+empty), `confirm?(question)`, `number(label, range)`, `each_pick(heading,
+items, label:)`, `markdown(text, width:, indent:)` (in `Screen::MARKDOWN`'s
+C64 colours), `qr(text)`, `rule_line`, `within(title, right) { … }` (the
+previous title drawn again after the block). `key` raises `BBS::Hangup`
+when the line drops.
+
+A class that includes `BBS::Petscii::Colors` writes the colours bare; a
+`Petscii::Face` subclass has them as constants. On a C64 the screen makes
+titles, paragraphs and list labels `plain` (`BBS::Petscii.plain`:
+typography and accents become ASCII, so a line wraps where it is counted).
+`Screen.new(session, cols: 80, rows: 24)` serves a modern terminal too:
+there it clears with ANSI and leaves the text alone.
 
 ### Block-font logos, goodbyes, Discord (`BBS::BlockFont`, `BBS::Goodbye`, `BBS::DiscordWebhook`)
 
@@ -1721,20 +2373,38 @@ F.half_blocks('WARP')                                   # 3 rows of ▀▄█ fo
 F.half_blocks('TTG BBS', colors: [YE, OR, RD])           # each row in its colour
 F.petscii('SCRIPTORIUM', colors: [WH, WH, YE, YE, CY], glyphs: F::NARROW_I, indent: 2)
 F.rows('TTG WIKI', glyphs: F::WIDE_W)                    # the pixel rows, # and .
-
-BBS::Goodbye.modern(runner, title: 'Feedia', note: "The stories are their publishers'.")
-BBS::Goodbye.petscii(screen, title: 'feedia', color: YE, note: "The stories are their publishers'.")
 ```
 
 `BlockFont` is a 3×5 font (A–Z, 0–9, space and `. , ! ? - + : ' /`); `glyphs:`
-lays other shapes over it. `Goodbye.modern` writes "Thanks for calling …",
-the note, "More of us: teletypegames.org", its QR code and NO CARRIER;
-`Goodbye.petscii` draws the reversed bar, the note (or what its block
-writes), the QR code in the middle, then `+++`, `ATH0` and NO CARRIER a
-moment apart. The code (`BBS::QR`) is of `Goodbye::QR_URL`,
-`HTTPS://TELETYPEGAMES.ORG`: in capitals it is alphanumeric and fits the
-smallest QR code, 13 lines. `qr:` takes another address (one that needs more
-than 15 lines goes without a code), `qr: nil` none.
+lays other shapes over it. A `Petscii::Face` masthead takes it with `logo`.
+
+The goodbye is the last screen of a call, and `BBS.board` shows it after
+each face by itself: a board only says its note.
+
+```ruby
+BBS.board 'Feedia BBS', FeediaBBS do
+  preset TTG::PRESET
+  goodbye "The stories are their publishers'."   # goodbye false: the faces say their own
+end
+```
+
+`BBS::Goodbye.show(session, note:)` (the `goodbye` step) picks the face of
+the line. On a modern terminal (`Goodbye.modern`) it writes "Thanks for
+calling" and the board's title, the note, "More of us:" and the preset's
+`url`, the QR code of the preset's `qr`, and NO CARRIER, in one write; on a
+C64 (`Goodbye.petscii`) a reversed bar, the note and the address, the QR
+code in the middle, then `+++`, `ATH0` and NO CARRIER a moment apart. The
+title comes from `BBS.config.title`, the address and the QR code from the
+`BBS::Preset`; without a `url` there is no "More of us:", without a `qr` no
+code, and a text that needs more than 15 lines goes without one. A face
+that says goodbye its own way (`modern APP, goodbye: false`) can still call
+the building blocks with its own words:
+
+```ruby
+BBS::Goodbye.petscii(screen, color: YE, note: 'Bye for now.') do |s|
+  s.puts " #{GR}the wiki on the web:#{LG}"           # in place of the note and the address
+end
+```
 
 `BBS::DiscordWebhook` is plain Ruby and loads alone (`require
 'bbs/discord_webhook'`), for a board's domain layer:
@@ -1782,6 +2452,22 @@ takes the cheaper of that and a whole frame. Aim for about 1.2 KB a screen
 and under 200 bytes an animation step. `feed(bytes)` plays PETSCII onto a
 canvas the way the C64's screen editor prints it — for tests: what the caller
 sees after your bytes.
+
+With `charset: :lower` the canvas is in the lower/upper set, where text
+keeps its case (the lines, the cross and the blocks are still there; the
+glyphs the set changes are left out): a full screen of text, a page of a
+`BBS::Pages` runner. `diff(before)` is the change for a screen of text: a
+patch of the changed cells row by row, or the whole frame when that is
+shorter, an empty String when nothing changed; cheaper than `update` when
+blocks of text change (a list's lit row, a page turned).
+
+```ruby
+shown  = nil
+canvas = BBS::Petscii::Canvas.new(charset: :lower)
+canvas.text(3, 1, 'Global Discovery', :light_green)
+session.write_raw(shown ? canvas.diff(shown) : canvas.frame)
+shown = canvas
+```
 
 **`BBS::Art`** loads a drawing from YAML. `chars` is the picture, `colors`
 a palette letter a cell (`.` = none), `reverse` optional `R`s, `background`
@@ -1948,37 +2634,42 @@ TTG WIKI
 YOUR TERMINAL [1]:
 ```
 
+`BBS.board` builds it when a board declares both faces:
+
 ```ruby
-BBS.configure do |config|
-  config.mouse            = true
-  config.mouse_on_connect = false   # the mouse's escape sequence is garbage on a C64
-  config.flow = BBS::Terminal.flow(title: 'TTG Wiki', modern: modern_flow, petscii: petscii_flow)
+BBS.board 'TTG Wiki', WikiBBS do
+  preset  TTG::PRESET          # its splash comes after the question
+  modern  UI::Modern::APP
+  petscii UI::Petscii
 end
 ```
 
-`Terminal.flow` asks, switches the line (`petscii!` on a C64, `enable_mouse`
-on a modern terminal when `config.mouse` is on) and runs that face's Flow. The question is plain ASCII
-capitals, which both machines print alike. A key (`1`/`M`, `2`/`C`/`P`) only
-picks and RETURN takes it, so the RETURN of a line-mode telnet does not reach
-the first screen; no answer in 60 s takes the pick or the guess.
-The question alone is private since 1.0 (`Terminal::Question`); a board uses
-`Terminal.flow`.
+Inside, `BBS.board` calls `BBS::Terminal.flow(title:, modern:, petscii:,
+splash:)` with the board's title, the two faces' flows and the preset's
+splash, and keeps `mouse_on_connect` off: the mouse's escape sequence would
+be garbage on a C64. The terminal flow asks, switches the line (`petscii!`
+on a C64, `enable_mouse` on a modern terminal when `config.mouse` is on) and
+runs that face's flow. The question is plain ASCII capitals, which both
+machines print alike. A key (`1`/`M`, `2`/`C`/`P`) only picks and RETURN
+takes it, so the RETURN of a line-mode telnet does not reach the first
+screen; no answer in 60 s takes the pick or the guess.
 
-`splash:` takes a `BBS::Splash`, a screen between the question and the face:
-the board's two drawings (`BBS::Art`, the C64 one `petscii-upper`), centred,
-with a prompt under them (PRESS ANY KEY TO CONTINUE by default). Any key, or
-60 s, goes on; a modern window narrower than the drawing skips it.
+The preset's `splash` is a `BBS::Splash`, a screen between the question and
+the face: the board's two drawings (`BBS::Art`, the C64 one
+`petscii-upper`), centred, with a prompt under them (PRESS ANY KEY TO
+CONTINUE by default). Any key, or 60 s, goes on; a modern window narrower
+than the drawing skips it.
 
 ```ruby
-splash = BBS::Splash.new(modern: BBS::Art.load('art/logo-modern.yml'),
+SPLASH = BBS::Splash.new(modern: BBS::Art.load('art/logo-modern.yml'),
                          petscii: BBS::Art.load('art/logo-c64.yml'))
-config.flow = BBS::Terminal.flow(title: 'My board', modern: m, petscii: p, splash: splash)
+MY_PRESET = BBS::Preset.new(splash: SPLASH, url: 'example.org')
 ```
 
-The TTG boards take theirs from `ttg-common` (`TTG::Logo.splash`).
+The TTG boards take theirs from `ttg-common` (`TTG::PRESET`).
 
 A call that comes through another rubbs board's gateway with `forward: true`
-had its question there: `Terminal.flow` takes the face picked there
+had its question there: the terminal flow takes the face picked there
 (`session.forwarded_face`) and shows neither the question nor the splash.
 
 ### `Session#readkey` return values
@@ -2022,34 +2713,75 @@ event.char?      # key is a 1-char String
 Return `:halt` to end the application, `:handled` to stop propagation,
 `nil`/`false` to keep dispatching.
 
+### Testing a board (`bbs/test`)
+
+`require 'bbs/test'` (not loaded by `require 'bbs'`) gives a board's tests
+`BBS::Test::Session`: a caller's line without a socket. The keys it will
+press go in, what the board writes is kept, and it answers what a page, a
+screen, a face or a flow asks of a `BBS::Session`.
+
+```ruby
+require 'bbs/test'
+
+session = BBS::Test::Session.new(keys: [:down, :enter, 'q'])
+BBS::Pages.new(session).run(Home.new)
+assert_includes session.output, 'Global Discovery'
+
+c64 = BBS::Test::Session.new(petscii: true)    # 40×25, PETSCII mode
+c64.keys << 's'                                # a key for later
+assert_raises(BBS::Hangup) { UI::Petscii.new(c64, {}, board).run }   # the keys ran out
+c64.take                                       # the bytes written since the last take
+```
+
+- `keys` are Strings and Symbols as `readkey` returns them (`:idle` too);
+  when they run out, `readkey` returns `nil`, a hang-up, so a face or a
+  page ends with `BBS::Hangup`. `readline` joins the keys up to an `:enter`.
+- `output` is everything written as one UTF-8 String, `raw` the bytes,
+  `writes` each write, `last` the last one, `take` what came since the last
+  `take`.
+- `new(keys:, petscii:, cols: 80, rows: 24, session_id: 'test')`;
+  `petscii!`, `caller_key` (`line:test`), `hand_over`, `enable_mouse` /
+  `mouse_on?`, `idle_seconds` behave as on a real line; `line` is `nil`, so
+  a gateway cannot be tested through it.
+
 ---
 
-## 19. Source layout
+## 22. Source layout
 
 | File | Responsibility |
 |---|---|
-| `lib/bbs.rb` | Public surface: `BBS.configure`, `BBS.config`, `BBS.start`. |
+| `lib/bbs.rb` | Public surface: `BBS.board`, `BBS.configure`, `BBS.config`, `BBS.start`, `BBS.log`, `BBS.background`. |
+| `bbs/board.rb` | `BBS.board` and `BBS::BoardDefinition`: the board declared, configured and started. |
+| `bbs/domain.rb` | `BBS::Domain`: settings, paths, services and background work of the board's domain object. |
+| `bbs/preset.rb` | `BBS::Preset`: splash, goodbye address and QR code, User-Agent of a family of boards. |
+| `bbs/hangup.rb` | `BBS::Hangup`, `BBS::LINE_DROPPED`, `BBS::Abort`. |
+| `bbs/test.rb` | `BBS::Test::Session` for a board's tests (`require 'bbs/test'`). |
 | `bbs/server.rb` | TCP accept loop, one thread per client, on-session-end hook. |
 | `bbs/session.rb` | Telnet negotiation, mouse enable/disable, idle timer. |
 | `bbs/telnet.rb`, `bbs/telnet/` | Telnet line I/O: `Codes`, the IAC `Parser`, `Keys` and `Escapes` (key parsing), `Mouse` (xterm SGR), `LineInput` (readline), PETSCII mode. |
 | `bbs/petscii.rb`, `bbs/petscii/encoder*` | PETSCII: the C64's codes, the one glyph table (`GRAPHICS`, `ROUNDED_CORNERS`, `LOOK_ALIKES`), the C64's keys (`KEYS`), and the UTF-8/ANSI → PETSCII encoder. |
-| `bbs/petscii/colors.rb`, `bbs/petscii/screen*` | The C64 names of the palette and the 40×25 screen of a line-by-line C64 board. |
+| `bbs/petscii/colors.rb`, `bbs/petscii/screen*` | The C64 names of the palette and the 40×25 screen of a line-by-line C64 board, with its helpers. |
+| `bbs/petscii/face.rb`, `bbs/petscii/face/` | `BBS::Petscii::Face`: the line-by-line face declared (title, `Masthead`, `MainMenu`). |
+| `bbs/pages.rb`, `bbs/pages/`, `bbs/page.rb` | `BBS::Pages` and `BBS::Page`: the full-screen page app for both faces (key map, painting, waiting, line input). |
+| `bbs/paint.rb`, `bbs/style.rb` | Colours by role on both faces; SGR styles by colour. |
 | `bbs/petscii/canvas.rb`, `bbs/petscii/canvas_menu.rb` | The C64 screen as cells in the graphics set (raw PETSCII, patches) and a `Selector` drawn on it. |
 | `bbs/art.rb`, `bbs/widgets/scene.rb` | YAML drawings (ANSI and PETSCII, layers, hotspots) and the art as a modern-face widget. |
 | `bbs/season.rb` | Time of day, season and holiday layers. |
 | `bin/art-preview` | Checks and shows an art: ANSI, PETSCII bytes, a C64 PNG. |
 | `bbs/block_font.rb` | A 3×5 block font for logos: half blocks (modern) and reversed spaces (C64). |
-| `bbs/goodbye.rb` | The NO CARRIER screen of a call, modern and C64. |
+| `bbs/goodbye.rb` | The NO CARRIER screen of a call, modern and C64 (`Goodbye.show`). |
 | `bbs/discord_webhook.rb` | Discord webhook posts, standalone: background thread, mentions off, relay limit. |
 | `bbs/terminal.rb` | The terminal question of a two-faced board: modern (ANSI) or C64 (PETSCII). |
 | `bbs/config.rb` | `BBS::Config` value object. |
-| `bbs/flow.rb`, `bbs/flow/`, `bbs/flow_runner.rb` | Flow DSL, its steps, the runner. |
+| `bbs/flow.rb`, `bbs/flow/`, `bbs/flow_runner.rb` | Flow DSL, its steps (`call`, `app`, `face`, `goodbye`, …), the runner. |
 | `bbs/selector.rb`, `bbs/selector/` | The cursor menu of a line-by-line board: layouts, cells, keys. |
 | `bbs/frame_buffer.rb`, `bbs/frame_buffer/` | Double-buffer, delta diff, drawing helpers, the ANSI text tools (the one wrap). |
-| `bbs/application.rb` | Widget event loop, window stack, ticking, builder DSL. |
+| `bbs/application.rb`, `bbs/application/` | The windowed face: the `Builder` DSL, `Command`, the bars, the desktop builder, the conveniences, window stack, event loop. |
+| `bbs/part.rb` | `BBS::Part`: a piece of an Application declaration in a file of its own. |
 | `bbs/widget.rb`, `bbs/container.rb` | Widget tree base. |
-| `bbs/widgets.rb`, `bbs/widgets/` | Built-in widgets, one a file (Label, Button, TextInput, TextArea, Checkbox, ListBox, ScrollView, Scene). |
-| `bbs/window.rb`, `bbs/window_spec.rb` | `Window` + declarative window DSL. |
+| `bbs/widgets.rb`, `bbs/widgets/` | Built-in widgets, one a file (Label, Button, TextInput, TextArea, Checkbox, ListBox, ScrollView, Scene, Desktop). |
+| `bbs/window.rb`, `bbs/window_spec.rb`, `bbs/window_spec/`, `bbs/window_context.rb` | `Window` + the declared windows and the context their blocks run in. |
+| `bbs/windows/reader.rb` | A long text to page through, with a position line and buttons. |
 | `bbs/windows/info.rb` | Centered info / message / kv / scroll dialog. |
 | `bbs/windows/form.rb` | Multi-field form with status line. |
 | `bbs/windows/master_detail.rb` | Two-pane list / detail browser. |
@@ -2063,6 +2795,8 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `bbs/event.rb` | Unified key + mouse event objects. |
 | `bbs/store.rb`, `bbs/store/csv_import.rb` | Thread-safe upsert-by-session table on SQLite (imports the CSV file of earlier versions, broken rows set aside). |
 | `bbs/sqlite.rb` | One shared SQLite connection: WAL, lock, query helpers, `user_version` migrations. |
+| `bbs/snapshot.rb` | A catalog as one gzipped JSON file in memory: seed, refresh, swap. |
+| `bbs/nodes.rb` | Node numbers of the calls. |
 | `bbs/http.rb` | Bounded HTTP GET/POST: deadline, body cap, safe redirects, public addresses only. |
 | `bbs/cache.rb` | TTL + LRU + byte-capped cache with single-flight and stale-on-error. |
 | `bbs/rate_limit.rb` | Sliding-window rate limit per key, several at once, in memory or SQLite; `caller_key(session)`. |
@@ -2076,6 +2810,7 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `bbs/gateway.rb`, `bbs/gateway/` | Telnet gateway doors: the line handed on to another board (`Link`, `Negotiation`, `AsciiBridge`), public addresses only by default. |
 | `bbs/zmodem.rb`, `bbs/zmodem/` | ZMODEM send: file downloads to the caller's terminal (`Frames`, `Input`, `Output`, `Stream`, `Sender`). |
 | `bbs/xmodem.rb` | XMODEM / XMODEM-CRC / XMODEM-1K send: file downloads for a Commodore 64. |
+| `bbs/transfer.rb` | One call for either protocol, and what to tell the caller. |
 | `bbs/ai.rb` | AI characters: persona file, OpenAI-compatible streaming client, chat with memory and fallback, typewriter output. |
 | `bbs/banner.rb`, `bbs/renderer.rb` | FIGlet + ERB. |
 | `test/` | minitest suite: `bundle exec rake test`; style: `bundle exec rubocop`. |

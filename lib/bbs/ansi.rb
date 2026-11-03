@@ -51,6 +51,8 @@ module BBS
     WHITE = "\e[1;37m"
     # SGR: bright red text.
     BRIGHT_RED = "\e[1;31m"
+    # Red (dark red on a C64).
+    RED = "\e[0;31m"
     # SGR: green text.
     GREEN = "\e[0;32m"
     # SGR: bright green text.

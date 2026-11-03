@@ -89,6 +89,33 @@ module BBS
 
       # No socket: a gateway cannot hand this line on.
       def line = nil
+
+      # Turns mouse reporting on (only remembered).
+      def enable_mouse = (@mouse = true)
+
+      # Turns mouse reporting off (only remembered).
+      def disable_mouse = (@mouse = false)
+
+      # Whether mouse reporting is on.
+      def mouse_on? = @mouse == true
+
+      # The key of the line for rate limits: <tt>line:<session_id></tt>.
+      def caller_key = "line:#{@session_id}"
+
+      # Runs the block with the line (see BBS::Session#hand_over).
+      def hand_over = yield(self)
+
+      # The next line typed: the keys up to an +:enter+ joined, or +nil+
+      # (a hang-up) when the keys run out first.
+      def readline(**)
+        typed = +''
+        while (key = @keys.shift)
+          return typed if key == :enter
+
+          typed << key if key.is_a?(String)
+        end
+        nil
+      end
     end
   end
 end

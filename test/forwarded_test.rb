@@ -62,7 +62,7 @@ class ForwardedTest < Minitest::Test
     splash = Object.new
     def splash.continue?(*) = raise('no splash for a forwarded call')
     reached = nil
-    modern  = BBS::Flow.define { call { |_ctx, _r| reached = :modern; nil } }
+    modern  = BBS::Flow.define { call { reached = :modern } }
     flow    = BBS::Terminal.flow(title: 'X', modern: modern, petscii: modern, splash: splash)
     Timeout.timeout(5) { BBS::FlowRunner.new(@session, 'id', flow).run }
     assert_equal :modern, reached

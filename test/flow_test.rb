@@ -18,7 +18,7 @@ class FlowTest < Minitest::Test
     seen = nil
     run_flow("ada\r\n") do
       ask :name, prompt: 'Name', transform: :upcase
-      call { |ctx, _| seen = ctx[:name] }
+      call { seen = context[:name] }
     end
     assert_equal 'ADA', seen
   end

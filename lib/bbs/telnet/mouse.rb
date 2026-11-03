@@ -53,6 +53,9 @@ module BBS
         @mouse_enabled = true
       end
 
+      # Whether mouse reporting is on.
+      def mouse_on? = @mouse_enabled == true
+
       # Turns xterm mouse reporting off, if #enable_mouse turned it on.
       def disable_mouse
         return unless @mouse_enabled

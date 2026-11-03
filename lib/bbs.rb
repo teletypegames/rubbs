@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'bbs/hangup'
+require_relative 'bbs/preset'
 require_relative 'bbs/ansi'
 require_relative 'bbs/ascii'
 require_relative 'bbs/text'
@@ -15,6 +17,7 @@ require_relative 'bbs/selector'
 require_relative 'bbs/editor'
 require_relative 'bbs/petscii/colors'
 require_relative 'bbs/petscii/screen'
+require_relative 'bbs/petscii/face'
 require_relative 'bbs/petscii/canvas'
 require_relative 'bbs/petscii/canvas_menu'
 require_relative 'bbs/art'
@@ -71,6 +74,11 @@ require_relative 'bbs/windows/stream'
 require_relative 'bbs/application'
 require_relative 'bbs/session'
 require_relative 'bbs/server'
+require_relative 'bbs/domain'
+require_relative 'bbs/board'
+require_relative 'bbs/part'
+require_relative 'bbs/snapshot'
+require_relative 'bbs/transfer'
 
 # The +bbs+ gem: a library for telnet BBS servers. Requiring it loads the
 # whole library. Configure it with BBS.configure, then start the server with

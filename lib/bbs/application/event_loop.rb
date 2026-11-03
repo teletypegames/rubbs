@@ -19,7 +19,7 @@ module BBS
       # focused widget. A second without input calls #tick!. After the idle
       # limit without input (the session's +idle_seconds+, set from
       # BBS.config.idle_seconds) the +on_idle+ callable runs; unless it
-      # returns +:keep+, the loop shows a message and ends.
+      # calls Application#keep_on, the loop shows a message and ends.
       # A handler's StandardError is logged and the loop goes on. Ends when a
       # handler returns :halt, #stop! is called or the line drops (see
       # #line_lost?), then shows the cursor and clears the screen.
@@ -27,7 +27,7 @@ module BBS
         @running = true
         start_idle
         event_turn while @running
-      rescue IOError, Errno::EPIPE, Errno::ECONNRESET
+      rescue *LINE_DROPPED
         @line_lost = true
         nil
       ensure
@@ -44,6 +44,8 @@ module BBS
       # Periodic tick: notify on_tick callback and let each open window pull
       # any asynchronous updates by overriding BBS::Window#tick.
       def tick!
+        refresh_status
+        @desktop&.tick
         @on_tick&.call(self)
         @windows.each { |w| w.tick(self) }
       end
@@ -83,9 +85,11 @@ module BBS
         @idle_elapsed += TICK_SECONDS
         tick!
         return unless @idle_max && @idle_elapsed >= @idle_max
-        return start_idle if @on_idle&.call(self) == :keep
+        @kept_on = false
+        @on_idle&.call(self)
+        return start_idle if @kept_on
 
-        Dialogs.message(self, "Disconnected after #{@idle_max.to_i}s idle.", title: ' Idle ')
+        Dialogs.message(self, "Disconnected after #{@idle_max.to_i}s idle.", title: 'Idle')
         render_screen
         sleep IDLE_MESSAGE_WAIT
         lose_line
@@ -105,6 +109,8 @@ module BBS
         dispatch(event)
       rescue IOError, SystemCallError
         raise
+      rescue Abort
+        nil
       rescue StandardError => e
         BBS.log('event', "#{e.class}: #{e.message}\n#{e.backtrace.first(BACKTRACE_LINES).join("\n")}")
         nil

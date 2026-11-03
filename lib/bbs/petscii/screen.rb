@@ -47,6 +47,9 @@ module BBS
       EMPTY = '(nothing here)'
       # The clear screen of a modern terminal: colours reset, cursor home.
       MODERN_CLEAR = "#{Ansi::RESET}#{Ansi::CLEAR}".freeze
+      # The colours of Markdown (BBS::Markdown) on this screen, in the
+      # roles of a BBS::Theme.
+      MARKDOWN = { text: LG, text_bright: WH, accent: YE, label: CY, text_dim: GR }.freeze
 
       # The session written to and read from (BBS::Session or one that
       # quacks like it).
@@ -89,8 +92,24 @@ module BBS
 
       # Clears the screen and writes the #title_bar of +text+ and +right+.
       def title(text, right = '')
+        @title = [text, right]
         cls
         puts title_bar(text, right)
+      end
+
+      # The title bar's text and right end last drawn by #title, or +nil+.
+      def current_title = @title
+
+      # Runs the block under the title +text+ (and +right+), then draws the
+      # title that was up before it again. Returns the block's value.
+      #
+      #   within("SEARCH: #{query}") { each_pick(…) { … } }
+      def within(text, right = '')
+        before = @title
+        title(text, right)
+        yield
+      ensure
+        title(*before) if before
       end
 
       # A reversed cyan bar the width of the screen less its last column:
@@ -104,6 +123,10 @@ module BBS
 
       # Writes a horizontal line in +color+, the screen's width less one.
       def rule(color: DG) = puts("#{color}#{'─' * (@cols - 1)}#{LG}")
+
+      # A rule as a line for a list of lines: +indent+ spaces, then dashes to
+      # the screen's width less one.
+      def rule_line(indent: 1, color: DG) = "#{' ' * indent}#{color}#{'─' * (@cols - 1 - indent)}#{LG}"
 
       # +text+ word-wrapped to +width+ columns, ANSI colours kept: an Array
       # of lines (BBS::FrameBuffer.wrap_ansi).
@@ -139,7 +162,7 @@ module BBS
       # seconds, when given. Raises IOError when the caller hangs up.
       def key(timeout: nil)
         k = @session.readkey(timeout: timeout)
-        raise IOError, 'the caller hung up' if k.nil?
+        raise Hangup if k.nil?
 
         k
       end
@@ -172,3 +195,4 @@ module BBS
 end
 
 require_relative 'screen/prompts'
+require_relative 'screen/helpers'

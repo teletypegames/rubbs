@@ -48,13 +48,18 @@ module BBS
                   title: shown_title, title_sgr: title_style, title_indent: close_gadget? ? TITLE_INDENT : 0)
       end
 
-      # The title as it fits beside the gadgets, or the KBD_TITLES one.
+      # The title with a space on each side, cut with an ellipsis where it
+      # would run into the gadgets; or the KBD_TITLES one.
       def shown_title
         return KBD_TITLES[@kbd_mode] if @kbd_mode
-        return @title unless zoom_gadget? || number_shown?
+
+        text = @title.to_s.strip
+        return text if text.empty?
 
         room = (zoom_gadget? ? TITLE_ROOM_ZOOM : TITLE_ROOM) + (number_shown? ? NUMBER_ROOM : 0)
-        @title.to_s[0, [bounds.width - room, 0].max]
+        fit  = [bounds.width - room - 2, 1].max
+        text = "#{text[0, fit - 1]}…" if text.length > fit
+        " #{text} "
       end
 
       # Draws the gadgets that apply and fit, each <tt>[x, y, text,

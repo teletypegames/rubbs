@@ -94,11 +94,25 @@ module BBS
         end
       end
 
-      # Merges SGR overrides into the colour roles, e.g.
-      # <tt>colors text: "\e[0;32m"</tt>. Returns the colour Hash with no
-      # argument.
+      # Merges overrides into the colour roles: each a colour name or an
+      # xterm-256 index (BBS::Style, the text colour), a Hash of
+      # BBS::Style.[] (<tt>{ fg: :green, faint: true }</tt>) or an SGR
+      # String. Returns the colour Hash with no argument.
+      #
+      #   colors text: :green, accent: :bright_green, dim: { fg: :green, faint: true }
       def colors(overrides = nil)
-        overrides ? @colors.merge!(overrides) : @colors
+        return @colors unless overrides
+
+        @colors.merge!(overrides.transform_values { |value| Definition.sgr(value) })
+      end
+
+      # The SGR String of a colour given to #colors.
+      def self.sgr(value)
+        case value
+        when String then value
+        when Hash   then "#{Ansi::RESET}#{Style[**value]}"
+        else "#{Ansi::RESET}#{Style[fg: value]}"
+        end
       end
 
       # Sets the boot sequence, run in the Console before anything else.

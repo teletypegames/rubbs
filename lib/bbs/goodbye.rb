@@ -1,25 +1,17 @@
 # frozen_string_literal: true
 
 module BBS
-  # The last screen of a call, the way our boards hang up: thanks for
-  # calling, a note, where to find more of us and its QR code (BBS::QR),
-  # and NO CARRIER. On a modern
+  # The last screen of a call: thanks for calling, a note, where to find
+  # more of the board's family and its QR code (BBS::QR), and NO CARRIER.
+  # The board's name, the address and the QR code come from BBS.config
+  # (+title+ and the BBS::Preset); a board that uses BBS.board only says
+  # <tt>goodbye 'a note'</tt>. On a modern
   # terminal it is one write (::modern); on a C64 a reversed bar, then the
   # modem's <tt>+++</tt>, <tt>ATH0</tt> and NO CARRIER a moment apart
   # (::petscii).
   #
-  #   call do |_ctx, runner|
-  #     BBS::Goodbye.modern(runner, title: 'Feedia', note: "The stories are their publishers'.")
-  #     nil
-  #   end
+  #   BBS::Goodbye.show(session, note: "The stories are their publishers'.")
   module Goodbye
-    # Where more of us are.
-    URL = 'teletypegames.org'
-    # The address the QR code takes a phone to: URL in capitals, which a
-    # QR code holds in its alphanumeric mode, so it fits the smallest one
-    # (21 modules, 13 lines); a scheme and a host name are the same in
-    # either case.
-    QR_URL = 'HTTPS://TELETYPEGAMES.ORG'
     # The most lines the QR code may take; an address that needs more
     # goes without one.
     QR_ROWS = 15
@@ -31,8 +23,9 @@ module BBS
     # "Thanks for calling +title+." in white, then dim +note+ (when given)
     # and "More of us: +url+", the QR code of +qr+ (none for +nil+), then
     # NO CARRIER in red.
-    def self.modern_text(title:, note: nil, url: URL, clear: true, qr: QR_URL)
-      more = [note, "More of us: #{url}"].compact.join(' ')
+    def self.modern_text(title: BBS.config.title, note: nil, url: BBS.config.preset.url, clear: true,
+                         qr: BBS.config.preset.qr)
+      more = more_text(note, url)
       a = Ansi
       "#{a::RESET}#{a::CLEAR if clear}#{a::CRLF}  #{a::WHITE}Thanks for calling #{title}.#{a::RESET}#{a::CRLF}  " \
         "#{a::DIM_GREY}#{more}#{a::RESET}#{a::CRLF * 2}#{modern_code(qr)}  " \
@@ -47,7 +40,8 @@ module BBS
     #                       note: 'Games from wikidata.org (CC0).')
     #
     # Returns +nil+.
-    def self.modern(out, title:, note: nil, url: URL, clear: true, qr: QR_URL)
+    def self.modern(out, title: BBS.config.title, note: nil, url: BBS.config.preset.url, clear: true,
+                    qr: BBS.config.preset.qr)
       out.write(modern_text(title: title, note: note, url: url, clear: clear, qr: qr))
       nil
     end
@@ -64,6 +58,7 @@ module BBS
     # - after PAUSES: <tt>+++</tt>, <tt>ATH0</tt> and NO CARRIER in red
     #
     # [width] the bar's width; default the screen's +cols+ less one, or 39
+    # [art]   lines written under the bar (a logo), or +nil+
     #
     #   BBS::Goodbye.petscii(screen, title: 'feedia', color: YE,
     #                        note: "The stories are their publishers'.")
@@ -73,19 +68,43 @@ module BBS
     #
     # Returns +nil+. Raises what the session raises when the caller has
     # hung up (IOError, Errno::EPIPE …).
-    def self.petscii(screen, title: nil, bar: nil, note: nil, url: URL, color: Petscii::Colors::CY, width: nil, qr: QR_URL)
+    def self.petscii(screen, title: BBS.config.title, bar: nil, note: nil, url: BBS.config.preset.url,
+                     color: Petscii::Colors::CY, width: nil, qr: BBS.config.preset.qr, art: nil)
       screen = Petscii::Screen.new(screen) unless screen.respond_to?(:say)
-      width ||= screen.respond_to?(:cols) ? screen.cols - 1 : Petscii::COLS - 1
+      width ||= bar_width(screen)
       screen.cls
       screen.puts
-      screen.puts bar_line(bar || "thanks for calling #{title}", color, width)
-      screen.puts
-      block_given? ? yield(screen) : screen.say([note, "More of us: #{url}"].compact.join(' '), color: Petscii::Colors::GR)
+      [bar_line(bar || "thanks for calling #{title.to_s.downcase}", color, width), '', *Array(art)]
+        .each { |line| screen.puts(line) }
+      block_given? ? yield(screen) : screen.say(more_text(note, url), color: Petscii::Colors::GR)
       screen.puts
       petscii_code(screen, qr, width)
       hang_up(screen)
       nil
     end
+
+    # The goodbye of the face of +session+: ::petscii on a PETSCII line,
+    # ::modern otherwise, with the board's title and preset. +note+ is the
+    # board's own line (its sources, its licence); +clear+ (modern: whether
+    # the screen is cleared first), +color+, +bar+ and +art+ (C64: the
+    # bar's colour and text, lines under it) are those of ::modern and
+    # ::petscii. A dropped line is not an error here: the caller has gone
+    # already.
+    #
+    # Returns +nil+.
+    def self.show(session, note: nil, clear: true, color: Petscii::Colors::CY, bar: nil, art: nil)
+      if session.respond_to?(:petscii?) && session.petscii?
+        petscii(session, note: note, color: color, bar: bar, art: art)
+      else
+        modern(session, note: note, clear: clear)
+      end
+    rescue *LINE_DROPPED
+      nil
+    end
+
+    def self.bar_width(screen) = (screen.respond_to?(:cols) ? screen.cols : Petscii::COLS) - 1
+
+    def self.more_text(note, url) = [note, ("More of us: #{url}" if url)].compact.join(' ')
 
     # The QR code of +qr+ on +screen+, centred in +width+ columns, and a
     # blank line; nothing for +nil+ or an address too long for QR_ROWS.
@@ -130,6 +149,6 @@ module BBS
       screen.puts " #{c::RD}NO CARRIER#{c::LG}"
       screen.puts
     end
-    private_class_method :hang_up, :bar_line, :petscii_code, :modern_code, :qr_lines
+    private_class_method :bar_width, :more_text, :hang_up, :bar_line, :petscii_code, :modern_code, :qr_lines
   end
 end

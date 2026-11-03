@@ -65,7 +65,7 @@ module BBS
     # closes it. +width+ fixes the box width; by default it fits the text.
     #
     # Returns the Window.
-    def self.message(app, text, title: ' Message ', width: nil)
+    def self.message(app, text, title: 'Message', width: nil)
       lines  = wrap(text, width ? width - TEXT_CHROME : WRAP_WIDTH)
       window = text_box(app, lines, width || fit(lines, MESSAGE_MIN_WIDTH), title)
       ok     = Widgets::Button.new(label: '&OK', on_click: closer(app, window))
@@ -77,7 +77,7 @@ module BBS
     # +on_yes+ or +on_no+ when given.
     #
     # Returns the Window.
-    def self.confirm(app, text, title: ' Confirm ', on_yes: nil, on_no: nil)
+    def self.confirm(app, text, title: 'Confirm', on_yes: nil, on_no: nil)
       lines  = wrap(text, WRAP_WIDTH)
       window = text_box(app, lines, fit(lines, CONFIRM_MIN_WIDTH), title)
       pair(window, Widgets::Button.new(label: '&Yes', on_click: closer(app, window) { on_yes&.call }),
@@ -91,7 +91,7 @@ module BBS
     # has the focus.
     #
     # Returns the Window.
-    def self.input(app, prompt:, title: ' Input ', value: '', width: INPUT_WIDTH, on_submit: nil)
+    def self.input(app, prompt:, title: 'Input', value: '', width: INPUT_WIDTH, on_submit: nil)
       window = centred_window(app, width: width, height: INPUT_HEIGHT, title: title)
       inner  = window.bounds.width - (2 * PADDING)
       place(window, Widgets::Label.new(text: prompt, style_key: :window_text), PADDING, TEXT_TOP, inner)

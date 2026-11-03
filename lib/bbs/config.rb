@@ -37,17 +37,36 @@ module BBS
     #                    or 6
     # [ai_concurrency]   the most BBS::AI::Client requests running at once in
     #                    the process; default 2
-    # [user_agent]       the User-Agent header of BBS::HTTP requests;
-    #                    default <tt>rubbs/<version> (+https://teletypegames.org)</tt>
     # [log_tag]          what every BBS.log line starts with, the board's
     #                    technical name such as <tt>feedia-bbs</tt>; default
     #                    the +BBS_LOG_TAG+ environment variable or +bbs+
+    # [title]            the board's name as callers read it, <tt>Feedia
+    #                    BBS</tt>; set by BBS.board, default +nil+
+    # [env_prefix]       the prefix of the board's own environment variables,
+    #                    <tt>FEEDIA_BBS_</tt>, read by BBS::Domain#setting;
+    #                    set by BBS.board, default +nil+
+    # [preset]           the BBS::Preset of the board; default
+    #                    BBS::Preset::NONE
+    # [board]            the board's domain object (the class given to
+    #                    BBS.board, made once at boot): its +services+ are
+    #                    the default services of an Application, and a
+    #                    BBS::Petscii::Face gets it; default +nil+
     attr_accessor :screens_dir, :flow, :on_session_end,
                   :port, :theme, :mouse, :mouse_on_connect, :idle_seconds, :max_sessions,
-                  :max_sessions_per_ip, :ai_concurrency, :user_agent, :log_tag
+                  :max_sessions_per_ip, :ai_concurrency, :log_tag, :title, :env_prefix, :preset, :board
 
-    # The User-Agent of BBS::HTTP when none is configured.
-    DEFAULT_USER_AGENT = "rubbs/#{Gem.loaded_specs['bbs']&.version || 'dev'} (+https://teletypegames.org)".freeze
+    # The User-Agent of BBS::HTTP without a preset's addition.
+    DEFAULT_USER_AGENT = "rubbs/#{Gem.loaded_specs['bbs']&.version || 'dev'}".freeze
+
+    # Sets the User-Agent of BBS::HTTP requests, overriding the derived one.
+    attr_writer :user_agent
+
+    # The User-Agent header of BBS::HTTP requests: the one set with
+    # #user_agent=, else DEFAULT_USER_AGENT followed by the preset's
+    # +user_agent+.
+    def user_agent
+      @user_agent || [DEFAULT_USER_AGENT, @preset.user_agent].compact.join(' ')
+    end
 
     # Creates a Config with the defaults, reading +BBS_PORT+,
     # +BBS_MAX_SESSIONS+, +BBS_MAX_SESSIONS_PER_IP+ and +BBS_LOG_TAG+ from
@@ -60,8 +79,9 @@ module BBS
       @max_sessions = (ENV['BBS_MAX_SESSIONS'] || 100).to_i
       @max_sessions_per_ip = (ENV['BBS_MAX_SESSIONS_PER_IP'] || 6).to_i
       @ai_concurrency      = 2
-      @user_agent          = DEFAULT_USER_AGENT
+      @user_agent          = nil
       @log_tag             = ENV['BBS_LOG_TAG'] || 'bbs'
+      @preset              = Preset::NONE
     end
   end
 end

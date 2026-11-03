@@ -37,6 +37,23 @@ module BBS
       @client.timeout = seconds || Server::DEFAULT_TIMEOUT if @client.respond_to?(:timeout=)
     end
 
+    # The key the caller is known by for rate limits: their address, or the
+    # line when it is local (BBS::RateLimit.caller_key).
+    def caller_key = @caller_key ||= RateLimit.caller_key(self)
+
+    # Lends the line to the block (a gateway to another board, a file
+    # transfer): mouse reporting off and the screen cleared on a modern
+    # terminal, and afterwards the mouse back as it was. Returns the block's
+    # value.
+    def hand_over
+      mouse = mouse_on?
+      disable_mouse
+      write("#{Ansi::RESET}#{Ansi::CLEAR}") unless petscii?
+      yield self
+    ensure
+      enable_mouse if mouse
+    end
+
     # Negotiates the telnet options, turns on mouse reporting when
     # BBS.config.mouse and BBS.config.mouse_on_connect are both set, and runs
     # BBS.config.flow for the caller in a BBS::FlowRunner. Turns the mouse

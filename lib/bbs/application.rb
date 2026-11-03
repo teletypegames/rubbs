@@ -16,30 +16,28 @@ require_relative 'application/window_stack'
 require_relative 'application/event_loop'
 require_relative 'application/screen'
 require_relative 'application/builder'
+require_relative 'application/conveniences'
+require_relative 'paint'
 
 module BBS
-  # The widget event loop. Acts as the root container:
+  # A windowed face: the desktop, a menubar, the statusbar and a stack of
+  # windows, drawn with a theme and driven by keys and the mouse. Declared
+  # with Application.define (see Builder) and run by BBS.board or a Flow's
+  # +app+ step:
   #
-  #   root_panel        — base UI (drawn behind windows)
-  #   menubar           — optional, Alt-letter pulldown menus
-  #   statusbar         — optional, hotkey hints at the bottom
-  #   window stack      — modal windows on top of root_panel
-  #
-  # Build one with Application.define { ... } DSL, or instantiate directly
-  # and use add_window / menubar / statusbar.
-  #
-  # Doors (BBS::Door) are declared in the DSL and opened from any handler;
-  # Builder#run then hands the line to the door and rebuilds the
-  # application when the caller comes back:
-  #
-  #   APP = BBS::Application.define do
-  #     door :sermo, Sermo::OS, label: '&SERMO'
-  #     menubar do
-  #       menu('&Doors') { doors }        # one item per declared door
-  #     end
+  #   UI::Modern = BBS::Application.define do
+  #     theme :synchronet
+  #     command :search, 'Search…', key: 'F2' do search end
+  #     menu 'Wiki', :search, :separator, :log_off
+  #     help about: ABOUT
+  #     status { "#{lang}.wikipedia.org" }
+  #     desktop { on_show { search } }
+  #     window(:results, :master_detail) { items { results }; label :title }
   #   end
   #
-  #   APP.run(session: session, session_id: sid, context: ctx)
+  # The blocks of the declaration run in the Application: the helpers, the
+  # services (as readers), and the methods below (Conveniences: #message,
+  # #ask, #confirm, #loading, #qr, #show, the colours of BBS::Paint …).
   class Application
     # The window numbers handed out, shown in the frame and picked with
     # Alt-1 ... Alt-9.
@@ -56,8 +54,6 @@ module BBS
     IDLE_MESSAGE_WAIT = 0.5
     # Lines of the backtrace logged with a handler's error.
     BACKTRACE_LINES = 3
-    # Columns the "Please wait" box of #with_loading takes beside its text.
-    LOADING_CHROME = 8
 
     # [session]      the BBS::Session the application draws on and reads from
     # [session_id]   the session's id
@@ -67,43 +63,45 @@ module BBS
     # [statusbar]    the BBS::Statusbar, or +nil+
     # [windows]      the open windows, bottom to top (the last is in front)
     # [theme]        the BBS::Theme every widget is drawn with
-    # [services]     Hash of service objects handed to window callbacks
-    # [window_specs] Hash of the registered BBS::WindowSpec objects by name
+    # [services]     Hash of the service objects by name
+    # [window_specs] Hash of the declared BBS::WindowSpec objects by name
     # [doors]        Hash of the declared BBS::Door objects by name
     attr_reader :session, :session_id, :context, :root, :menubar, :statusbar,
                 :windows, :theme, :services, :window_specs, :doors
 
+    # The desktop widget (BBS::Widgets::Desktop), or +nil+.
+    attr_accessor :desktop
+
     include WindowStack
     include EventLoop
     include Screen
+    include Conveniences
+    include Paint
 
     # Evaluates the DSL +block+ in a new Builder and returns the Builder;
-    # call <tt>Builder#run</tt> (or <tt>Builder#build</tt>) on it for each
-    # session.
+    # its +run+ (or BBS.board, or a Flow's +app+ step) runs the application.
     def self.define(&block)
       builder = Builder.new
       builder.instance_eval(&block) if block
       builder
     end
 
-    # Creates an application with no windows, menubar or statusbar.
+    # Creates an application on +session+. Usually Builder#build makes it.
     #
-    # [session]      the BBS::Session to run on
-    # [session_id]   the session's id
     # [context]      the caller's context Hash
-    # [theme]        the BBS::Theme; default <tt>BBS.config.theme</tt>, or
-    #                BBS::Theme.synchronet when that is not set either
-    # [on_idle]      callable invoked as <tt>call(app)</tt> when the caller
-    #                reaches the idle limit (see #run); returning +:keep+
-    #                keeps the caller on and starts the count again
-    # [on_tick]      callable invoked as <tt>call(app)</tt> on every tick (see
-    #                #tick!)
-    # [helpers]      a Module the application is extended with
-    # [services]     Hash of service objects for window callbacks
-    # [window_specs] Hash of BBS::WindowSpec objects by name, for #open_window
-    # [doors]        Hash of BBS::Door objects by name, for #open_door
-    def initialize(session:, session_id:, context: {}, theme: nil, on_idle: nil,
-                   on_tick: nil, helpers: nil, services: {}, window_specs: {}, doors: {})
+    # [theme]        the BBS::Theme; default <tt>BBS.config.theme</tt>, else
+    #                BBS::Theme.synchronet
+    # [on_idle]      callable run with the application at the idle limit
+    # [on_tick]      callable run with the application once a second
+    # [helpers]      a Module of helper methods the application is extended with
+    # [services]     Hash of service objects; each gets a reader of its name
+    #                unless the application has such a method already
+    # [window_specs] Hash of BBS::WindowSpec by name
+    # [doors]        Hash of BBS::Door by name
+    # [status]       block whose text is the right end of the statusbar
+    # [clock]        whether the time follows it
+    def initialize(session:, session_id:, context: {}, theme: nil, on_idle: nil, on_tick: nil, helpers: nil,
+                   services: {}, window_specs: {}, doors: {}, status: nil, clock: false)
       @session      = session
       @session_id   = session_id
       @context      = context
@@ -115,41 +113,41 @@ module BBS
       @services     = services
       @window_specs = window_specs
       @doors        = doors
+      @status       = status
+      @clock        = clock
       extend(helpers) if helpers
+      define_service_readers
     end
 
-    # The terminal width in columns (80 when the session does not know it).
+    # The terminal's width in columns (NAWS), 80 when it did not say.
     def cols = @session.term_cols || Telnet::DEFAULT_COLS
-    # The terminal height in rows (24 when the session does not know it).
+
+    # The terminal's height in rows (NAWS), 24 when it did not say.
     def rows = @session.term_rows || Telnet::DEFAULT_ROWS
 
-    # Sets the BBS::Menubar shown on the top row (or +nil+ for none) and
-    # gives it the application's theme.
+    # Sets the menubar, giving it the application's theme.
     def menubar=(menubar)
       @menubar = menubar
       menubar.theme = @theme if menubar
     end
 
-    # Sets the BBS::Statusbar shown on the bottom row (or +nil+ for none) and
-    # gives it the application's theme.
+    # Sets the statusbar, giving it the application's theme.
     def statusbar=(statusbar)
       @statusbar = statusbar
       statusbar.theme = @theme if statusbar
     end
 
-    # Adds the widget +child+ to the root container, behind all windows, and
-    # gives it the application's theme. Returns +child+.
+    # Adds +child+ to the root container behind the windows, with the
+    # application's theme. Returns +child+.
     def add(child)
       @root.add(child)
       child.theme = @theme
       child
     end
 
-    # Leaves the application through a declared door, from any handler: a
-    # menu item, a key, a window button or a list's Enter. The event loop
-    # stops after this event, and Builder#run opens the door. Stores the door
-    # under <tt>context[:door]</tt>. Returns :halt, so a handler can also end
-    # with it. Raises ArgumentError for an unknown door name.
+    # Leaves through the declared door +name+: Builder#run opens it once the
+    # application has stopped. Returns +:halt+. Raises ArgumentError for an
+    # unknown door.
     def open_door(name)
       door = @doors[name.to_sym]
       raise ArgumentError, "Unknown door: #{name.inspect}" unless door
@@ -159,29 +157,47 @@ module BBS
       :halt
     end
 
-    # Hands the raw line to the block, a file transfer for one, on a clean
-    # screen without mouse reporting, and repaints the whole application
-    # when it returns. Returns what the block returns.
-    def with_line
-      @session.disable_mouse
-      @session.write("#{Ansi::RESET}#{Ansi::CLEAR}")
-      yield @session
+    # The board's domain object (BBS::Config#board).
+    def board = BBS.config.board
+
+    # Keeps a caller who reached the idle limit on the line (called from the
+    # +on_idle+ block, after a "still there?" got an answer); the idle time
+    # starts again.
+    def keep_on = (@kept_on = true)
+
+    # Ends the call's application: the flow goes on to the goodbye. Returns
+    # +:halt+.
+    def log_off
+      stop!
+      :halt
+    end
+
+    # Writes the right end of the statusbar: the status block's text and
+    # the clock.
+    def refresh_status
+      return unless @statusbar
+
+      text  = @status && instance_exec(&@status)
+      clock = Time.now.strftime('%H:%M') if @clock
+      parts = @clock == :before ? [clock, text] : [text, clock]
+      @statusbar.right_text = parts.compact.join(' │ ')
+    end
+
+    # Hands the raw line to the block (a file transfer, a gateway) on a
+    # clean screen without mouse reporting (BBS::Session#hand_over), then
+    # repaints everything. Returns the block's value.
+    def with_line(&)
+      @session.hand_over(&)
     ensure
-      @session.enable_mouse if BBS.config.mouse
       @committed = nil
     end
 
-    # Shows a "Please wait" message with +text+, runs the block in a thread
-    # and waits for it, then closes the message. Returns the block's value.
-    def with_loading(text = 'Working...', &block)
-      win = Dialogs.message(self, text, title: ' Please wait ', width: text.length + LOADING_CHROME)
-      render_screen
-      Thread.new do
-        @loading_result = block.call
-      ensure
-        close_window(win)
-      end.join
-      @loading_result
+    private
+
+    def define_service_readers
+      @services.each do |name, service|
+        define_singleton_method(name) { service } unless respond_to?(name, true)
+      end
     end
   end
 end

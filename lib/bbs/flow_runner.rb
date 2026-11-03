@@ -29,14 +29,16 @@ module BBS
     # context Hash the steps share.
     attr_reader :session_id, :session, :context
 
-    # Creates a runner for +flow+ (a BBS::Flow) on +session+. +context+
-    # seeds the flow's context, such as the caller's name when a flow runs
-    # as a door; +session_id+ is stored in it under +:session_id+.
+    # Creates a runner for +flow+ (a BBS::Flow) on +session+. +context+ is
+    # the Hash its steps share (the caller's, so a nested flow and its face
+    # see the same one; a door passes a copy); +session_id+ is stored in it
+    # under +:session_id+.
     def initialize(session, session_id, flow, context: {})
       @session    = session
       @session_id = session_id
       @flow       = flow
-      @context    = { **context, session_id: session_id }
+      @context    = context
+      @context[:session_id] = session_id
     end
 
     # Runs the flow's steps until they end or one stops the flow. Returns

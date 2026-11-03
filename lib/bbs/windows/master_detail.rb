@@ -129,6 +129,9 @@ module BBS
         reload_detail
       end
 
+      # The selected item of the list, or +nil+.
+      def selected = @list_widget.selected_item
+
       # A master/detail window can be resized; #place lays the panes out
       # again.
       def resizable? = true

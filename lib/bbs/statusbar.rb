@@ -13,6 +13,8 @@ module BBS
     FKEY_LABEL = /\AF(\d+)\z/i
     # An Alt key label, <tt>Alt-X</tt>; the group is the letter.
     ALT_LABEL  = /\AAlt-(.)\z/i
+    # A Ctrl-letter key label, as <tt>Ctrl-S</tt>.
+    CTRL_LABEL = /\ACtrl-(.)\z/i
     # The Escape key label.
     ESC_LABEL  = /\AEsc\z/i
     # The Tab key label.
@@ -134,6 +136,7 @@ module BBS
         case label
         when FKEY_LABEL then key == :"f#{::Regexp.last_match(1)}"
         when ALT_LABEL  then key == :"alt_#{::Regexp.last_match(1).downcase}"
+        when CTRL_LABEL then key == :"ctrl_#{::Regexp.last_match(1).downcase}"
         when ESC_LABEL  then key == :escape
         when TAB_LABEL  then key == :tab
         else                 key_str.casecmp?(label)

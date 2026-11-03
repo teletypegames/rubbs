@@ -4,193 +4,165 @@ require_relative 'windows/info'
 require_relative 'windows/form'
 require_relative 'windows/master_detail'
 require_relative 'windows/stream'
+require_relative 'windows/reader'
+require_relative 'window_context'
+require_relative 'window_spec/options'
+require_relative 'window_spec/reader_options'
 
 module BBS
-  # Declarative window definition used inside Application.define:
+  # A window declared in Application.define, opened with
+  # <tt>show(:name, **extras)</tt>:
   #
-  #   window :compose, type: :form do |w|
-  #     w.title { |ctx| " Post to #{ctx[:board].title} " }
-  #     w.width 70
-  #     w.field :body, type: :textarea, max_length: 1000
-  #     w.on_submit do |values, form, ctx|
-  #       case ctx[:boards].post(ctx[:board].id, ctx[:username], values[:body])
-  #       when :empty then form.error('Message cannot be empty.'); :keep
-  #       else :close
-  #       end
-  #     end
+  #   window :article, :master_detail do
+  #     title  { article.title }
+  #     items  { article.sections }
+  #     label  :title
+  #     detail { |section| markdown(section.markdown) }
+  #     meta   { "#{article.url} · CC BY-SA" }
+  #     action('QR code') { qr article.short_url, title: 'Scan the article' }
   #   end
   #
-  # <tt>w.maximizable true</tt> gives the window the zoom gadget (F5,
-  # Alt-Enter): it fills the screen and back. Worth it for windows with a lot
-  # to read.
+  #   show :article, article: found
   #
-  # Open with <tt>app.open_window(:compose, board: some_board)</tt>. Block
-  # callbacks receive a +ctx+ hash combining the app's services, app.context,
-  # and any extras passed to open_window.
+  # The block is evaluated in the spec; each attribute takes a value or a
+  # block. A block runs when the window opens (or, for the callbacks, when
+  # the caller acts) in a BBS::WindowContext: the application's helpers,
+  # services and methods, the +extras+ of Application#show as methods (+article+), and
+  # +window+, +close+, +keep+, +error!+.
   #
-  # The +type+ picks the window class: +:info+ (BBS::Windows::Info), +:form+
-  # (BBS::Windows::Form), +:master_detail+ (BBS::Windows::MasterDetail) or
-  # +:stream+ (BBS::Windows::Stream). Each name in SCALAR_ATTRS and
-  # BLOCK_ATTRS is a setter method that takes a value or a block; a block
-  # is called with +ctx+ (and the callback's own arguments first, for the
-  # callbacks) when the window opens.
+  # The types:
+  #
+  # [+:info+]          text and buttons (BBS::Windows::Info): +body+,
+  #                    +scroll+, +padding+, #button
+  # [+:form+]          fields and Save/Cancel (BBS::Windows::Form): #field,
+  #                    +hint+, +prefill+, +on_submit+, +on_cancel+, #errors,
+  #                    +submit_label+, +cancel_label+
+  # [+:master_detail+] a list and the picked item (BBS::Windows::MasterDetail):
+  #                    +items+, +label+, +detail+, +meta+, +on_pick+,
+  #                    #action, +list_width+, +empty+
+  # [+:stream+]        a log and an input line (BBS::Windows::Stream):
+  #                    +lines+, +placeholder+, +buffer_size+, +on_submit+,
+  #                    +on_poll+
+  # [+:reader+]        a long text to page through (BBS::Windows::Reader):
+  #                    +lines+, +where+, +max_width+, #action, +on_key+ (a
+  #                    Hash of keys to blocks taking the reader)
+  #
+  # Every type takes +title+ (padded by the frame), +width+ and +height+
+  # (a negative number counts back from the screen's size), +maximizable+
+  # (on by default for a master/detail, a stream and a reader), +maximized+
+  # (opens full screen) and
+  # +accent+ (a Hash of theme roles for this window only).
   class WindowSpec
-    # The attributes usually given as plain values, each a setter method
-    # with an <tt>=</tt> alias; a block given instead is called with +ctx+.
-    SCALAR_ATTRS = %i[
-      title width height padding hint placeholder list_width buffer_size
-      scroll close_button close_label empty_message submit_label cancel_label
-      maximizable accent
-    ].freeze
+    include Options
+    include ReaderOptions
 
-    # The attributes usually given as blocks: content (+body+, +items+,
-    # +initial_lines+, +prefill+), item rendering (+item_label+,
-    # +render_detail+, +bottom_meta+) and callbacks (+on_submit+,
-    # +on_cancel+, +on_poll+, +on_activate+). Each is a setter method that
-    # takes a value or a block.
-    BLOCK_ATTRS = %i[
-      body items initial_lines item_label render_detail bottom_meta
-      on_submit on_cancel on_poll on_activate prefill
+    # The attributes: each a method taking a value or a block.
+    ATTRS = %i[
+      title width height maximizable accent padding scroll body hint submit_label cancel_label prefill
+      on_submit on_cancel items label detail meta on_pick list_width empty close_button close_label
+      lines placeholder buffer_size on_poll where max_width maximized on_key
     ].freeze
 
     # The window class of each type.
     WINDOWS = {
-      info: Windows::Info, form: Windows::Form, master_detail: Windows::MasterDetail, stream: Windows::Stream
-    }.freeze
-    # The attributes each type passes to its window's +open+, resolved
-    # with +ctx+; a +nil+ one is left out.
-    VALUES = {
-      info:          %i[title body width height scroll padding],
-      form:          %i[title width height hint submit_label cancel_label],
-      master_detail: %i[title items list_width empty_message close_button close_label width height],
-      stream:        %i[title initial_lines placeholder buffer_size width height close_button close_label]
-    }.freeze
-    # The callbacks each type passes on, called with their own arguments
-    # and +ctx+ last.
-    CALLBACKS = {
-      info:          [],
-      form:          %i[on_submit on_cancel],
-      master_detail: %i[item_label render_detail bottom_meta on_activate],
-      stream:        %i[on_submit on_poll]
-    }.freeze
-    # What a type's window gets for an attribute that is not set.
-    DEFAULTS = {
-      master_detail: { items: [], item_label: :to_s.to_proc, render_detail: ->(_item, _width) { [] } },
-      stream:        { initial_lines: [] }
+      info: Windows::Info, form: Windows::Form, master_detail: Windows::MasterDetail,
+      stream: Windows::Stream, reader: Windows::Reader
     }.freeze
 
-    # The window's name (as used with +open_window+) and its type Symbol.
+    # The types whose windows are maximizable unless the spec says.
+    MAXIMIZABLE = %i[master_detail stream reader].freeze
+
+    # Raised inside a form's +on_submit+ by WindowContext#error! to show a
+    # message and keep the form open.
+    class Refused < StandardError
+    end
+
+    # The window's name (as used with Application#show) and its type Symbol.
     attr_reader :name, :type
 
-    # Creates an empty spec for the window +name+ of +type+ (+:info+,
-    # +:form+, +:master_detail+ or +:stream+).
-    def initialize(name, type:)
+    # Creates the spec of window +name+ of +type+ (a key of WINDOWS) and
+    # evaluates the block in it. Raises ArgumentError for an unknown type.
+    def initialize(name, type, &block)
+      raise ArgumentError, "Unknown window type: #{type.inspect}" unless WINDOWS.key?(type)
+
       @name    = name
       @type    = type
       @attrs   = {}
       @fields  = []
       @actions = []
       @buttons = nil
+      @errors  = {}
+      instance_eval(&block) if block
     end
 
-    SCALAR_ATTRS.each do |key|
-      define_method(key) { |value = nil, &block| @attrs[key] = block || value }
-      alias_method "#{key}=", key
-    end
-
-    BLOCK_ATTRS.each do |key|
+    ATTRS.each do |key|
       define_method(key) { |value = nil, &block| @attrs[key] = block || value }
     end
 
-    # Adds a form field stored under +key+. +opts+ is a
-    # BBS::Windows::Form field descriptor (+label+, +type+, +max_length+,
-    # ...); a Proc +value+ is called with +ctx+, and a field without a value
-    # takes it from the +prefill+ Hash.
+    # Adds a form field stored under +key+. +opts+ is a BBS::Windows::Form
+    # field descriptor (+label+, +type+, +max_length+, …); a block +value+
+    # is evaluated when the form opens, and a field without a value takes it
+    # from +prefill+.
     def field(key, **opts)
       @fields << opts.merge(key: key)
     end
 
-    # Adds an action button to a master/detail window. +opts+ is a
-    # BBS::Windows::ButtonBar descriptor; the block, when given, becomes its
-    # +on_click+ and is called with the window and +ctx+.
-    def action(**opts, &block)
-      opts = opts.merge(on_click: block) if block
-      @actions << opts
-    end
-
-    # Adds a button to an info window, replacing its default OK button.
-    # +opts+ is a BBS::Windows::ButtonBar descriptor; the block, when given,
-    # becomes its +on_click+ and is called with the window and +ctx+.
-    def button(**opts, &block)
-      @buttons ||= []
-      opts = opts.merge(on_click: block) if block
-      @buttons << opts
-    end
-
-    # Resolves the attributes, wraps the callbacks with the runtime +ctx+,
-    # then opens the underlying rubbs window on +app+. +extras+ flow into
-    # +ctx+ (e.g. <tt>board:</tt>).
+    # The messages of a form's refusals: when +on_submit+ returns one of
+    # these keys, the form shows its message and stays open.
     #
-    # Returns the opened BBS::Window.
+    #   errors empty: 'Write something first.', too_fast: 'One post a minute, please.'
+    def errors(messages) = @errors.merge!(messages)
+
+    # Adds a button under a master/detail list or a reader. The block runs
+    # with the selected item (a master/detail; a block that takes it does not
+    # run on an empty list, one without a parameter always runs) and the
+    # window stays open unless the block calls +close+.
+    # +opts+ are those of BBS::Windows::ButtonBar (+align+, +key+).
+    #
+    #   action('Open') { |book| read(book) }
+    def action(label, **opts, &block)
+      @actions << opts.merge(label: menu_label(label), run: block)
+    end
+
+    # Adds a button to an info window, in place of its OK button. The block
+    # runs, then the window closes unless the block calls +keep+.
+    def button(label, **opts, &block)
+      (@buttons ||= []) << opts.merge(label: menu_label(label), run: block)
+    end
+
+    # Opens the window on +app+: a BBS::WindowContext with +extras+, the
+    # attributes resolved in it, the window made. Returns the BBS::Window.
     def open(app, **extras)
-      ctx    = build_ctx(app, extras)
-      window = WINDOWS.fetch(@type).open(app, **options(ctx))
-      window.maximizable = resolve(:maximizable, ctx) ? true : false if window.respond_to?(:maximizable=)
-      window.accent = resolve(:accent, ctx) if window.respond_to?(:accent=)
+      context = WindowContext.new(app, extras)
+      window  = WINDOWS.fetch(@type).open(app, **options(context))
+      context.window = window
+      window.id = @name
+      window.maximizable = maximizable?(context)
+      window.toggle_maximize if resolve(:maximized, context) && window.respond_to?(:toggle_maximize)
+      window.accent = resolve(:accent, context) if @attrs.key?(:accent)
       window
     end
 
     private
 
-    def build_ctx(app, extras)
-      services = app.respond_to?(:services) ? (app.services || {}) : {}
-      context  = app.respond_to?(:context)  ? (app.context  || {}) : {}
-      { app: app, **context, **services, **extras }
-    end
+    def menu_label(label) = label.include?('&') ? label : "&#{label}"
 
-    def resolve(key, ctx, *)
-      val = @attrs[key]
-      val.is_a?(Proc) ? val.call(ctx, *) : val
-    end
-
-    # The keywords of the window's +open+: the defaults, the VALUES set,
-    # the CALLBACKS bound to +ctx+, and the type's own parts.
-    def options(ctx)
-      values    = VALUES.fetch(@type).to_h { |key| [key, resolve(key, ctx)] }.compact
-      callbacks = CALLBACKS.fetch(@type).filter_map { |key| [key, bind(@attrs[key], ctx)] if @attrs[key] }.to_h
-      DEFAULTS.fetch(@type, {}).merge(values, callbacks, parts(ctx))
-    end
-
-    # +callback+ called with its own arguments and +ctx+ last.
-    def bind(callback, ctx) = ->(*args) { callback.call(*args, ctx) }
-
-    # The fields of a form, the buttons of an info window, the actions of a
-    # master/detail window.
-    def parts(ctx)
-      case @type
-      when :form then { fields: resolve_fields(ctx) }
-      when :info then @buttons ? { buttons: clickables(@buttons, ctx) } : {}
-      when :master_detail then @actions.empty? ? {} : { actions: clickables(@actions, ctx) }
-      else {}
+    def maximizable?(context)
+      if @attrs.key?(:maximizable)
+        resolve(:maximizable, context) ? true : false
+      else
+        MAXIMIZABLE.include?(@type)
       end
     end
 
-    def resolve_fields(ctx)
-      prefilled = @attrs[:prefill] ? Hash(@attrs[:prefill].call(ctx)).transform_keys(&:to_sym) : {}
-      @fields.map { |field| field.merge(value: field_value(field, prefilled, ctx)) }
+    def resolve(key, context)
+      value = @attrs[key]
+      value.is_a?(Proc) ? context.instance_exec(&value) : value
     end
 
-    # The value of +field+: its own (a Proc called with +ctx+), else the
-    # +prefilled+ one.
-    def field_value(field, prefilled, ctx)
-      value = field[:value]
-      value = value.call(ctx) if value.is_a?(Proc)
-      value.nil? && prefilled.key?(field[:key]) ? prefilled[field[:key]] : value
-    end
-
-    # Button descriptors with their +on_click+ Proc bound to +ctx+.
-    def clickables(list, ctx)
-      list.map { |opts| opts[:on_click].is_a?(Proc) ? opts.merge(on_click: bind(opts[:on_click], ctx)) : opts }
+    def size(key, context, total)
+      value = resolve(key, context)
+      value.is_a?(Integer) && value.negative? ? total + value : value
     end
   end
 end
