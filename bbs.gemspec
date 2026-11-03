@@ -2,11 +2,11 @@
 
 Gem::Specification.new do |s|
   s.name        = 'bbs'
-  s.version     = '1.6.1'
+  s.version     = '1.7.0'
   s.summary     = 'Universal telnet BBS server library'
   s.license     = 'MIT'
   s.author      = 'Zsolt Tasnadi'
-  s.files       = Dir['lib/**/*.rb'] + Dir['lib/**/*.yml'] + ['bin/art-preview']
+  s.files       = Dir['lib/**/*.rb'] + ['bin/art-preview']
   s.bindir      = 'bin'
   s.executables = ['art-preview']
   s.require_paths = ['lib']

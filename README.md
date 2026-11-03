@@ -1951,11 +1951,18 @@ the first screen; no answer in 60 s takes the pick or the guess.
 The question alone is private since 1.0 (`Terminal::Question`); a board uses
 `Terminal.flow`.
 
-`splash: true` puts the Teletype Games logo (`BBS::Splash`) between the
-question and the face, centred, with PRESS ANY KEY TO CONTINUE under it: 66×23
-half blocks in 256 colours on a modern terminal (none when the window is
-narrower), 33×23 quarter blocks on a C64 (`lib/bbs/splash/ttg-*.yml`, both
-`BBS::Art`). Any key, or 60 s, goes on.
+`splash:` takes a `BBS::Splash`, a screen between the question and the face:
+the board's two drawings (`BBS::Art`, the C64 one `petscii-upper`), centred,
+with a prompt under them (PRESS ANY KEY TO CONTINUE by default). Any key, or
+60 s, goes on; a modern window narrower than the drawing skips it.
+
+```ruby
+splash = BBS::Splash.new(modern: BBS::Art.load('art/logo-modern.yml'),
+                         petscii: BBS::Art.load('art/logo-c64.yml'))
+config.flow = BBS::Terminal.flow(title: 'My board', modern: m, petscii: p, splash: splash)
+```
+
+The TTG boards take theirs from `ttg-common` (`TTG::Logo.splash`).
 
 ### `Session#readkey` return values
 
