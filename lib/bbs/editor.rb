@@ -100,8 +100,8 @@ module BBS
     # screen as it is; the caller draws the next one.
     #
     # Returns the text, lines joined by LF, when saved, and +nil+ when the
-    # caller quit. Raises IOError when the caller hangs up (after the last
-    # autosave) and IO::TimeoutError, an IOError, when an autosaving editor
+    # caller quit. Raises IOError, Errno::ECONNRESET or Errno::EPIPE when
+    # the caller hangs up (after the last autosave) and IO::TimeoutError, an IOError, when an autosaving editor
     # sat idle past the session's limit.
     def run
       first_paint
@@ -115,7 +115,7 @@ module BBS
         paint
         autosave if due?
       end
-    rescue IOError
+    rescue IOError, Errno::ECONNRESET, Errno::EPIPE
       autosave
       raise
     end
