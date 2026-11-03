@@ -42,11 +42,13 @@ module BBS
     # [title]   the board's name, shown above the question
     # [modern]  the BBS::Flow for a modern terminal
     # [petscii] the BBS::Flow for a PETSCII line, a Commodore 64
+    # [splash]  whether the Teletype Games logo (BBS::Splash) comes between
+    #           the question and the face
     #
     # Returns a BBS::Flow that halts when the line drops at the question.
     #
     #   BBS.configure { |c| c.flow = BBS::Terminal.flow(title: 'My board', modern: MODERN, petscii: PETSCII) }
-    def self.flow(title:, modern:, petscii:)
+    def self.flow(title:, modern:, petscii:, splash: false)
       faces = { modern: modern, petscii: petscii }
       Flow.define do
         call do |ctx, runner|
@@ -54,6 +56,8 @@ module BBS
           next :halt if face.nil?
 
           Terminal.switch(runner.session, face)
+          next :halt if splash && !Splash.continue?(runner.session, face)
+
           FlowRunner.new(runner.session, ctx[:session_id], faces[face], context: ctx).run
           nil
         end

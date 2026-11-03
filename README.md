@@ -1951,6 +1951,12 @@ the first screen; no answer in 60 s takes the pick or the guess.
 The question alone is private since 1.0 (`Terminal::Question`); a board uses
 `Terminal.flow`.
 
+`splash: true` puts the Teletype Games logo (`BBS::Splash`) between the
+question and the face, centred, with PRESS ANY KEY TO CONTINUE under it: 66×23
+half blocks in 256 colours on a modern terminal (none when the window is
+narrower), 33×23 quarter blocks on a C64 (`lib/bbs/splash/ttg-*.yml`, both
+`BBS::Art`). Any key, or 60 s, goes on.
+
 ### `Session#readkey` return values
 
 - Single-character `String` — printable input (`'a'`, `' '`, …).
