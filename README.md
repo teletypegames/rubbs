@@ -37,7 +37,7 @@ Connect with `telnet localhost 2323`.
 12. [FrameBuffer & ANSI text](#12-framebuffer--ansi-text)
 13. [Markdown renderer](#13-markdown-renderer)
 14. [Banner & ERB screens](#14-banner--erb-screens)
-15. [Persistence and shared blocks (`Store`, `SQLite`, `HTTP`, `Cache`, `RateLimit`, `Text`)](#15-persistence-and-shared-blocks-store-sqlite-http-cache-ratelimit-text)
+15. [Persistence and shared blocks (`Store`, `SQLite`, `HTTP`, `Cache`, `RateLimit`, `Text`)](#15-persistence-and-shared-blocks-store-sqlite-http-cache-ratelimit-text) — and QR codes (`BBS::QR`)
 16. [AI characters (`BBS::AI`)](#16-ai-characters-bbsai)
 17. [Doors (`BBS::Door`)](#17-doors-bbsdoor) — telnet gateways (`BBS::Gateway`) and file downloads (`BBS::Zmodem`, `BBS::Xmodem`)
 18. [Telnet, sessions & input model](#18-telnet-sessions--input-model)
@@ -1156,6 +1156,43 @@ A board's layers handle a failure of a service in one place:
 So an error message with a URL or a token never reaches a caller, and each
 failure is logged once.
 
+### `BBS::QR`
+
+A QR code drawn in text, for a phone to read off the caller's screen: the
+address of a story, a page to open in a browser. The code is encoded by the
+`rqrcode_core` gem (the smallest version that holds the text, error
+correction `:l`), and drawn white on black, two modules to a cell, so the
+modules come out square on both kinds of screen:
+
+- `BBS::QR.ansi(text, width: 80, height: 24)` — a modern terminal, whose cells
+  are twice as tall as wide: half blocks (`▀ ▄ █`), two rows of modules a line.
+- `BBS::QR.petscii(text, cols: 39, rows: 20)` — a Commodore 64, whose cells are
+  square: quadrant blocks, two by two modules a cell; the quadrants the C64
+  has no character for are the reverse of those it has. The defaults leave
+  the last column free (a full row wraps) and five rows for a title and a
+  prompt: up to a version 4 code (78 bytes), a 19×19-cell square.
+
+Both return the lines with their colours as ANSI SGR (and reverse video),
+which a PETSCII session turns into the C64's colour and RVS codes, so a line
+is written as it is or goes into a window body. Two light modules of quiet
+zone go around the code (`quiet:`). A text that does not fit the room
+raises `BBS::QR::TooLong` (an `ArgumentError`): say so, and show the address
+as text.
+
+```ruby
+# A C64 screen (BBS::Petscii::Screen)
+screen.title('SCAN THE LINK')
+BBS::QR.petscii(item.link).each { |line| screen.puts(" #{line}") }
+screen.pause
+
+# A window of a modern board
+BBS::Windows::Info.open(app, title: ' Scan me ', width: 46,
+                             body: BBS::QR.ansi(item.link, width: 42, height: 20))
+```
+
+`BBS::QR.modules(text, level: :l, max_version: 40)` is the bare matrix, rows
+of `true` for a dark module, for a drawing of a board's own.
+
 ### `BBS::Text` and `BBS::Address`
 
 - `BBS::Text.clean(text, keep_newlines: true)`: valid UTF-8, without C0
@@ -1966,6 +2003,7 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `bbs/cache.rb` | TTL + LRU + byte-capped cache with single-flight and stale-on-error. |
 | `bbs/rate_limit.rb` | Sliding-window rate limit per key, several at once, in memory or SQLite; `caller_key(session)`. |
 | `bbs/wikipedia.rb` | Wikipedia's Action API, paced, parsed. |
+| `bbs/qr.rb` | QR codes in half blocks (ANSI) and quadrant blocks (PETSCII). |
 | `bbs/background.rb` | `BBS.background`: work in a thread with log and retry. |
 | `bbs/text.rb`, `bbs/address.rb` | Control-free text; local / public IP addresses. |
 | `bbs/fake_os.rb` | Character-mode OS simulator: boot script + command shell. |

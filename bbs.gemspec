@@ -2,7 +2,7 @@
 
 Gem::Specification.new do |s|
   s.name        = 'bbs'
-  s.version     = '1.1.0'
+  s.version     = '1.2.0'
   s.summary     = 'Universal telnet BBS server library'
   s.license     = 'MIT'
   s.author      = 'Zsolt Tasnadi'
@@ -18,5 +18,6 @@ Gem::Specification.new do |s|
   }
   s.add_dependency 'artii', '~> 2.1'
   s.add_dependency 'csv', '~> 3.3'
+  s.add_dependency 'rqrcode_core', '~> 2.1'
   s.add_dependency 'sqlite3', '~> 2.1'
 end
