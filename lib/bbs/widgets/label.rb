@@ -19,12 +19,13 @@ module BBS
       end
 
       # Draws the text on the first row of the bounds into +frame+, a
-      # BBS::FrameBuffer, cut to the width and aligned.
+      # BBS::FrameBuffer, cut to the width and aligned; its ANSI escape
+      # sequences take no width.
       def render(frame)
         return if bounds.width <= 0
 
-        clipped = @text.to_s[0, bounds.width].to_s
-        frame.move(bounds.x + offset(clipped.length), bounds.y)
+        clipped = FrameBuffer.clip_ansi(@text.to_s, bounds.width)
+        frame.move(bounds.x + offset(FrameBuffer.visible_width(clipped)), bounds.y)
         frame.write_ansi(clipped, base_sgr: style(@style_key))
       end
 

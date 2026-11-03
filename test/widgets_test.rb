@@ -33,6 +33,13 @@ class LabelTest < Minitest::Test
     assert_equal '        hi', row(drawn(place(BBS::Widgets::Label.new(text: 'hi', align: :right))), 1, width: 10)
     assert_equal 'abc', row(drawn(place(BBS::Widgets::Label.new(text: 'abcdef'), width: 3)), 1, width: 3)
   end
+
+  def test_escapes_take_no_width
+    text = "\e[97;40mabcdef\e[0m"
+    assert_equal 'abcdef    ', row(drawn(place(BBS::Widgets::Label.new(text: text))), 1, width: 10)
+    assert_equal '  abcdef  ', row(drawn(place(BBS::Widgets::Label.new(text: text, align: :center))), 1, width: 10)
+    assert_equal 'abc', row(drawn(place(BBS::Widgets::Label.new(text: text), width: 3)), 1, width: 3)
+  end
 end
 
 class ButtonTest < Minitest::Test

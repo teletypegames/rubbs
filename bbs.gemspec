@@ -2,7 +2,7 @@
 
 Gem::Specification.new do |s|
   s.name        = 'bbs'
-  s.version     = '1.2.0'
+  s.version     = '1.2.1'
   s.summary     = 'Universal telnet BBS server library'
   s.license     = 'MIT'
   s.author      = 'Zsolt Tasnadi'
