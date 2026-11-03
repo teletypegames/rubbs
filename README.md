@@ -1385,6 +1385,19 @@ door :feedia, FEEDIA, label: '&Feedia'
   when it does not answer (5 s), the caller is told so and comes back. A caller
   who hangs up inside ends the call, and the other board's connection with it.
 - `session.line` is the caller's socket, for a door like this one.
+- `forward: true`, for a board of one's own only, says who is calling, as a
+  proxy's `X-Forwarded-For` does in HTTP: before anything else the gateway
+  sends the other board three telnet NEW-ENVIRON (RFC 1572) variables,
+  `BBS_FACE` (`modern` or `petscii`, what the caller picked here; `modern` for
+  a translated C64), `BBS_CLIENT_IP` (the caller's address) and `BBS_VIA`
+  (`config.log_tag`). A rubbs board believes them only from a neighbour, a
+  private or loopback address (`BBS::Address.local?`), and then
+  `session.forwarded_face`, `session.caller_ip` and `session.via` answer from
+  them: `BBS::Terminal` skips its question and splash, and
+  `BBS::RateLimit.caller_key` counts the real address. From anywhere else they
+  are kept (`session.telnet_env`) but not believed, and `caller_ip` is the
+  line's own. Never forward to someone else's board: it would learn the
+  caller's address.
 - A directory that dials many boards makes a gateway a call
   (`connect_timeout:` sets the wait, 5 s by default) and reads how it went from
   the `BBS::Gateway::Report` its block gets: `connected`, the `error` that kept
@@ -1963,6 +1976,10 @@ config.flow = BBS::Terminal.flow(title: 'My board', modern: m, petscii: p, splas
 ```
 
 The TTG boards take theirs from `ttg-common` (`TTG::Logo.splash`).
+
+A call that comes through another rubbs board's gateway with `forward: true`
+had its question there: `Terminal.flow` takes the face picked there
+(`session.forwarded_face`) and shows neither the question nor the splash.
 
 ### `Session#readkey` return values
 

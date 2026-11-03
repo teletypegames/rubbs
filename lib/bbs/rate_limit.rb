@@ -29,18 +29,21 @@ module BBS
     LOCK = Monitor.new
 
     # Returns the key a caller's events are counted by: the IP address of a
-    # caller on the internet (an IPv4-mapped one as IPv4), or
-    # <tt>line:<session id></tt> for one behind a local proxy such as
-    # bbs-web (BBS::Address.local?), whose address is the proxy's, and for a
-    # line without an address.
+    # caller on the internet (an IPv4-mapped one as IPv4), the forwarded one
+    # for a call through another board's gateway (Telnet::Forwarded#caller_ip),
+    # or <tt>line:<session id></tt> for one behind a local proxy that does
+    # not forward it, such as bbs-web (BBS::Address.local?), and for a line
+    # without an address.
     def self.caller_key(session)
       address = Address.parse(peer(session))
       address.nil? || Address.local?(address) ? "line:#{session.session_id}" : address.to_s
     end
 
-    # Returns the IP address of +session+'s line as a String, or +nil+.
+    # Returns the caller's IP address of +session+ as a String (the
+    # forwarded one when believed, see Telnet::Forwarded#caller_ip), or
+    # +nil+.
     def self.peer(session)
-      session.line.remote_address.ip_address
+      session.respond_to?(:caller_ip) ? session.caller_ip : session.line.remote_address.ip_address
     rescue StandardError
       nil
     end

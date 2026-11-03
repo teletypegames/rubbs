@@ -14,6 +14,10 @@ module BBS
   # screen. A changed pick prints the prompt again on a new line, since the
   # two machines go back a character differently. A caller who does not answer
   # gets what is picked, or the guess.
+  #
+  # A call forwarded by another board's gateway (Telnet::Forwarded, a
+  # BBS::Gateway with <tt>forward: true</tt>) had its question there: the
+  # face picked there is taken without asking, and without the splash.
   module Terminal
     # Seconds to wait for the telnet negotiation before guessing.
     SETTLE = 1.5
@@ -45,6 +49,9 @@ module BBS
     # [splash]  a BBS::Splash to show between the question and the face, or
     #           +nil+ for none
     #
+    # A forwarded call (Telnet::Forwarded#forwarded_face) gets neither the
+    # question nor the splash.
+    #
     # Returns a BBS::Flow that halts when the line drops at the question.
     #
     #   BBS.configure { |c| c.flow = BBS::Terminal.flow(title: 'My board', modern: MODERN, petscii: PETSCII) }
@@ -52,13 +59,16 @@ module BBS
       faces = { modern: modern, petscii: petscii }
       Flow.define do
         call do |ctx, runner|
-          face = Question.new(runner.session, title).ask
+          session   = runner.session
+          guess     = Terminal.guess(session)
+          forwarded = session.respond_to?(:forwarded_face) && session.forwarded_face
+          face      = forwarded || Question.new(session, title, default: guess).ask
           next :halt if face.nil?
 
-          Terminal.switch(runner.session, face)
-          next :halt if splash && !splash.continue?(runner.session, face)
+          Terminal.switch(session, face)
+          next :halt if splash && !forwarded && !splash.continue?(session, face)
 
-          FlowRunner.new(runner.session, ctx[:session_id], faces[face], context: ctx).run
+          FlowRunner.new(session, ctx[:session_id], faces[face], context: ctx).run
           nil
         end
       end
@@ -83,11 +93,12 @@ module BBS
       # The keys that take the pick back.
       UNPICK_KEYS = %i[backspace ctrl_t].freeze
 
-      # The question of +title+ for +session+.
-      def initialize(session, title)
+      # The question of +title+ for +session+, +default+ the face taken when
+      # the caller just presses RETURN (Terminal.guess when +nil+).
+      def initialize(session, title, default: nil)
         @session = session
         @title   = title
-        @default = Terminal.guess(session)
+        @default = default || Terminal.guess(session)
         @picked  = nil
       end
 

@@ -7,6 +7,8 @@ require_relative 'telnet/mouse'
 require_relative 'telnet/keys'
 require_relative 'telnet/escapes'
 require_relative 'telnet/line_input'
+require_relative 'telnet/environ'
+require_relative 'telnet/forwarded'
 
 module BBS
   # The telnet line I/O of a BBS::Session: option negotiation, key and line
@@ -21,6 +23,7 @@ module BBS
     include Keys
     include Escapes
     include LineInput
+    include Forwarded
 
     # The widest terminal accepted from a NAWS report, in columns.
     MAX_COLS = 255
@@ -146,9 +149,12 @@ module BBS
 
     def telnet_parser = @telnet_parser ||= Parser.new { |command, argument| telnet_command(command, argument) }
 
-    # A NAWS report resizes the line; the other commands need no answer.
+    # A NAWS report resizes the line, NEW-ENVIRON variables are kept
+    # (Telnet::Forwarded); the other commands need no answer.
     def telnet_command(command, argument)
-      return unless command == SB && argument[0] == NAWS_OPT && argument.size > NAWS_SIZE
+      return unless command == SB
+      return take_environ(argument) if argument[0] == NEW_ENVIRON_OPT
+      return unless argument[0] == NAWS_OPT && argument.size > NAWS_SIZE
 
       resize!((argument[1] << 8) | argument[2], (argument[3] << 8) | argument[4])
     end

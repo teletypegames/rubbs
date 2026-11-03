@@ -29,6 +29,15 @@ module BBS
   # cannot make the board a relay into its own network. A board that dials
   # its neighbours (<tt>host.docker.internal</tt>, a container) says
   # <tt>public_only: false</tt>.
+  #
+  # A gateway to one of the board's own neighbours can also say who is
+  # calling, with <tt>forward: true</tt>: before anything else it sends the
+  # other board the caller's face, IP address and this board's name as
+  # telnet NEW-ENVIRON variables (Telnet::Environ::FORWARDED), and a rubbs
+  # board that takes them from a neighbour skips its terminal question and
+  # splash and counts the caller by the real address (Telnet::Forwarded).
+  # Never forward to a board of someone else's: it would learn the caller's
+  # address.
   class Gateway
     # Seconds to wait for the other board to accept the connection, by
     # default.
@@ -85,8 +94,10 @@ module BBS
     # [public_only]     call only an address on the public internet
     #                   (BBS::Address.public?); +false+ for a trusted
     #                   neighbour such as <tt>host.docker.internal</tt>
+    # [forward]         send the other board who is calling (see above);
+    #                   only for a board of one's own
     def initialize(host:, port:, name: nil, terminal: 'XTERM-256COLOR', connect_timeout: CONNECT_TIMEOUT, idle: nil,
-                   translate: false, public_only: true)
+                   translate: false, public_only: true, forward: false)
       @host            = host
       @port            = port.to_i
       @name            = name || "#{host}:#{port}"
@@ -95,6 +106,7 @@ module BBS
       @idle            = idle
       @translate       = translate
       @public_only     = public_only
+      @forward         = forward
     end
 
     # The door's program: connects, carries the line until the other board
@@ -167,11 +179,21 @@ module BBS
 
     # Carries the line over a Link; true when the caller hung up.
     def carry(session, remote, report)
+      remote.write(Telnet::Environ.info(forwarded(session))) if @forward
       link = Link.new(session, remote, terminal: @terminal, idle: idle_seconds, bridge: bridge(session))
       link.run.tap { |hung_up| report.hung_up = hung_up ? :caller : :board }
     ensure
       report.received = link&.received.to_i
       remote.close rescue nil
+    end
+
+    # What a forwarding gateway tells the other board: the face it sees
+    # (an ANSI terminal for a translated PETSCII caller), the caller's
+    # address (as this board believes it), this board's name.
+    def forwarded(session)
+      face = session.petscii? && !@translate ? 'petscii' : 'modern'
+      { 'BBS_FACE' => face, 'BBS_CLIENT_IP' => session.caller_ip.to_s, 'BBS_VIA' => BBS.config.log_tag.to_s }
+        .reject { |_, value| value.empty? }
     end
 
     def back(session, text)

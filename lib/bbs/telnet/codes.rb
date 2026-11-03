@@ -29,6 +29,8 @@ module BBS
       SGA_OPT  = 3
       # Telnet option NAWS (the client reports its window size).
       NAWS_OPT = 31
+      # Telnet option NEW-ENVIRON (RFC 1572: the client sends variables).
+      NEW_ENVIRON_OPT = 39
     end
   end
 end
