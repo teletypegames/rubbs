@@ -108,7 +108,7 @@ class EditorAutosaveTest < Minitest::Test
       sleep 0.05
       caller.close
     end
-    assert_raises(IOError) { run_with(editor(every: 10)) }
+    assert_raises(IOError, Errno::ECONNRESET, Errno::EPIPE) { run_with(editor(every: 10)) }
     assert_equal ['xy'], @saves
   end
 
