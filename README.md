@@ -1125,19 +1125,44 @@ A sliding window per key, thread-safe; quiet keys are forgotten.
   under the limit's name, so a lockout outlasts a restart:
   `BBS::RateLimit.new(limit: 10, per: 600, store: DB, name: 'logins')`.
 
-### `BBS::Wikipedia`
+### `BBS::MediaWiki`, `BBS::Wikipedia` and `BBS::Wikidata`
 
-Wikipedia's Action API as a board asks it: through `BBS::HTTP`, with the
-board's User-Agent (Wikipedia may answer 403 without one), paced so that all
+`BBS::MediaWiki` is the Action API of any MediaWiki site (Wikipedia, Memory
+Alpha, any `api.php`) as a board asks it: through `BBS::HTTP`, with the
+board's User-Agent (a wiki may answer 403 without one), paced so that all
 callers together send at most `rate` requests a second (a request that would
 wait more than `max_wait`, 3 s, for its turn is not sent). The answer comes
-parsed; a failure raises `BBS::Wikipedia::Error`, a `BBS::HTTP::Error`.
+parsed; a failure raises `BBS::MediaWiki::Error`, a `BBS::HTTP::Error`, whose
+message names the wiki.
+
+```ruby
+ALPHA = BBS::MediaWiki.new(endpoint: 'https://memory-alpha.fandom.com/api.php', name: 'Memory Alpha',
+                           user_agent: 'Starbase BBS (+https://teletypegames.org)', rate: 3)
+ALPHA.get(action: 'query', list: 'search', srsearch: 'tribbles')
+```
+
+`BBS::Wikipedia` is one, with the language in each call and one pace for all
+languages; it raises `BBS::Wikipedia::Error` (a `BBS::MediaWiki::Error`).
 
 ```ruby
 WIKIPEDIA = BBS::Wikipedia.new(user_agent: 'Alexandria BBS (+https://teletypegames.org)', rate: 5)
 WIKIPEDIA.get('en', action: 'query', list: 'search', srsearch: 'Commodore 64')
 # => { "query" => { "search" => [...] } }   (format=json, formatversion=2 added)
 ```
+
+`BBS::MediaWiki::Extract.sections(title, extract, skip: Extract::SKIP)` cuts the
+plain-text extract of an article (`prop=extracts`, `explaintext=1`,
+`exsectionformat=wiki`) into `[heading, markdown]` pairs at its level-2
+headings, ready for `BBS::Markdown`: the lead under `title`, deeper headings
+as Markdown headings, formulas as readable text, and the sections named in
+`skip` (lowercase; by default references, notes and links in English,
+Hungarian and German) left out.
+
+`BBS::Wikidata` is the SPARQL endpoint of Wikidata (CC0) for a catalog
+import: `select(query)` posts the query (long timeouts, a 32 MB cap, a pause
+before each) and returns the result rows; `BBS::Wikidata.qid(binding)` and
+`BBS::Wikidata.text(binding)` read a row's values. A failure raises
+`BBS::Wikidata::Error`, a `BBS::HTTP::Error`.
 
 ### Where an error is handled: repositories raise, services decide
 
@@ -2006,7 +2031,8 @@ Return `:halt` to end the application, `:handled` to stop propagation,
 | `bbs/http.rb` | Bounded HTTP GET/POST: deadline, body cap, safe redirects, public addresses only. |
 | `bbs/cache.rb` | TTL + LRU + byte-capped cache with single-flight and stale-on-error. |
 | `bbs/rate_limit.rb` | Sliding-window rate limit per key, several at once, in memory or SQLite; `caller_key(session)`. |
-| `bbs/wikipedia.rb` | Wikipedia's Action API, paced, parsed. |
+| `bbs/media_wiki.rb`, `bbs/media_wiki/extract.rb`, `bbs/wikipedia.rb` | the Action API of a MediaWiki site, paced, parsed; Wikipedia as one; extracts cut into sections. |
+| `bbs/wikidata.rb` | Wikidata's SPARQL endpoint for catalog imports. |
 | `bbs/qr.rb` | QR codes in half blocks (ANSI) and quadrant blocks (PETSCII). |
 | `bbs/background.rb` | `BBS.background`: work in a thread with log and retry. |
 | `bbs/text.rb`, `bbs/address.rb` | Control-free text; local / public IP addresses. |
