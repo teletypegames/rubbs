@@ -332,6 +332,79 @@ Every part is optional. The TTG boards use `TTG::PRESET` from `ttg-common`.
 
 ---
 
+### Accounts and login: `BBS::Auth`
+
+Who is on the line, the same on every board of a network. One board keeps the
+accounts (with roles), the others ask it, and a call handed on from one board
+to another carries its caller's identity in a signed key.
+
+```ruby
+# the home of the accounts: a database of its own, an API for the other boards
+class HomeBBS
+  include BBS::Domain
+  path     :accounts_db, 'data/accounts.sqlite3'
+  database :accounts_db, BBS::Auth::MIGRATIONS, name: :auth
+  service(:directory) { BBS::Auth::Directory.new(store: databases[:auth], roles: ['member']) }
+end
+
+BBS.board 'Home BBS', HomeBBS do
+  auth(login: :menu, &:directory)
+  on_start { |bbs| BBS::Auth::API.new(bbs.directory, port: 8090).start }
+  …
+end
+
+# any other board
+BBS.board 'Blog BBS', BlogBBS do
+  auth BBS::Auth::Remote.new('http://home-bbs:8090/auth'), login: :menu   # or :call, :both
+  …
+end
+```
+
+| `auth` option | |
+|---|---|
+| directory | a `BBS::Auth::Directory` (the accounts here) or a `BBS::Auth::Remote` (another board's, through its `BBS::Auth::API`); a block is given the domain object at boot |
+| `login:` | `:call` asks a name and password at the start of a call, before the face; `:menu` leaves it to the faces (the built-in `:log_in` / `:log_out` commands, `log_in` on a `Petscii::Face`); `:both` |
+| `guests:` | at a `:call` login, whether an empty name or one without an account comes in as a guest (default `true`) |
+
+In an Application, a `Petscii::Face` and a flow: `identity` (a
+`BBS::Auth::Identity`: `id`, `name`, `roles`, `source`), `signed_in?`,
+`role?(:blogger)`, `log_in`, `log_out`. A command can be for one role; its menu
+item is greyed out and its key refused for anyone else:
+
+```ruby
+command(:write, 'Write…', key: 'F4', role: :blogger) { show(:editor) }
+menu 'You', :log_in, :log_out
+main_menu { item('w', 'write', if: -> { role?(:blogger) }) { write } }   # a C64 face
+```
+
+**Handing a caller on.** A forwarding `BBS::Gateway` (`forward: true`) sends a
+signed-in caller's identity as `RUBBS_AUTH_KEY`, a `BBS::Auth::Token` for the
+board it dials (`audience:`, by default the slug of its `name:`). The other
+board takes it from a neighbour only (a private or loopback address, as the
+other forwarded variables), checks it, and the caller is signed in without a
+question. A token is `v1.<kid>.<payload>.<HMAC-SHA256>`: the payload (name,
+id, roles, issuer, audience, times, a nonce) is signed with the secret every
+board shares, not hidden; it is good for one board, sixty seconds and once.
+
+**The secret.** `RUBBS_AUTH_SECRET` (`BBS.config.auth_secrets`), the same on
+every board: at least 32 random bytes (`openssl rand -hex 32`), never in a
+repository. While it changes, give both, the new first: `new,old`.
+
+**The API** (`BBS::Auth::API`, WEBrick) answers one POST path, `/auth`, with
+`log_in`, `register`, `change_password`, `known`, `look_alike`. A request is
+signed with the secret too, so only the boards that share it can ask. Run it on
+a network only the boards reach.
+
+**Passwords** are PBKDF2-SHA256 in one self-describing string
+(`pbkdf2-sha256$200000$salt$hash`); an older digest is checked as it is and
+stored anew at the next login, and a hex one of an older board carries over
+with `BBS::Auth::Password.from_hex`. Wrong passwords are counted by name and by
+line (`BBS::Auth::Guard`); names are compared by their look (`BBS::Auth::Names`:
+a Cyrillic а is an a), so nobody registers a look-alike of another account.
+
+**Tests.** `BBS::Test.accounts` (a fresh accounts database and a `Directory`),
+`BBS::Test.auth_secret`, and `BBS::Test::Session.new(identity:, forwarded:)`.
+
 ## 4. Server lifecycle
 
 ### `BBS.configure { |c| … }` / `BBS.config`

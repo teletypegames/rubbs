@@ -54,6 +54,14 @@ module BBS
     # what #announce tells the caller while the screen it belongs to runs.
     def on_announce(handler) = (@announcer = handler)
 
+    # Who the caller is (a BBS::Auth::Identity): the one a neighbouring
+    # board handed on with the call (BBS::Auth.from_line), until a login or
+    # a logout sets another; a guest otherwise.
+    def identity = @identity ||= Auth.from_line(self)
+
+    # Sets who the caller is (a BBS::Auth::Identity).
+    attr_writer :identity
+
     # The key the caller is known by for rate limits: their address, or the
     # line when it is local (BBS::RateLimit.caller_key).
     def caller_key = @caller_key ||= RateLimit.caller_key(self)

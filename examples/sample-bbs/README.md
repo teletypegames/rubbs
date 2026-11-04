@@ -47,6 +47,12 @@ test/                                   the service and both faces (bbs/test)
   The window blocks run in the application, so `guestbook` is the service itself.
 - **The C64 face** is a class: its title bar, masthead and main menu are declared, its
   methods say what an item does; the title comes back by itself after a list.
+- **Accounts** (`BBS::Auth`): this board keeps its own, in a database of their own
+  (`database :accounts_db, BBS::Auth::MIGRATIONS, name: :auth`, a `Directory` service), and
+  `auth(login: :menu, &:directory)` in `bbs.rb`. The modern face has a You menu (the
+  built-in `:log_in`, `:log_out` and its own `:register`), the C64 face three items shown by
+  `signed_in?`; a signed-in caller signs the guestbook with their own name. A board of a
+  network asks another board's accounts instead (`BBS::Auth::Remote`).
 
 Each of these is in the rubbs README, and the changes from rubbs 1.x in
 [UPGRADING.md](../../UPGRADING.md).

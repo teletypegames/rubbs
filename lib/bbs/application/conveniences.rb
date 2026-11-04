@@ -115,7 +115,44 @@ module BBS
       # (BBS::Session#caller_key).
       def caller_key = @session.caller_key
 
+      # Opens the login box of the board's BBS::Auth::Setup: name and
+      # password; a good pair makes the caller that account (see
+      # BBS::Auth::Conveniences#identity), a wrong one is said in the box.
+      # Returns the window.
+      def log_in(title: 'Log in')
+        setup = auth_setup or return message(no_login)
+        Windows::Form.open(
+          self,
+          title:        title,
+          width:        52,
+          submit_label: '&Log in',
+          fields:       [
+            { key: :name, label: 'Name', max_length: 20 },
+            { key: :password, label: 'Password', password: true, max_length: 200 }
+          ],
+          on_submit:    ->(values, form) { submit_login(setup, values, form) }
+        )
+      end
+
+      # Logs the caller out (BBS::Auth::Conveniences#log_out) and says so.
+      def log_out_now
+        log_out
+        message('You are logged out.', title: 'Log out')
+      end
+
       private
+
+      def submit_login(setup, values, form)
+        result = setup.directory.log_in(values[:name].to_s.strip, values[:password].to_s, caller_key: caller_key)
+        unless result.is_a?(Auth::Identity)
+          form.error(Auth::Login::WORDS.fetch(result, Auth::Login::WORDS[:wrong]))
+          return :keep
+        end
+
+        @session.identity = result
+        message("Welcome, #{result.name}.", title: 'Log in')
+        :close
+      end
 
       def qr_code(text)
         room = { width: cols - QR_CHROME[0], height: rows - QR_CHROME[1] }

@@ -75,6 +75,7 @@ module BBS
     include Announcements
     include Screen
     include Conveniences
+    include Auth::Conveniences
     include Paint
 
     # Evaluates the DSL +block+ in a new Builder and returns the Builder;

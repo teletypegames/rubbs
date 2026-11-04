@@ -120,19 +120,23 @@ module BBS
       # +key+ its key anywhere (<tt>'F2'</tt>, <tt>'Alt-R'</tt>), +hint+ its
       # word on the statusbar (default: the label without <tt>&</tt> and
       # <tt>…</tt>; +false+ binds the key without showing it), +about+ the
-      # statusbar line while its menu item is highlighted. The commands
-      # +:menu+ (F10) and +:log_off+ (Alt-X) are built in; declaring one of
-      # them replaces it.
+      # statusbar line while its menu item is highlighted, +role+ the
+      # BBS::Auth role it is for (its menu item is greyed out, and its key
+      # says so, for a caller without it). The commands +:menu+ (F10) and
+      # +:log_off+ (Alt-X) are built in, and +:log_in+ and +:log_out+ for a
+      # board with a login (BBS.board's +auth+); declaring one of them
+      # replaces it.
       #
       #   command :search, 'Search…', key: 'F2' do search end
-      def command(name, label, key: nil, hint: nil, about: nil, &action)
+      def command(name, label, key: nil, hint: nil, about: nil, role: nil, &action)
         @commands[name.to_sym] = Command.new(
           name:   name.to_sym,
           label:  label,
           key:    key,
           hint:   hint,
           about:  about,
-          action: action
+          action: action,
+          role:   role
         )
       end
 
@@ -276,7 +280,13 @@ module BBS
       # unknown command.
       def command(name)
         command = @commands[name.to_sym] or raise ArgumentError, "Unknown command: #{name.inspect}"
-        add(command.label, command.key, command.about, ->(_item) { command.run(@app) })
+        add(
+          command.label,
+          command.key,
+          command.about,
+          ->(_item) { command.run(@app) },
+          enabled: -> { command.available?(@app) }
+        )
       end
 
       # Adds an item that runs the block in the application. +enabled+ may

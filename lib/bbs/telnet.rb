@@ -40,7 +40,8 @@ module BBS
     # The bytes of a NAWS report: width and height, two bytes each.
     NAWS_SIZE = 4
     # The most bytes of a subnegotiation kept; the rest is read and dropped.
-    MAX_SUBNEGOTIATION = 64
+    # Room for a NEW-ENVIRON RUBBS_AUTH_KEY (a BBS::Auth::Token).
+    MAX_SUBNEGOTIATION = 640
     # The opening negotiation: the server will echo and suppress go-ahead,
     # and asks the client to suppress go-ahead and report its window size.
     NEGOTIATION = [IAC, WILL, SGA_OPT, IAC, WILL, ECHO_OPT, IAC, DO, SGA_OPT, IAC, DO, NAWS_OPT].pack('C*').freeze

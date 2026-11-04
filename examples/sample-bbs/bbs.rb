@@ -9,5 +9,6 @@ require_relative 'lib/ui/petscii'
 BBS.board 'Sample BBS', SampleBBS do
   modern  UI::Modern::APP
   petscii UI::Petscii
+  auth(login: :menu, &:directory)
   goodbye 'This is the sample board of rubbs.'
 end

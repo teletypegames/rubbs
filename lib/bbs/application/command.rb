@@ -3,17 +3,34 @@
 module BBS
   class Application
     # Something the caller can do in an Application (Builder#command): its
-    # menu label, its key, its word on the statusbar and the block it runs.
-    Command = Struct.new(:name, :label, :key, :hint, :about, :action, keyword_init: true) do
+    # menu label, its key, its word on the statusbar, the block it runs, the
+    # +role+ it is for (BBS::Auth; +nil+: everyone) and +available+, a block
+    # evaluated in the application that says whether it can run now.
+    Command = Struct.new(:name, :label, :key, :hint, :about, :action, :role, :available, keyword_init: true) do
       # Runs the action in +app+. Returns +:halt+ when the action did, else
-      # +:handled+.
+      # +:handled+. A command for a role the caller lacks says so instead.
       def run(app)
+        return refuse(app) unless available?(app)
+
         app.instance_exec(&action) == :halt ? :halt : :handled
+      end
+
+      # Whether the caller in +app+ may run it now: they have its +role+ and
+      # its +available+ block agrees. Its menu item is greyed out otherwise.
+      def available?(app)
+        (role.nil? || app.role?(role)) && (available.nil? || app.instance_exec(&available) ? true : false)
       end
 
       # The word on the statusbar: +hint+, or the label without its
       # <tt>&</tt> and <tt>…</tt>.
       def hint_text = hint.is_a?(String) ? hint : Command.plain(label)
+
+      private
+
+      def refuse(app)
+        app.message("This is for the #{role} role.", title: 'Not for you') if role && !app.role?(role)
+        :handled
+      end
     end
 
     # The built-in commands and the Keys page of the Help menu.
@@ -33,8 +50,9 @@ module BBS
       # The width of the key column on the Keys page.
       KEY_WIDTH = 13
 
-      # The built-in commands: +:menu+ (F10, only with a menubar) and
-      # +:log_off+ (Alt-X), by name.
+      # The built-in commands: +:menu+ (F10, only with a menubar),
+      # +:log_off+ (Alt-X), and +:log_in+ and +:log_out+ (BBS::Auth; greyed
+      # out on a board without a login), by name.
       def self.builtin(with_menubar: true)
         bye = new(
           name:   :log_off,
@@ -45,7 +63,29 @@ module BBS
           action: proc { log_off }
         )
         bar = new(name: :menu, label: 'Menu', key: 'F10', hint: 'Menu', action: proc { menubar&.open(0) })
-        (with_menubar ? [bar, bye] : [bye]).to_h { |c| [c.name, c] }
+        commands = (with_menubar ? [bar, bye] : [bye])
+        commands += auth
+        commands.to_h { |c| [c.name, c] }
+      end
+
+      # The +:log_in+ and +:log_out+ commands, each available when it fits.
+      def self.auth
+        [
+          new(
+            name:      :log_in,
+            label:     'Log in…',
+            about:     'Log in to your account',
+            action:    proc { log_in },
+            available: proc { BBS.config.auth && !signed_in? }
+          ),
+          new(
+            name:      :log_out,
+            label:     'Log out',
+            about:     'Log out, staying on the line',
+            action:    proc { log_out_now },
+            available: proc { signed_in? }
+          )
+        ]
       end
 
       # +label+ without its <tt>&</tt> and a trailing <tt>…</tt>.

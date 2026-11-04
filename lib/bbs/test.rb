@@ -21,6 +21,29 @@ module BBS
       db
     end
 
+    # The secret the test's tokens are signed with (BBS::Auth::Token).
+    SECRET = 'rubbs test secret, never a real one'
+
+    # Sets +secret+ as the shared secret of BBS::Auth (BBS.config.auth_secrets)
+    # and forgets the tokens taken so far. Returns the secret.
+    def self.auth_secret(secret = SECRET)
+      BBS.config.auth_secrets = [secret]
+      Auth::Token.forget!
+      secret
+    end
+
+    # A fresh accounts database (BBS::Auth::MIGRATIONS, bound as +:auth+) and
+    # a BBS::Auth::Directory on it with +options+.
+    #
+    #   directory = BBS::Test.accounts(roles: ['member'])
+    #   directory.register('ada', 'secret1')
+    def self.accounts(**)
+      Directory.new(store: database(Auth::MIGRATIONS, name: :auth), **)
+    end
+
+    # The directory class of ::accounts.
+    Directory = Auth::Directory
+
     # A caller's line without a socket: the keys it will press go in, what
     # the board writes is kept. It answers what a page, a screen or a flow
     # asks of a BBS::Session.
@@ -44,13 +67,21 @@ module BBS
       attr_accessor :idle_seconds
       # The session id, 'test' unless given.
       attr_reader :session_id
+      # Who the caller is (a BBS::Auth::Identity); a guest unless given,
+      # changed by a login or a logout.
+      attr_accessor :identity
+      # The variables a neighbouring board forwarded (see
+      # BBS::Telnet::Forwarded#forwarded), a Hash; empty unless given.
+      attr_reader :forwarded
 
       # A line with +keys+ to press.
       #
       # [petscii] whether the line is a C64 in PETSCII mode
       # [cols]    the terminal width (ignored on a PETSCII line)
       # [rows]    the terminal height (ignored on a PETSCII line)
-      def initialize(keys: [], petscii: false, cols: 80, rows: 24, session_id: 'test')
+      # [identity]  who the caller is (a BBS::Auth::Identity)
+      # [forwarded] the forwarded variables (BBS_VIA, RUBBS_AUTH_KEY …)
+      def initialize(keys: [], petscii: false, cols: 80, rows: 24, session_id: 'test', identity: nil, forwarded: {})
         @keys       = keys.dup
         @petscii    = petscii
         @term_cols  = petscii ? Petscii::COLS : cols
@@ -59,7 +90,15 @@ module BBS
         @writes     = []
         @taken      = 0
         @idle_seconds = nil
+        @forwarded    = forwarded
+        @identity     = identity || Auth::Identity.guest
       end
+
+      # The board the call came through (BBS_VIA), or +nil+.
+      def via = @forwarded['BBS_VIA']
+
+      # The caller's address (BBS_CLIENT_IP), or +nil+.
+      def caller_ip = @forwarded['BBS_CLIENT_IP']
 
       # Whether the line is in PETSCII mode.
       def petscii? = @petscii

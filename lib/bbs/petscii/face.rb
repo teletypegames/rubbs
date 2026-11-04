@@ -4,6 +4,7 @@ require 'forwardable'
 require_relative 'screen'
 require_relative '../paint'
 require_relative 'face/sayings'
+require_relative '../auth/conveniences'
 
 module BBS
   module Petscii
@@ -42,6 +43,7 @@ module BBS
       include Colors
       include Paint
       include Sayings
+      include Auth::Conveniences
 
       # The colours of the roles of BBS::Paint on a C64.
       ROLES = { text: LG, text_dim: GR, text_bright: WH, accent: YE, label: CY, error: RD, success: GN }.freeze

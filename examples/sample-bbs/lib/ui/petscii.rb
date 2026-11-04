@@ -19,6 +19,9 @@ module UI
       item('r', 'read the guestbook', -> { "#{guestbook.all.size} entries" }) { read }
       item('s', 'sign it', 'your name and a line') { sign }
       item('a', 'about', 'this board') { page('ABOUT', wrap(Wording::ABOUT).map { |l| " #{l}" }) }
+      item('l', 'log in', 'your account', if: -> { !signed_in? }) { log_in }
+      item('n', 'new account', 'a name and a password', if: -> { !signed_in? }) { register }
+      item('o', 'log out', -> { identity.name.to_s }, if: -> { signed_in? }) { log_out }
       log_off
     end
 
@@ -30,9 +33,20 @@ module UI
       end
     end
 
+    def register
+      title('NEW ACCOUNT')
+      name = prompt('name', max: 20) or return
+      password = prompt('password', mask: '*', max: 200) or return
+      found = directory.register(name, password, prompt('again', mask: '*', max: 200).to_s)
+      return alert(Wording::REGISTER.fetch(found)) unless found.is_a?(BBS::Auth::Identity)
+
+      @session.identity = found
+      notice("Welcome, #{found.name}.")
+    end
+
     def sign
       title('SIGN THE GUESTBOOK')
-      name = prompt('name', max: 30) or return
+      name = identity.name || prompt('name', max: 30) or return
       text = prompt('text', max: 200) or return
       report(guestbook.sign(name, text), Wording::SIGN)
     end

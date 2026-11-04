@@ -68,12 +68,13 @@ module BBS
 
     # Writes +prompt+ and reads the answer, stripped: in a BBS::Field on a
     # PETSCII line, which edits with the cursor keys, a plain line
-    # otherwise. Returns +nil+ when the caller hangs up.
-    def ask(prompt)
-      return Field.ask(@session, prompt, max: Telnet::MAX_LINE).to_s.strip if petscii?
+    # otherwise; +mask+ (<tt>'*'</tt>) hides what is typed. Returns +nil+
+    # when the caller hangs up.
+    def ask(prompt, mask: nil)
+      return Field.ask(@session, prompt, max: Telnet::MAX_LINE, mask: mask).to_s.strip if petscii?
 
       write prompt
-      readline&.strip
+      readline(mask: mask)&.strip
     rescue IOError
       nil
     end

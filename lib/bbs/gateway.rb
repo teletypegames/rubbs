@@ -94,6 +94,10 @@ module BBS
     # [public_only]     call only an address on the public internet
     #                   (BBS::Address.public?); +false+ for a trusted
     #                   neighbour such as <tt>host.docker.internal</tt>
+    # [audience]        the other board's technical name, the +aud+ of the
+    #                   RUBBS_AUTH_KEY a forwarding gateway sends a signed-in
+    #                   caller's identity in (BBS::Auth::Token); defaults to
+    #                   the name's (<tt>TTG Blog BBS</tt> → +ttg-blog-bbs+)
     # [forward]         send the other board who is calling (see above);
     #                   only for a board of one's own
     def initialize(
@@ -105,7 +109,8 @@ module BBS
       idle: nil,
       translate: false,
       public_only: true,
-      forward: false
+      forward: false,
+      audience: nil
     )
       @host            = host
       @port            = port.to_i
@@ -116,6 +121,7 @@ module BBS
       @translate       = translate
       @public_only     = public_only
       @forward         = forward
+      @audience        = audience || BoardDefinition.slug(@name)
     end
 
     # The door's program: connects, carries the line until the other board
@@ -198,11 +204,23 @@ module BBS
 
     # What a forwarding gateway tells the other board: the face it sees
     # (an ANSI terminal for a translated PETSCII caller), the caller's
-    # address (as this board believes it), this board's name.
+    # address (as this board believes it), this board's name, and for a
+    # signed-in caller their identity in a token for that board.
     def forwarded(session)
       face = session.petscii? && !@translate ? 'petscii' : 'modern'
-      { 'BBS_FACE' => face, 'BBS_CLIENT_IP' => session.caller_ip.to_s, 'BBS_VIA' => BBS.config.log_tag.to_s }
-        .reject { |_, value| value.empty? }
+      {
+        'BBS_FACE'       => face,
+        'BBS_CLIENT_IP'  => session.caller_ip.to_s,
+        'BBS_VIA'        => BBS.config.log_tag.to_s,
+        'RUBBS_AUTH_KEY' => auth_key(session)
+      }.reject { |_, value| value.to_s.empty? }
+    end
+
+    def auth_key(session)
+      identity = session.respond_to?(:identity) ? session.identity : nil
+      return nil unless identity&.signed_in? && Auth::Token.keys.any?
+
+      Auth::Token.issue(identity, aud: @audience)
     end
 
     def back(session, text)

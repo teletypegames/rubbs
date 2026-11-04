@@ -77,6 +77,20 @@ module BBS
       # The one ExitMenu step.
       EXIT_MENU = ExitMenu.new.freeze
 
+      # The login at the start of a call (Flow#login).
+      class Login
+        # Runs BBS::Auth::Login#at_call on the runner's line. Returns
+        # +:halt+ when the caller may not come in or hung up, else +nil+.
+        def run(runner)
+          setup = BBS.config.auth or return nil
+          tell  = ->(text) { runner.line(text, style: :error) }
+          ask   = ->(label, mask: nil) { runner.ask("  #{label}: ", mask: mask) }
+          Auth::Login.new(setup, runner.session, ask: ask, tell: tell).at_call == :halt ? :halt : nil
+        rescue *LINE_DROPPED
+          :halt
+        end
+      end
+
       # A block called with the context and the runner.
       Call = Struct.new(:block) do
         # Runs the block in +runner+: +:halt+ when it says so or the line

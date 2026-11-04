@@ -16,9 +16,24 @@ module UI
         action('Sign') { show(:sign) }
       end
 
+      window :register, :form do
+        title 'New account'
+        field :name, label: 'Name', max_length: 20
+        field :password, label: 'Password', password: true, max_length: 200
+        field :again, label: 'Again', password: true, max_length: 200
+        errors Wording::REGISTER
+        on_submit do |values|
+          found = directory.register(values[:name], values[:password], values[:again])
+          next found unless found.is_a?(BBS::Auth::Identity)
+
+          session.identity = found
+          message "Welcome, #{found.name}.", title: 'New account'
+        end
+      end
+
       window :sign, :form do
         title 'Sign the guestbook'
-        field :name, label: 'Name', max_length: 30
+        field :name, label: 'Name', max_length: 30, value: -> { identity.name.to_s }
         field :text, label: 'Text', type: :textarea, max_length: 200
         errors Wording::SIGN.except(:ok)
         on_submit do |values|

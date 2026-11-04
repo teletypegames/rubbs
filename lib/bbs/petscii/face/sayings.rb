@@ -60,6 +60,17 @@ module BBS
 
         # The key the caller is known by for rate limits.
         def caller_key = @session.caller_key
+
+        # Logs the caller in with the board's BBS::Auth::Setup: a name and its
+        # password as prompts (BBS::Auth::Login), the outcome as an alert or
+        # a notice. Returns the BBS::Auth::Identity, or +nil+.
+        def log_in
+          setup = auth_setup or return alert(no_login)
+          ask   = ->(label, mask: nil) { prompt(label, mask: mask, max: mask ? 200 : 20) }
+          found = Auth::Login.new(setup, @session, ask: ask, tell: ->(text) { alert(text) }).run
+          notice("Welcome, #{found.name}.") if found
+          found
+        end
       end
     end
   end

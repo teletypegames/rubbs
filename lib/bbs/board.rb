@@ -61,6 +61,7 @@ module BBS
       @on_start  = []
       @on_stop   = []
       @on_end    = nil
+      @auth      = nil
       @own_goodbye = []
       instance_eval(&block) if block
     end
@@ -102,6 +103,20 @@ module BBS
     # is given the domain object at boot (<tt>idle { |bbs| bbs.idle_seconds }</tt>).
     def idle(seconds = nil, &block) = (@idle = block || seconds)
 
+    # How callers log in (BBS::Auth): +directory+ (a BBS::Auth::Directory
+    # or Remote, or a block given the domain object at boot), +login+
+    # (+:call+ asks at the start of a call, before the face; +:menu+ leaves
+    # it to the faces' login item; +:both+) and +guests+ (whether a caller
+    # without an account comes in at a +:call+ login).
+    #
+    #   auth TTG::AUTH, login: :menu
+    #   auth(login: :call) { |board| board.directory }
+    def auth(directory = nil, login: :menu, guests: true, &block)
+      raise ArgumentError, "login: is one of #{Auth::LOGINS.join(', ')}" unless Auth::LOGINS.include?(login)
+
+      @auth = [block || directory, login, guests]
+    end
+
     # Whether the modern face uses the mouse (default +true+).
     def mouse(on) = (@mouse = on)
 
@@ -127,6 +142,7 @@ module BBS
       BBS.config.board = @board
       @board.start if @board.respond_to?(:start)
       @on_start.each { |hook| hook.call(@board) }
+      configure_auth
       configure_line
       BBS.config.flow = flow
       self
@@ -172,6 +188,14 @@ module BBS
       config.preset     = @preset
     end
 
+    def configure_auth
+      return BBS.config.auth = nil unless @auth
+
+      directory, login, guests = @auth
+      directory = directory.call(@board) if directory.respond_to?(:call)
+      BBS.config.auth = Auth::Setup.new(directory: directory, login: login, guests: guests)
+    end
+
     def configure_line
       config = BBS.config
       config.idle_seconds     = @idle.respond_to?(:call) ? @idle.call(@board) : @idle
@@ -182,20 +206,32 @@ module BBS
       config.health = -> { board.health } if board.respond_to?(:health)
     end
 
-    def face_flow(face, goodbye)
-      board = @board
-      steps = case face
-              when Flow then face
-              when Proc then Flow.define { instance_exec(board, &face) }
-              else Flow.define { face.is_a?(Class) ? face(face) : app(face) }
-              end
-      note    = @note
-      options = @goodbye_options || {}
-      return steps unless goodbye
+    def face_flow(face, says_goodbye)
+      steps    = face_steps(face)
+      asks     = BBS.config.auth&.at_call?
+      farewell = goodbye_step if says_goodbye
+      return steps unless farewell || asks
 
       Flow.define do
+        login if asks
         flow steps
-        note.respond_to?(:call) ? goodbye(**options, &note) : goodbye(note, **options)
+        instance_exec(&farewell) if farewell
+      end
+    end
+
+    # The goodbye step of the board's note, as a block for a Flow.define.
+    def goodbye_step
+      note    = @note
+      options = @goodbye_options || {}
+      proc { note.respond_to?(:call) ? goodbye(**options, &note) : goodbye(note, **options) }
+    end
+
+    def face_steps(face)
+      board = @board
+      case face
+      when Flow then face
+      when Proc then Flow.define { instance_exec(board, &face) }
+      else Flow.define { face.is_a?(Class) ? face(face) : app(face) }
       end
     end
   end

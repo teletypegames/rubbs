@@ -6,3 +6,6 @@ BBS_PORT=2323
 # The guestbook's database, and the longest message it takes
 SAMPLE_BBS_DB=data/sample.sqlite3
 SAMPLE_BBS_MAX_LENGTH=200
+
+# The accounts (BBS::Auth): this board keeps its own
+SAMPLE_BBS_ACCOUNTS_DB=data/accounts.sqlite3

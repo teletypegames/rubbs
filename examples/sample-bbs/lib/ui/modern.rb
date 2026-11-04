@@ -14,10 +14,12 @@ module UI
 
       command(:read, 'Read the guestbook', key: 'F2', hint: 'Read') { show(:entries) }
       command(:sign, 'Sign…', key: 'F3') { show(:sign) }
+      command(:register, 'New account…') { show(:register) }
       menu 'Guestbook', :read, :sign, :separator, :log_off
+      menu 'You', :log_in, :register, :log_out
       help about: Wording::ABOUT
 
-      status { "#{guestbook.all.size} entries" }
+      status { "#{identity.name || 'guest'} · #{guestbook.all.size} entries" }
 
       desktop do
         art  TITLE, top: 2

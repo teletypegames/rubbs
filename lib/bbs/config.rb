@@ -84,6 +84,14 @@ module BBS
     #                    domain's +health+, default +nil+ (always well)
     attr_accessor :log_format, :shutdown_seconds, :shutdown_notice, :health
 
+    # [auth_secrets] the secrets the boards of a network share for
+    #                BBS::Auth::Token, the first one signing: the
+    #                +RUBBS_AUTH_SECRET+ environment variable split at commas
+    #                (<tt>new,old</tt> while it changes); empty: no tokens
+    # [auth]         the board's BBS::Auth::Setup (BBS.board's +auth+), or
+    #                +nil+ when callers do not log in
+    attr_accessor :auth_secrets, :auth
+
     # The User-Agent of BBS::HTTP without a preset's addition.
     DEFAULT_USER_AGENT = "rubbs/#{Gem.loaded_specs['bbs']&.version || 'dev'}".freeze
 
@@ -114,9 +122,17 @@ module BBS
       @user_agent          = nil
       @log_tag             = ENV['BBS_LOG_TAG'] || 'bbs'
       @preset              = Preset::NONE
-      @log_format          = (ENV['BBS_LOG_FORMAT'] || 'text').to_sym
-      @shutdown_seconds    = (ENV['BBS_SHUTDOWN_SECONDS'] || 8).to_f
-      @shutdown_notice     = SHUTDOWN_NOTICE
+      running_defaults
+    end
+
+    private
+
+    def running_defaults
+      @log_format       = (ENV['BBS_LOG_FORMAT'] || 'text').to_sym
+      @shutdown_seconds = (ENV['BBS_SHUTDOWN_SECONDS'] || 8).to_f
+      @shutdown_notice  = SHUTDOWN_NOTICE
+      @auth_secrets     = ENV['RUBBS_AUTH_SECRET'].to_s.split(',').map(&:strip).reject(&:empty?)
+      @auth             = nil
     end
   end
 end

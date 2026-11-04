@@ -121,6 +121,13 @@ module BBS
     #   call { context[:caller_key] = session.caller_key }
     def call(&block) = add(Steps::Call.new(block))
 
+    # The login of the board's BBS::Auth::Setup at the start of a call
+    # (BBS::Auth::Login#at_call): a caller handed on signed in passes, a
+    # guest comes in when the board lets guests in, and a caller who cannot
+    # log in ends the flow. BBS.board puts it before the face of a board
+    # with <tt>auth …, login: :call</tt>.
+    def login = add(Steps::Login.new)
+
     # Runs the windowed BBS::Application +definition+ on the session.
     def app(definition) = add(Steps::App.new(definition))
 

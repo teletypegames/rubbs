@@ -1,3 +1,22 @@
+# rubbs 2.5
+
+Accounts, roles and a login for a network of boards: `BBS::Auth`. Nothing a
+board wrote changes; a board that wants it adds:
+
+- `auth directory, login: :call | :menu | :both, guests: true` in `BBS.board` (README:
+  "Accounts and login"); the home of the accounts declares
+  `database :accounts_db, BBS::Auth::MIGRATIONS, name: :auth` and a `BBS::Auth::Directory`,
+  and starts a `BBS::Auth::API`; the others use a `BBS::Auth::Remote`.
+- `RUBBS_AUTH_SECRET` in every board's environment (the same, 32+ random bytes).
+- In the faces: `identity`, `signed_in?`, `role?`, `log_in`, `log_out`; `command …, role:`;
+  the built-in `:log_in` and `:log_out` commands for a menu.
+- A board's own accounts move with `Directory#import` (a hex digest with
+  `BBS::Auth::Password.from_hex`); its `context[:username]` / `context[:user]` become
+  `identity`.
+- A forwarding `Gateway` hands a signed-in caller on (`RUBBS_AUTH_KEY`); `audience:` names
+  the board it dials when its `name:` is not that board's title.
+- New gem dependency: `webrick`. A telnet subnegotiation may now be 640 bytes (was 64).
+
 # rubbs 2.4
 
 Running in production: a server that stops in order, a health probe and log

@@ -34,8 +34,9 @@ module BBS
       MAX_VARIABLES = 16
       # The variables a forwarding BBS::Gateway sends: the face the caller
       # picked on the first board (+modern+ or +petscii+), the caller's own
-      # IP address, and the name of the board the call came through.
-      FORWARDED = %w[BBS_FACE BBS_CLIENT_IP BBS_VIA].freeze
+      # IP address, the name of the board the call came through, and a
+      # signed-in caller's identity (a BBS::Auth::Token).
+      FORWARDED = %w[BBS_FACE BBS_CLIENT_IP BBS_VIA RUBBS_AUTH_KEY].freeze
 
       # The variables of a NEW-ENVIRON subnegotiation, +bytes+ an Array of
       # Integer as BBS::Telnet::Parser gives it (the option first): a Hash of
