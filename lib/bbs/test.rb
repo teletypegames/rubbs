@@ -81,8 +81,25 @@ module BBS
       def write_raw(bytes) = write(bytes)
 
       # The next key of #keys; +nil+ (the caller hung up) when there is
-      # none left. A +timeout:+ is taken and ignored.
-      def readkey(**) = @keys.shift
+      # none left. A +timeout:+ is taken and ignored. A callable among the
+      # keys is called with the session when its turn comes (something
+      # that happens while the caller waits: <tt>->(line) { line.announce('…') }</tt>)
+      # and the key after it is read.
+      def readkey(**)
+        key = @keys.shift
+        key = @keys.shift.tap { key.call(self) } while key.respond_to?(:call)
+        key
+      end
+
+      # Tells the caller +text+ as BBS::Session#announce does: through the
+      # handler of #on_announce, else as a line. Returns +nil+.
+      def announce(text)
+        @announcer ? @announcer.call(text) : write("\r\n*** #{text} ***\r\n")
+        nil
+      end
+
+      # The handler of #announce (see BBS::Session#on_announce).
+      def on_announce(handler) = (@announcer = handler)
 
       # Everything written so far as text, one UTF-8 String (for
       # <tt>assert_includes</tt>); #raw has the bytes.

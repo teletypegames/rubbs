@@ -26,11 +26,13 @@ module BBS
       def run
         @running = true
         start_idle
+        listen_announcements
         event_turn while @running
       rescue *LINE_DROPPED
         @line_lost = true
         nil
       ensure
+        @session.on_announce(nil) if @session.respond_to?(:on_announce)
         @session.write("#{Ansi::SHOW_CURSOR}#{Ansi::CLEAR}")
         @running = false
       end
@@ -61,6 +63,7 @@ module BBS
 
       # One turn of the loop: draw, read a key, act on it.
       def event_turn
+        show_announcements
         render_screen
         key = @session.readkey(timeout: TICK_SECONDS)
         return lose_line if key.nil?
@@ -112,7 +115,7 @@ module BBS
       rescue Abort
         nil
       rescue StandardError => e
-        BBS.log('event', "#{e.class}: #{e.message}\n#{e.backtrace.first(BACKTRACE_LINES).join("\n")}")
+        BBS.log('event', e)
         nil
       end
 

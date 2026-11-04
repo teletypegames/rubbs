@@ -37,6 +37,23 @@ module BBS
       @client.timeout = seconds || Server::DEFAULT_TIMEOUT if @client.respond_to?(:timeout=)
     end
 
+    # Tells the caller +text+ now, from any thread (the server's shutdown
+    # notice): through the handler of #on_announce when the screen has one
+    # (a windowed BBS::Application shows a message box), else as a line of
+    # its own on the terminal. Returns +nil+; a line that is gone is no
+    # error.
+    def announce(text)
+      handler = @announcer
+      handler ? handler.call(text) : write("#{Ansi::CRLF}*** #{text} ***#{Ansi::CRLF}")
+      nil
+    rescue StandardError
+      nil
+    end
+
+    # Makes +handler+ (a callable given the text, or +nil+ to stop) show
+    # what #announce tells the caller while the screen it belongs to runs.
+    def on_announce(handler) = (@announcer = handler)
+
     # The key the caller is known by for rate limits: their address, or the
     # line when it is local (BBS::RateLimit.caller_key).
     def caller_key = @caller_key ||= RateLimit.caller_key(self)

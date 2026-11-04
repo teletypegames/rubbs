@@ -1,0 +1,17 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bbs-health: asks the board on this machine whether it is well (BBS::Health)
+# and prints its answer. Exits 0 when it is, 1 when it is not or does not
+# answer, so it serves as a container's HEALTHCHECK.
+#
+#   bbs-health          # the port of BBS_PORT, or 2323
+#   bbs-health 2328
+
+$LOAD_PATH.unshift File.expand_path('../lib', __dir__)
+require 'bbs/health'
+
+port = Integer(ARGV[0] || ENV['BBS_PORT'] || 2323)
+ok, line = BBS::Health.ask(port: port)
+puts line
+exit(ok ? 0 : 1)

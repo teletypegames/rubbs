@@ -1,3 +1,27 @@
+# rubbs 2.4
+
+Running in production: a server that stops in order, a health probe and log
+lines a pipeline can read. Nothing a board wrote changes; what it may add:
+
+- **Stopping.** SIGTERM / Ctrl-C closes the port, tells the callers
+  (`BBS_SHUTDOWN_SECONDS`, default 8, and `config.shutdown_notice`), waits for
+  them, hangs up on the rest, then runs `on_stop { |board| … }` and the
+  domain's new `stop` (background work stopped, databases closed). A domain that
+  writes a file on a timer flushes it in `def stop; …; super; end`. Raise
+  `BBS_SHUTDOWN_SECONDS` together with the supervisor's stop timeout
+  (`stop_grace_period`).
+- **Health.** `BBS::Health` answers `BBS-HEALTH` from loopback on the telnet port
+  (`OK n/max` or `FAIL …`); `bbs-health` asks it. The domain's `health` (default:
+  every database answers) says what is wrong; `def health = super + […]` adds more.
+- **Logs.** `BBS.log(tag, message, level:, **fields)`; `BBS_LOG_FORMAT=json` writes
+  JSON lines with the call's `session`. The server logs every call's end
+  (`call: ended seconds=… end=hung_up|dropped|error|stopped`) and its own start and
+  stop; the `Server stopped.` and `BBS listening on port …` lines of stdout are
+  gone. Pass the exception itself to `BBS.log` (it adds the class, the message and,
+  at `:error`, the backtrace) instead of formatting `"#{e.class}: #{e.message}"`.
+- `BBS::Test::Session` takes a callable among its keys (called with the session
+  when its turn comes) and has `announce`.
+
 # rubbs 2.3
 
 A model for every table: `BBS::Model` (a `Sequel::Model`) with the queries as

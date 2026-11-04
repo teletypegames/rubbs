@@ -47,6 +47,18 @@ class BoardDefinitionTest < Minitest::Test
     assert_same board.board, BBS.config.board
   end
 
+  def test_stop_runs_the_hooks_then_the_domains_stop
+    stopped = []
+    board = BBS::BoardDefinition.new('Shop BBS', Shop) do
+      modern APP
+      on_stop { |shop| stopped << shop.class }
+    end.configure
+    board.board.define_singleton_method(:stop) { stopped << :domain }
+    board.stop
+    assert_equal [Shop, :domain], stopped
+    assert_equal [], BBS.config.health.call
+  end
+
   def test_settings_take_the_type_of_their_default
     BBS::BoardDefinition.new('Shop BBS', Shop) { modern APP }.configure
     shop = BBS.config.board

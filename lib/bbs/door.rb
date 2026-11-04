@@ -68,7 +68,7 @@ module BBS
     rescue IOError, SystemCallError
       raise
     rescue StandardError => e
-      BBS.log("door #{@name}", "#{e.class}: #{e.message}\n#{e.backtrace&.first(3)&.join("\n")}")
+      BBS.log("door #{@name}", e)
     ensure
       (session.enable_mouse if BBS.config.mouse) rescue nil
     end

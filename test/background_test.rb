@@ -18,7 +18,7 @@ class BackgroundTest < Minitest::Test
     end
     assert_equal 3, tries
     assert_equal 2, err.lines.size
-    assert_match(/index: RuntimeError: not yet; again in 0.02 s/, err.lines.last)
+    assert_match(/index: RuntimeError: not yet retry_in=0.02/, err.lines.last)
   end
 
   def test_runs_every_so_often

@@ -59,6 +59,7 @@ module BBS
       @goodbye   = true
       @note      = nil
       @on_start  = []
+      @on_stop   = []
       @on_end    = nil
       @own_goodbye = []
       instance_eval(&block) if block
@@ -108,6 +109,11 @@ module BBS
     # an HTTP API beside the telnet port, say.
     def on_start(&block) = @on_start << block
 
+    # A block run once with the domain object when the server has stopped,
+    # after the last caller and before the domain's own +stop+: an HTTP
+    # API beside the telnet port shut, say.
+    def on_stop(&block) = @on_stop << block
+
     # A block run after each call with the session and the domain object
     # (BBS::Config#on_session_end).
     def on_session_end(&block) = (@on_end = block)
@@ -126,10 +132,25 @@ module BBS
       self
     end
 
-    # #configure, then BBS.start. Does not return while the server runs.
+    # #configure, then BBS.start; when the server has stopped (SIGTERM,
+    # Ctrl-C, see BBS::Server#stop), #stop. Does not return while the
+    # server runs.
     def start
       configure
       BBS.start
+    ensure
+      stop
+    end
+
+    # Ends the board after the server: the #on_stop blocks, then the domain
+    # object's +stop+ (BBS::Domain#stop). An error is logged, not raised.
+    # Returns +nil+.
+    def stop
+      @on_stop.each { |hook| hook.call(@board) }
+      @board.stop if @board.respond_to?(:stop)
+      nil
+    rescue StandardError => e
+      BBS.log('stop', e)
     end
 
     # The root flow: the terminal question with two faces, the one face's
@@ -158,6 +179,7 @@ module BBS
       config.mouse_on_connect = !@faces.key?(:petscii)
       board = @board
       config.on_session_end = ->(session) { @on_end.call(session, board) } if @on_end
+      config.health = -> { board.health } if board.respond_to?(:health)
     end
 
     def face_flow(face, goodbye)

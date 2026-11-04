@@ -32,6 +32,16 @@ steps:
       - bundle install
       - bundle exec rake test
 
+  # A mintaboard (examples/sample-bbs) ennek a checkoutnak a rubbs-ával: a
+  # tesztjei és a rake bbs:check. Egy board szemével nézi a kiadás előtt a
+  # DSL-t, a modelleket és a check-szabályokat.
+  - name: sample-bbs
+    image: ruby:3.3
+    commands:
+      - cd examples/sample-bbs
+      - bundle install
+      - bundle exec rake
+
   # Az egész gem a .rubocop.yml szabályaihoz igazodik, todo-fájl nélkül.
   - name: rubocop
     image: ruby:3.3

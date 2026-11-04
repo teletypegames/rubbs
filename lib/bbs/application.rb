@@ -14,6 +14,7 @@ require_relative 'window_spec'
 require_relative 'door'
 require_relative 'application/window_stack'
 require_relative 'application/event_loop'
+require_relative 'application/announcements'
 require_relative 'application/screen'
 require_relative 'application/builder'
 require_relative 'application/conveniences'
@@ -52,8 +53,6 @@ module BBS
     TICK_SECONDS = 1.0
     # Seconds the idle disconnect message stays before the line is dropped.
     IDLE_MESSAGE_WAIT = 0.5
-    # Lines of the backtrace logged with a handler's error.
-    BACKTRACE_LINES = 3
 
     # [session]      the BBS::Session the application draws on and reads from
     # [session_id]   the session's id
@@ -74,6 +73,7 @@ module BBS
 
     include WindowStack
     include EventLoop
+    include Announcements
     include Screen
     include Conveniences
     include Paint

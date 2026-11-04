@@ -105,7 +105,7 @@ module BBS
       data = JSON.parse(Zlib::GzipReader.open(path, &:read))
       [@build.call(data), Time.iso8601(data.fetch('generated'))]
     rescue StandardError => e
-      BBS.log('snapshot', "reading #{path}: #{e.class}: #{e.message}")
+      BBS.log('snapshot', e, level: :warn, path: path.to_s)
       nil
     end
   end

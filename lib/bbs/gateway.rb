@@ -171,7 +171,7 @@ module BBS
 
     def failed(session, report, error)
       report.error = error
-      BBS.log('gateway', "#{@name} (#{@host}:#{@port}): #{error.class}: #{error.message}")
+      BBS.log('gateway', error, level: :warn, door: @name, host: "#{@host}:#{@port}")
       excuse = error.is_a?(Refused) ? 'may not be called from here' : 'does not answer. Try again later'
       back(session, "#{Ansi::CRLF}  #{@name} #{excuse}. Press a key.")
       nil

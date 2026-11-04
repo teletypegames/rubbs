@@ -53,7 +53,7 @@ module BBS
 
     # Logs +error+, waits +delay+ seconds and returns the next delay.
     def failed(error, delay)
-      BBS.log(@name, "#{error.class}: #{error.message}; again in #{delay} s")
+      BBS.log(@name, error, level: :warn, retry_in: delay)
       sleep delay
       [delay * 2, @max_retry].min
     end

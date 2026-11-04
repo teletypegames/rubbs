@@ -8,6 +8,8 @@ require_relative 'bbs/text'
 require_relative 'bbs/address'
 require_relative 'bbs/patterns'
 require_relative 'bbs/config'
+require_relative 'bbs/log'
+require_relative 'bbs/health'
 require_relative 'bbs/petscii'
 require_relative 'bbs/telnet'
 require_relative 'bbs/text_buffer'
@@ -111,17 +113,20 @@ module BBS
     Server.new(port: port).run
   end
 
-  # Writes one line to the log (stderr): the board's
-  # <tt>BBS.config.log_tag</tt>, +tag+ (what the line is about) and
-  # +message+, a String or an exception (its class and message).
+  # Writes one line to the log (stderr, BBS::Log): the board's
+  # <tt>BBS.config.log_tag</tt>, +tag+ (what the line is about),
+  # +message+ (a String or an exception: its class, message and, at the
+  # +:error+ level, its first backtrace lines), the +level+ (+:debug+,
+  # +:info+, +:warn+, +:error+, +:fatal+; an exception is +:error+ and a
+  # String +:info+ unless given) and +fields+, more facts as keys and
+  # values. As text or JSON by <tt>BBS.config.log_format</tt>.
   #
-  #   BBS.log('catalog refresh', error)   # "feedia-bbs: catalog refresh: SocketError: …"
+  #   BBS.log('catalog refresh', error)                              # "feedia-bbs: catalog refresh: SocketError: …"
+  #   BBS.log('catalog refresh', error, level: :warn, retry_in: 10)
+  #   BBS.log('index', 'loaded', rfcs: 9700)
   #
   # Returns +nil+.
-  def self.log(tag, message)
-    message = "#{message.class}: #{message.message}" if message.is_a?(Exception)
-    warn "#{config.log_tag}: #{tag}: #{message}"
-  end
+  def self.log(tag, message, level: nil, **fields) = Log.write(tag, message, level: level, **fields)
 
   # +seconds+ as a short duration for a caller: <tt>45s</tt>, <tt>12m</tt>,
   # <tt>2h 5m</tt>. A Time is taken as the start of what lasted until now

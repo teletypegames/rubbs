@@ -161,8 +161,33 @@ module BBS
         next if condition && !instance_exec(&condition)
 
         seconds = every.is_a?(Proc) ? instance_exec(&every) : every
-        BBS.background(name, every: seconds, **options) { instance_exec(&work) }
+        jobs << BBS.background(name, every: seconds, **options) { instance_exec(&work) }
       end
+      self
+    end
+
+    # The board's problems for the health probe (BBS::Health), an Array of
+    # Strings, empty when it is well: by default a database that does not
+    # answer. A board adds its own:
+    #
+    #   def health = super + (index.loaded? ? [] : ['the index is not loaded'])
+    def health
+      databases.filter_map do |name, db|
+        db.test_connection && nil
+      rescue StandardError => e
+        "database #{name}: #{e.class}: #{e.message}"
+      end
+    end
+
+    # Ends the board's work when the server has stopped: the background
+    # work of #start is stopped and the databases are closed (SQLite folds
+    # its write-ahead log back into the file). BBS.board calls it once, after
+    # the last caller. A board that keeps more (a file it writes on a
+    # timer, a connection elsewhere) ends it first and calls +super+.
+    # Returns +self+.
+    def stop
+      jobs.each(&:kill).each { |job| job.join(1) }
+      @databases&.each_value(&:disconnect)
       self
     end
 
@@ -171,5 +196,7 @@ module BBS
     def settings = @settings ||= {}
 
     def services_made = @services_made ||= {}
+
+    def jobs = @jobs ||= []
   end
 end

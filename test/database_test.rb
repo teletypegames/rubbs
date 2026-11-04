@@ -100,4 +100,17 @@ class ModelTest < Minitest::Test
       ENV.delete('MODEL_TEST_SHOP_DB')
     end
   end
+
+  def test_a_domain_reports_its_health_and_stops
+    Dir.mktmpdir do |dir|
+      ENV['MODEL_TEST_SHOP_DB'] = File.join(dir, 'shop.sqlite3')
+      Shop.env_prefix 'MODEL_TEST_SHOP_'
+      shop = Shop.new.start
+      assert_empty shop.health
+      shop.stop
+      assert_equal 0, shop.databases[:main].pool.size
+    ensure
+      ENV.delete('MODEL_TEST_SHOP_DB')
+    end
+  end
 end

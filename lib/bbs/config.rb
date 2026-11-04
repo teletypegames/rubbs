@@ -55,6 +55,22 @@ module BBS
                   :port, :theme, :mouse, :mouse_on_connect, :idle_seconds, :max_sessions,
                   :max_sessions_per_ip, :ai_concurrency, :log_tag, :title, :env_prefix, :preset, :board
 
+    # [log_format]       how BBS.log writes a line: +:text+ (the default)
+    #                    or +:json+, one object a line for a log pipeline;
+    #                    the +BBS_LOG_FORMAT+ environment variable sets it
+    # [shutdown_seconds] how long a stopping server (SIGTERM, Ctrl-C) waits
+    #                    for its callers after telling them, before it
+    #                    hangs up on the rest; default the
+    #                    +BBS_SHUTDOWN_SECONDS+ environment variable or 8
+    #                    (within the 10 seconds of <tt>docker stop</tt>)
+    # [shutdown_notice]  what the callers of a stopping server are told;
+    #                    <tt>%<seconds>d</tt> is replaced by the seconds left
+    # [health]           callable the health probe (BBS::Health) asks: it
+    #                    returns the board's problems, an Array of Strings,
+    #                    empty when it is well; set by BBS.board from the
+    #                    domain's +health+, default +nil+ (always well)
+    attr_accessor :log_format, :shutdown_seconds, :shutdown_notice, :health
+
     # The User-Agent of BBS::HTTP without a preset's addition.
     DEFAULT_USER_AGENT = "rubbs/#{Gem.loaded_specs['bbs']&.version || 'dev'}".freeze
 
@@ -68,9 +84,12 @@ module BBS
       @user_agent || [DEFAULT_USER_AGENT, @preset.user_agent].compact.join(' ')
     end
 
+    # The default #shutdown_notice.
+    SHUTDOWN_NOTICE = 'The board is restarting in %<seconds>d seconds. Please call back in a minute.'
+
     # Creates a Config with the defaults, reading +BBS_PORT+,
-    # +BBS_MAX_SESSIONS+, +BBS_MAX_SESSIONS_PER_IP+ and +BBS_LOG_TAG+ from
-    # the environment.
+    # +BBS_MAX_SESSIONS+, +BBS_MAX_SESSIONS_PER_IP+, +BBS_LOG_TAG+,
+    # +BBS_LOG_FORMAT+ and +BBS_SHUTDOWN_SECONDS+ from the environment.
     def initialize
       @port         = (ENV['BBS_PORT'] || 2323).to_i
       @mouse        = false
@@ -82,6 +101,9 @@ module BBS
       @user_agent          = nil
       @log_tag             = ENV['BBS_LOG_TAG'] || 'bbs'
       @preset              = Preset::NONE
+      @log_format          = (ENV['BBS_LOG_FORMAT'] || 'text').to_sym
+      @shutdown_seconds    = (ENV['BBS_SHUTDOWN_SECONDS'] || 8).to_f
+      @shutdown_notice     = SHUTDOWN_NOTICE
     end
   end
 end

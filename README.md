@@ -206,6 +206,7 @@ BBS.board 'Feedia BBS', FeediaBBS do
   mouse false                            # default true on the modern face
   on_start { |bbs| Web::Api.new(bbs).start }                      # once at boot
   on_session_end { |session, bbs| bbs.end_call(session.session_id) }
+  on_stop { |bbs| bbs.irc.quit }                                   # once, after the last caller
 end
 ```
 
@@ -223,6 +224,7 @@ return while the server runs.
 | `mouse(on)` | Whether the modern face uses the mouse (default `true`). |
 | `on_start { \|board\| … }` | Run once at boot with the domain object, after its `start`: an HTTP API beside the telnet port, say. |
 | `on_session_end { \|session, board\| … }` | Run after each call, also when it ended with an error. |
+| `on_stop { \|board\| … }` | Run once when the server has stopped ([§4](#stopping-in-order)), after the last caller and before the domain's own `stop`. |
 
 A face is one of:
 
@@ -296,6 +298,12 @@ Instance methods:
   background work. `BBS.board` calls it once at boot. Returns `self`.
 - `databases` — the board's databases by name (`Sequel::Database` each),
   opened and migrated on first use, the `BBS::Model` classes bound to them.
+- `health` — the board's problems for the health probe, an Array of Strings,
+  empty when it is well: by default a database that does not answer. A board
+  adds its own: `def health = super + (index.loaded? ? [] : ['no index'])`.
+- `stop` — when the server has stopped: stops the background work and closes
+  the databases. A board that keeps more (a file written on a timer, a
+  connection elsewhere) ends it first and calls `super`.
 
 The class macro `database(setting, migrations, name: :main)` declares a
 database: the file of the path setting `setting`, migrated by the
@@ -352,6 +360,10 @@ lives on `BBS::Session`. A board without `BBS.board` (a test, a tool) sets
 | `theme` | `nil` | Default `BBS::Theme` for Applications. |
 | `screens_dir` | `nil` | Directory for ERB templates used by `Flow#screen` when the flow has no `screens_dir` of its own. |
 | `on_session_end` | `nil` | `->(session) { … }` invoked from the server thread after each session ends, even on errors. `BBS.board`'s `on_session_end` sets it. |
+| `log_format` | `ENV["BBS_LOG_FORMAT"] \|\| :text` | How `BBS.log` writes: `:text` for a person, `:json` (one object a line) for a log pipeline. |
+| `shutdown_seconds` | `ENV["BBS_SHUTDOWN_SECONDS"] \|\| 8` | How long a stopping server waits for its callers after telling them; the rest are hung up on. Keep it below the stop timeout of the supervisor (`docker stop`: 10 s, or `stop_grace_period`). |
+| `shutdown_notice` | `"The board is restarting in %<seconds>d seconds. …"` | What the callers of a stopping server are told. |
+| `health` | `nil` | `-> { [problems…] }`, what the health probe asks; `BBS.board` sets it to the domain's `health`. |
 
 ### `BBS.start(port: …)`
 
@@ -371,13 +383,31 @@ caller reads it: `45s`, `12m`, `2h 5m` (a number of seconds works too).
 ### Logging and background work: `BBS.log`, `BBS.background`
 
 Every line the library and the board write to the log goes through one
-method, so the lines of eleven boards in one log read the same. The tag is
-the board's technical name, which `BBS.board` takes from the title:
+method, so the lines of many boards in one log read the same. The tag is
+the board's technical name, which `BBS.board` takes from the title. A line
+has a level (`:debug`, `:info`, `:warn`, `:error`, `:fatal`; an exception is
+`:error` and a String `:info` unless given) and may carry more facts:
 
 ```ruby
-BBS.log('catalog refresh', 'done in 3.2 s')   # feedia-bbs: catalog refresh: done in 3.2 s
-BBS.log('catalog refresh', error)             # feedia-bbs: catalog refresh: SocketError: …
+BBS.log('catalog refresh', 'done', seconds: 3.2)          # feedia-bbs: catalog refresh: done seconds=3.2
+BBS.log('catalog refresh', error)                         # feedia-bbs: catalog refresh: SocketError: …  (and the backtrace)
+BBS.log('catalog refresh', error, level: :warn, retry_in: 10)
 ```
+
+With `BBS_LOG_FORMAT=json` each line is a JSON object for a log pipeline
+(Loki, Elasticsearch): `time`, `level`, `board`, `tag`, `msg`, for an error
+`error` and `backtrace`, the facts given, and `session`, the id of the call
+whose thread wrote it, so the lines of one call can be read together:
+
+```json
+{"time":"2026-11-04T14:30:23.174+01:00","level":"info","board":"sample-bbs","tag":"call","msg":"ended","session":"5354408d60f30097","seconds":5,"end":"stopped"}
+```
+
+The server writes a line when it starts listening, when it stops, for each
+caller it turns away (`BBS busy`, `BBS crowded`) and at the end of every call:
+how long it lasted and how it ended (`hung_up`, `dropped`, `error`,
+`stopped`). An error in a call is logged with its backtrace and ends only
+that call.
 
 Work out of the callers' way (an index loaded at boot, a catalog refreshed
 every hour) runs in a `BBS::Background` thread: an error is logged and the
@@ -397,11 +427,51 @@ the calling thread (a test, a command-line tool).
 
 ### `BBS::Server`
 
-Lightweight wrapper around `TCPServer`. Catches accept-loop errors (any
-`SystemCallError`, `IOError`) and warns instead of crashing; stops on Ctrl-C
-and on SIGTERM (`docker stop`) with `Server stopped.`. `#admit(address)` is the
-door policy (`:ok`, `:busy`, `:crowded`); a session's slot is given back
-whatever ends it.
+Lightweight wrapper around `TCPServer`. An accept error (any
+`SystemCallError`, `IOError`) is logged and the loop goes on; any other
+error of the loop is logged as `:fatal` and ends the process, so its
+supervisor (Docker's restart policy, systemd) starts it again.
+`#admit(address)` is the door policy (`:ok`, `:busy`, `:crowded`); a
+session's slot is given back whatever ends it. `#callers` is the number on
+the line.
+
+### Stopping in order
+
+On SIGTERM (`docker stop`) or Ctrl-C the server stops in order:
+
+1. it closes the port: no new calls, and the health probe fails;
+2. every caller is told `shutdown_notice` — a windowed Application shows it
+   in a message box, a line-by-line face gets it as a line;
+3. it waits up to `shutdown_seconds` for them to leave;
+4. it hangs up on the rest (`BBS::Hangup` in their threads, so a
+   transaction rolls back and `on_session_end` runs);
+5. `BBS.board` runs the `on_stop` blocks and the domain's `stop`: the
+   background work ends and the databases are closed.
+
+A second SIGTERM or Ctrl-C meanwhile stops at once. Give the supervisor
+time: with `BBS_SHUTDOWN_SECONDS=20`, a compose service wants
+`stop_grace_period: 30s`.
+
+### The health probe: `BBS::Health`, `bbs-health`
+
+The board answers a health probe on its own telnet port. A connection from
+the machine itself (a loopback address) that sends `BBS-HEALTH` gets one line
+and is closed, without a session, a log line or a count against the limits:
+
+```
+$ bbs-health            # BBS_PORT, or 2323; exit 0 when well
+OK 3/100
+$ printf 'BBS-HEALTH\r\n' | nc -w 5 127.0.0.1 2323
+FAIL database main: SQLite3::BusyException: database is locked
+```
+
+`FAIL` comes with the domain's `health` problems; no answer (not listening
+yet, stopping, hung) is unhealthy too. In a container:
+
+```dockerfile
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s \
+  CMD printf 'BBS-HEALTH\r\n' | nc -w 5 127.0.0.1 2323 | grep -q '^OK'
+```
 
 ---
 

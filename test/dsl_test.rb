@@ -365,3 +365,19 @@ class LeftoversTest < Minitest::Test
                     'Thanks for reading TTG Blog BBS.'
   end
 end
+
+class AnnouncementTest < Minitest::Test
+  def test_a_running_application_shows_an_announcement_in_a_box
+    session = BBS::Test::Session.new(keys: [->(line) { line.announce('Restarting in 8 seconds.') }, :idle])
+    app = BBS::Application.define { theme :synchronet }.build(session: session, session_id: 's', context: {})
+    app.run
+    assert_includes session.output, 'Restarting in 8 seconds.'
+    assert_includes session.output, 'Notice'
+  end
+
+  def test_without_an_application_it_is_a_line
+    session = BBS::Test::Session.new
+    session.announce('Restarting.')
+    assert_equal "\r\n*** Restarting. ***\r\n", session.output
+  end
+end

@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require 'socket'
+require_relative 'server/stopping'
+require_relative 'server/calls'
 
 module BBS
   # The telnet listener. It accepts connections on a TCP port and runs a
@@ -10,6 +12,9 @@ module BBS
   #
   #   BBS::Server.new(port: 2323).run
   class Server
+    include Stopping
+    include Calls
+
     # Seconds a silent line may stay connected when
     # <tt>BBS.config.idle_seconds</tt> is not set.
     DEFAULT_TIMEOUT = 900
@@ -21,9 +26,6 @@ module BBS
       busy:    'Too many callers right now, try again later.',
       crowded: 'Too many calls from your address, try again later.'
     }.freeze
-    # Lines of the backtrace logged with a session error.
-    BACKTRACE_LINES = 3
-
     # Creates a server that will listen on +port+ on all interfaces. Nothing
     # is opened until #run.
     def initialize(port:)
@@ -31,27 +33,43 @@ module BBS
       @mu       = Mutex.new
       @sessions = 0
       @calls    = Hash.new(0)
+      @live     = {}
+      @stopping = false
     end
 
     # Opens the port and serves callers until the process is interrupted
-    # (Ctrl-C) or stopped (SIGTERM, as <tt>docker stop</tt> sends). Blocks
-    # the calling thread.
+    # (Ctrl-C) or stopped (SIGTERM, as <tt>docker stop</tt> sends), then
+    # stops in order (#stop). Blocks the calling thread.
     #
     # Each accepted connection gets an idle timeout and a BBS::Session in a
-    # new thread. A caller #admit refuses hears why and is disconnected.
-    # Session errors are logged and end only that session;
-    # <tt>BBS.config.on_session_end</tt> is called with the session when it
-    # finishes. On a stop it prints "Server stopped." and returns.
+    # new thread. A caller #admit refuses hears why and is disconnected;
+    # the health probe (BBS::Health) gets its answer. Session errors are
+    # logged and end only that session; <tt>BBS.config.on_session_end</tt>
+    # is called with the session when it finishes, and one log line tells
+    # how long the call lasted and how it ended. An error of the accept
+    # loop itself is logged as +:fatal+ and raised, so the process ends and
+    # its supervisor (Docker's restart policy) starts it again.
     def run
-      server = TCPServer.new('0.0.0.0', @port)
-      puts "BBS listening on port #{@port} — connect with: telnet localhost #{@port}"
+      @listener = TCPServer.new('0.0.0.0', @port)
+      @port     = @listener.addr[1]
+      BBS.log('server', "listening on port #{@port}", port: @port)
       stop_on_term
-      loop { serve(accept(server)) }
+      loop { serve(accept(@listener)) }
     rescue Interrupt
-      puts "\nServer stopped."
+      stop
+    rescue StandardError => e
+      BBS.log('server', e, level: :fatal)
+      raise
     ensure
-      server&.close
+      @listener&.close rescue nil
     end
+
+    # The port it listens on: once #run has opened it, the one the system
+    # chose for port 0.
+    attr_reader :port
+
+    # The number of callers on the line now.
+    def callers = @mu.synchronize { @sessions }
 
     # Takes a call from the IP +address+ (a String, +nil+ when unknown) when
     # there is room, and counts it. Returns the verdict:
@@ -99,7 +117,7 @@ module BBS
     def accept(server)
       server.accept
     rescue SystemCallError, IOError => e
-      BBS.log('accept', e)
+      BBS.log('accept', e, level: :warn)
       sleep ACCEPT_PAUSE
       nil
     end
@@ -107,11 +125,18 @@ module BBS
     def serve(client)
       return unless client
 
+      Thread.new { take(client) }
+    end
+
+    # A new connection: the health probe, a caller turned away, or a call.
+    def take(client)
       address = peer(client)
+      return Health.answer(client, self) if Health.probe?(client, address)
+
       verdict = admit(address)
       return refuse(client, address, verdict) unless verdict == :ok
 
-      Thread.new { converse(client, address) }
+      converse(client, address)
     end
 
     # A line that stays silent (or stops reading) longer than the idle limit
@@ -132,22 +157,9 @@ module BBS
     # those).
     def refuse(client, address, verdict)
       BBS.log("BBS #{verdict}", "#{BBS.config.max_sessions} callers at most, " \
-                                "#{BBS.config.max_sessions_per_ip} from one address; turned #{address} away")
+                                "#{BBS.config.max_sessions_per_ip} from one address; turned #{address} away", level: :warn)
       client.write("#{REFUSALS.fetch(verdict)}#{Ansi::CRLF}") rescue nil
       client.close rescue nil
-    end
-
-    def converse(client, address)
-      session = Session.new(timed(client))
-      session.run
-    rescue IOError, Errno::EPIPE, Errno::ECONNRESET, Errno::ETIMEDOUT => e
-      BBS.log('session', "dropped by the client (#{e.message})")
-    rescue StandardError => e
-      BBS.log('session', "#{e.class}: #{e.message}\n#{e.backtrace.first(BACKTRACE_LINES).join("\n")}")
-    ensure
-      client.close
-      release(address)
-      BBS.config.on_session_end&.call(session) if session
     end
   end
 end

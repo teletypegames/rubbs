@@ -359,7 +359,7 @@ module BBS
         listen([*@persona.messages(facts), *history, { role: 'user', content: text }], reply, &)
         remember(history, text, reply.strip)
       rescue StandardError => e
-        BBS.log('ai', "model unavailable (#{e.class}: #{e.message})")
+        BBS.log('ai', e, level: :warn)
         reply.to_s.strip.empty? ? nil : reply.strip
       end
 

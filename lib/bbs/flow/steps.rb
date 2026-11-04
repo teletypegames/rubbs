@@ -86,7 +86,7 @@ module BBS
         rescue *LINE_DROPPED
           :halt
         rescue StandardError => e
-          BBS.log('flow call', "#{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
+          BBS.log('flow call', e)
           runner.write Ansi::CRLF
           runner.line('Something went wrong.', style: :error)
           nil
@@ -116,7 +116,7 @@ module BBS
         rescue *LINE_DROPPED
           :halt
         rescue StandardError => e
-          BBS.log('face', "#{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
+          BBS.log('face', e)
           nil
         end
       end

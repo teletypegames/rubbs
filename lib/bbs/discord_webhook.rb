@@ -81,7 +81,7 @@ module BBS
     # webhook is off or the relay limit is reached (logged).
     def post(content)
       return unless enabled?
-      return BBS.log(@label, 'relay limit reached, not sent') unless @relay.nil? || @relay.allow?(:posts)
+      return BBS.log(@label, 'relay limit reached, not sent', level: :warn) unless @relay.nil? || @relay.allow?(:posts)
 
       body = { content: content.to_s[0, @max], allowed_mentions: { parse: [] } }
       body[:flags] = SUPPRESS_EMBEDS unless @embeds
@@ -97,10 +97,10 @@ module BBS
         request = Net::HTTP::Post.new(@uri, 'Content-Type' => 'application/json')
         request.body = payload
         response = http.request(request)
-        BBS.log(@label, "HTTP #{response.code}") unless response.is_a?(Net::HTTPSuccess)
+        BBS.log(@label, "HTTP #{response.code}", level: :warn) unless response.is_a?(Net::HTTPSuccess)
       end
     rescue StandardError => e
-      BBS.log(@label, e)
+      BBS.log(@label, e, level: :warn)
     end
   end
 end

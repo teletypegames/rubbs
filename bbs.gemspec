@@ -2,13 +2,13 @@
 
 Gem::Specification.new do |s|
   s.name        = 'bbs'
-  s.version     = '2.3.0'
+  s.version     = '2.4.0'
   s.summary     = 'Universal telnet BBS server library'
   s.license     = 'MIT'
   s.author      = 'Zsolt Tasnadi'
-  s.files       = Dir['lib/**/*.rb'] + ['bin/art-preview']
+  s.files       = Dir['lib/**/*.rb'] + %w[bin/art-preview bin/bbs-health]
   s.bindir      = 'bin'
-  s.executables = ['art-preview']
+  s.executables = %w[art-preview bbs-health]
   s.require_paths = ['lib']
   s.required_ruby_version = '>= 3.2'
   s.homepage    = 'https://wiki.teletypegames.org/engines/rubbs'
