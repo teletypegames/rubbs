@@ -404,7 +404,7 @@ a Cyrillic а is an a), so nobody registers a look-alike of another account.
 
 **The profile.** `BBS::Auth::Profile` is the caller's account on either face: the preset's
 drawing in the middle, the title (`PROFILE`), who is on the line, and a cursor menu — log in or
-make an account, change the password or log out, back. A board opens it with `profile` (on a
+make an account, change the password or log out, back. A board opens it with `open_profile` (on a
 `Petscii::Face`, or in an Application, where the built-in `:profile` command does it too). The
 look is the preset's: `BBS::Preset.new(profile: BBS::Auth::Profile::Look.new(modern: art,
 petscii: c64_art, title: 'PROFILE', note: 'One account for every board.', words: {…},

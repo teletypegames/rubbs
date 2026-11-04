@@ -76,7 +76,7 @@ module BBS
             name:      :profile,
             label:     'Profile…',
             about:     'Your account: log in, a new account, the password',
-            action:    proc { profile },
+            action:    proc { open_profile },
             available: proc { BBS.config.auth }
           ),
           new(

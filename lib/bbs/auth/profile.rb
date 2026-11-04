@@ -9,7 +9,7 @@ module BBS
     # and a cursor menu (BBS::Selector) of what they can do: log in or make
     # an account, change the password or log out. A board opens it from a
     # menu (Application: the built-in +:profile+ command; a
-    # BBS::Petscii::Face: +profile+); how it looks comes from the board's
+    # BBS::Petscii::Face: +open_profile+); how it looks comes from the board's
     # BBS::Preset (+profile:+, a Look), and without one it is plain.
     #
     #   BBS::Auth::Profile.run(session)

@@ -140,7 +140,7 @@ module BBS
 
       # The caller's profile (BBS::Auth::Profile) on the bare line, then the
       # whole screen again. Returns +nil+.
-      def profile
+      def open_profile
         with_line { Auth::Profile.run(@session) }
         nil
       end

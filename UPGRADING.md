@@ -2,7 +2,7 @@
 
 The caller's profile on either face: `BBS::Auth::Profile` — the preset's drawing in the middle,
 the title, who is on the line, and a cursor menu (log in, a new account, the password, log out,
-back). A board opens it with `profile` (a `Petscii::Face`, an Application) or the built-in
+back). A board opens it with `open_profile` (a `Petscii::Face`, an Application) or the built-in
 `:profile` command; how it looks comes from the preset: `BBS::Preset.new(profile:
 BBS::Auth::Profile::Look.new(modern:, petscii:, title:, note:, words:, colors:, c64:))`, and
 without one it is plain. `BBS::Selector` takes `indent:` (columns of air on its left).

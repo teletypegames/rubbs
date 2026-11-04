@@ -63,7 +63,7 @@ module BBS
 
         # The caller's profile (BBS::Auth::Profile): log in, a new account,
         # the password, log out, until they go back. Returns +nil+.
-        def profile = Auth::Profile.run(@session)
+        def open_profile = Auth::Profile.run(@session)
 
         # Logs the caller in with the board's BBS::Auth::Setup: a name and its
         # password as prompts (BBS::Auth::Login), the outcome as an alert or
