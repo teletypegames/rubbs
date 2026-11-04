@@ -30,7 +30,8 @@ end
 
 Connect with `telnet localhost 2323`.
 
-Upgrading from 1.x: see [UPGRADING.md](UPGRADING.md).
+Upgrading from 1.x: see [UPGRADING.md](UPGRADING.md). A complete small board to start from:
+[examples/sample-bbs](examples/sample-bbs) (a guestbook, both faces, tests and `rake bbs:check`).
 
 ---
 
@@ -109,6 +110,9 @@ gem 'bbs', git: 'https://git.teletypegames.org/engines/rubbs.git'
 ```
 
 ### A board with two faces
+
+The whole of such a board, with its domain layers, a form, tests and the
+Rakefile, is [examples/sample-bbs](examples/sample-bbs).
 
 The board's domain, a small windowed face, a small line-by-line face, and
 the board itself:
