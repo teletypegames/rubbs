@@ -27,9 +27,10 @@ module BBS
     # migrated by +migrations+ (see ::migrate).
     #
     # [timeout]          milliseconds a write waits for a lock (BUSY_TIMEOUT)
-    # [transaction_mode] how its transactions begin: +nil+ (deferred) or
-    #                    +:immediate+ (a writer takes the lock at once)
-    def self.open(path, migrations = [], timeout: BUSY_TIMEOUT, transaction_mode: nil)
+    # [transaction_mode] how its transactions begin: +:immediate+ (the
+    #                    default: a writer takes the lock at once, as
+    #                    BBS::SQLite did) or +nil+ (deferred)
+    def self.open(path, migrations = [], timeout: BUSY_TIMEOUT, transaction_mode: :immediate)
       FileUtils.mkdir_p(File.dirname(path.to_s))
       db = Sequel.sqlite(path.to_s, timeout: timeout,
                                     connect_sqls: ['PRAGMA journal_mode = WAL', 'PRAGMA foreign_keys = ON'])

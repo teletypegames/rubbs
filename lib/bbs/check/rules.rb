@@ -53,6 +53,21 @@ module BBS
       end
     end
 
+    rule(:env_prefix, "the domain class reads the board's variables without BBS.board too") do |board|
+      domain = board.declaration[:domain]
+      next unless domain && board.env_prefix
+
+      derived = "#{domain.gsub(/([A-Z]+)([A-Z][a-z])/, '\\1_\\2').gsub(/([a-z\d])([A-Z])/, '\\1_\\2').upcase}_"
+      next if derived == board.env_prefix
+
+      declared = board.glob('lib/domain/*.rb').any? do |path|
+        board.read(path).match?(/^\s*env_prefix\s+['"]#{Regexp.escape(board.env_prefix)}['"]/)
+      end
+      next if declared
+
+      board.fail('lib/domain/', "#{domain} reads #{derived}* outside BBS.board: say env_prefix '#{board.env_prefix}'")
+    end
+
     rule(:names, 'each domain file defines the class of its name') do |board|
       LAYERS.each do |layer|
         board.glob("lib/domain/**/#{layer}/*.rb").each do |path|

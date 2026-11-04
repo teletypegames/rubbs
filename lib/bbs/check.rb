@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../bbs'
+
 module BBS
   # Checks that a board keeps the shape every rubbs board has: its files and
   # folders, the names of its classes, its +bbs.rb+ a BBS.board declaration,

@@ -76,6 +76,17 @@ class CheckTest < Minitest::Test
     end
   end
 
+  def test_a_domain_named_unlike_its_board_says_its_prefix
+    bbs = "BBS.board 'HackerCave BBS', HackerCaveBBS do\nend\n"
+    with_board('bbs.rb' => bbs) do |dir|
+      assert_equal [:env_prefix], BBS::Check.run(dir).map(&:rule).uniq
+    end
+    with_board('bbs.rb' => bbs, 'lib/domain/shop_bbs.rb' => "class HackerCaveBBS\n  include BBS::Domain\n\n  " \
+                                                            "env_prefix 'HACKERCAVE_BBS_'\nend\n") do |dir|
+      assert_empty BBS::Check.run(dir)
+    end
+  end
+
   def test_the_settings_name_their_variables
     klass = Class.new { include BBS::Domain }
     klass.env_prefix 'SHOP_BBS_'
