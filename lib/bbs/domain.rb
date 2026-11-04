@@ -48,7 +48,11 @@ module BBS
       end
 
       # The declared services, settings and background jobs, in order.
-      def declared = @declared ||= { services: [], settings: {}, jobs: [] }
+      def declared = @declared ||= { services: [], settings: {}, variables: {}, jobs: [] }
+
+      # The environment variables the settings read, full names with
+      # #env_prefix: what a board's +env-example+ lists.
+      def environment_variables = declared[:variables].values.map { |variable| "#{env_prefix}#{variable}" }
 
       # Declares the setting +name+: an instance method that reads
       # <tt><env_prefix><NAME></tt> from the environment, else +default+.
@@ -63,7 +67,8 @@ module BBS
       def setting(name, default = nil, env: nil, blank: false)
         declared[:settings][name] = default
         variable = (env || name).to_s.upcase
-        domain   = self
+        declared[:variables][name] = variable
+        domain = self
         define_method(name) do
           settings.fetch(name) { settings[name] = Domain.read(variable, default, blank: blank, prefix: domain.env_prefix) }
         end

@@ -1,3 +1,11 @@
+# rubbs 2.2
+
+A board's rake tasks and a check of its shape: `require 'bbs/rake'` and
+`BBS::Rake.board` in the Rakefile give `rake test`, `rake bbs:check` (`BBS::Check`:
+files, names, the `bbs.rb` declaration, the domain, no 1.x forms) and `rake` (both, what
+CI runs). House rules join with `BBS::Check.rule`; `Domain.environment_variables` lists
+what a domain reads. Nothing changes for a board that does not use it.
+
 # rubbs 2.1
 
 2.1 adds to the DSL; nothing of 2.0 changes, except where the empty line

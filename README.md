@@ -2733,6 +2733,39 @@ event.char?      # key is a 1-char String
 Return `:halt` to end the application, `:handled` to stop propagation,
 `nil`/`false` to keep dispatching.
 
+### The rake tasks of a board and its shape (`bbs/rake`, `BBS::Check`)
+
+```ruby
+# Rakefile
+require 'bbs/rake'
+BBS::Rake.board                 # BBS::Rake.board(faces: false) for a board without lib/ui faces
+```
+
+| Task | What it does |
+|---|---|
+| `rake test` | The tests: `test/**/*_test.rb`, with `test` and `lib` on the load path. |
+| `rake bbs:check` | The board's shape (`BBS::Check`); fails with the list of what is out of it. |
+| `rake` | Both: what CI runs. |
+
+`BBS::Check` runs rules over the board's files. rubbs' own rules:
+
+| Rule | Wants |
+|---|---|
+| `layout` | `bbs.rb`, `Rakefile`, `Gemfile(.lock)`, `README.md`, `lib/domain.rb`, `lib/domain/{model,repository,service}/`, a `test_helper.rb` |
+| `bbs_rb` | `bbs.rb` is requires and one `BBS.board` declaration |
+| `domain` | a class in `lib/domain/` that includes `BBS::Domain`; no `ENV` under `lib/ui` |
+| `names` | each file of a domain layer defines the class of its name |
+| `faces` | `lib/ui/modern.rb` and `lib/ui/petscii.rb` (unless `faces: false`) |
+| `wording` | the faces' text table is `lib/ui/wording.rb` |
+| `tests` | tests are `*_test.rb` and load the test helper |
+| `old_forms` | none of the 1.x forms (`BBS.configure`, `Terminal.flow`, `ctx[:app]`, `status_hint`, `with_loading`, padded titles …) |
+
+A family of boards adds its house rules with `BBS::Check.rule(:name, 'what it wants') { |board| board.fail(path, message) unless … }`
+(the `Board` has `file?`, `dir?`, `read`, `glob`, `ruby_files`, `declaration`, `slug`, `env_prefix`);
+ttg-common's are loaded with `require 'ttg/rake'`. A board turns a rule off with
+`BBS::Rake.board(skip: [:name])`. `BBS::Domain` classes answer `environment_variables`, the
+full names their settings read, for a rule that checks they are documented.
+
 ### Testing a board (`bbs/test`)
 
 `require 'bbs/test'` (not loaded by `require 'bbs'`) gives a board's tests
