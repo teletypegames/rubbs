@@ -62,6 +62,20 @@ class CheckTest < Minitest::Test
     assert_equal 'TTGBlogBBS', BBS::Check.class_name('lib/domain/ttg_blog_bbs.rb')
   end
 
+  def test_tables_need_models_and_sql_stays_in_them
+    changes = { 'lib/domain/migrations.rb' => "MIGRATIONS = ['CREATE TABLE items (id INTEGER PRIMARY KEY)', " \
+                                              "'CREATE TABLE tags (id INTEGER)'].freeze\n",
+                'lib/domain/model/item_model.rb' => "class ItemModel < BBS::Model\n  table :items\nend\n",
+                'lib/domain/service/item_service.rb' => "class ItemService\n  def all = db.fetch('SELECT * FROM items')\nend\n",
+                'lib/domain/repository/item_repository.rb' => "class ItemRepository\n  Q = 'SELECT ?item WHERE { }'\nend\n" }
+    with_board(changes) do |dir|
+      findings = BBS::Check.run(dir).map { |f| [f.rule, f.path] }
+      assert_includes findings, [:models, 'lib/domain/model/']
+      assert_includes findings, [:raw_sql, 'lib/domain/service/item_service.rb']
+      refute_includes findings, [:raw_sql, 'lib/domain/repository/item_repository.rb']
+    end
+  end
+
   def test_the_settings_name_their_variables
     klass = Class.new { include BBS::Domain }
     klass.env_prefix 'SHOP_BBS_'

@@ -51,7 +51,7 @@ class RateLimitTest < Minitest::Test
 
   def test_a_stored_limit_outlasts_a_restart
     Dir.mktmpdir do |dir|
-      db = BBS::SQLite.new(File.join(dir, 'limits.sqlite3'))
+      db = BBS::Database.open(File.join(dir, 'limits.sqlite3'))
       2.times { BBS::RateLimit.new(limit: 2, per: 60, store: db, name: 'logins').record('1.2.3.4') }
       again = BBS::RateLimit.new(limit: 2, per: 60, store: db, name: 'logins')
       refute again.allow?('1.2.3.4')
@@ -62,7 +62,7 @@ class RateLimitTest < Minitest::Test
 
   def test_stored_events_expire
     Dir.mktmpdir do |dir|
-      limit = BBS::RateLimit.new(limit: 1, per: 0.05, store: BBS::SQLite.new(File.join(dir, 'l.sqlite3')), name: 'x')
+      limit = BBS::RateLimit.new(limit: 1, per: 0.05, store: BBS::Database.open(File.join(dir, 'l.sqlite3')), name: 'x')
       assert limit.allow?(:k)
       refute limit.allow?(:k)
       sleep 0.06

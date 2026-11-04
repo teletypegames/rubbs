@@ -20,7 +20,7 @@ module BBS
   #   LOGINS.record(key) unless password_ok?
   #
   # By default the events live in memory and a restart forgets them; with
-  # a BBS::SQLite +store+ they are kept in its +rate_limit_events+ table
+  # a +store+ (the board's Sequel::Database) they are kept in its +rate_limit_events+ table
   # under the limit's +name+, so a lockout outlasts a restart. Keys that
   # have been quiet for +per+ seconds are forgotten either way.
   class RateLimit
@@ -63,7 +63,7 @@ module BBS
     end
 
     # Creates a limit of +limit+ events per +per+ seconds. With a +store+
-    # (a BBS::SQLite) the events are kept there under +name+ (a String,
+    # (a Sequel::Database) the events are kept there under +name+ (a String,
     # required then); without one, in memory.
     def initialize(limit:, per:, store: nil, name: nil)
       raise ArgumentError, 'a stored RateLimit needs a name' if store && name.to_s.empty?
@@ -134,18 +134,22 @@ module BBS
       end
     end
 
-    # The events of a limit in a BBS::SQLite table, by wall-clock time, so
-    # they outlast a restart.
+    # The events of a limit in a table of the board's database (a
+    # Sequel::Database), by wall-clock time, so they outlast a restart.
     class Table
       # The table every stored limit keeps its events in.
-      NAME = 'rate_limit_events'
+      NAME = :rate_limit_events
 
       # Uses (and creates) the table in +db+ for the limit called +name+.
       def initialize(db, name)
-        @db   = db
-        @name = name
-        @db.query("CREATE TABLE IF NOT EXISTS #{NAME} (name TEXT NOT NULL, key TEXT NOT NULL, at REAL NOT NULL)")
-        @db.query("CREATE INDEX IF NOT EXISTS #{NAME}_by_key ON #{NAME} (name, key, at)")
+        db.create_table?(NAME) do
+          String :name, null: false
+          String :key, null: false
+          Float :at, null: false
+          index %i[name key at]
+        end
+        @events = db[NAME]
+        @name   = name
       end
 
       # The current time of this store: Unix seconds.
@@ -154,12 +158,12 @@ module BBS
       # The times of +key+'s events after +start+, oldest first; the older
       # events of the limit are deleted.
       def since(key, start)
-        @db.change("DELETE FROM #{NAME} WHERE name = ? AND at <= ?", @name, start)
-        @db.query("SELECT at FROM #{NAME} WHERE name = ? AND key = ? ORDER BY at", @name, key.to_s).map { |row| row['at'] }
+        @events.where(name: @name).where { at <= start }.delete
+        @events.where(name: @name, key: key.to_s).order(:at).select_map(:at)
       end
 
       # Keeps an event of +key+ at +time+.
-      def add(key, time) = @db.insert("INSERT INTO #{NAME} (name, key, at) VALUES (?, ?, ?)", @name, key.to_s, time)
+      def add(key, time) = @events.insert(name: @name, key: key.to_s, at: time)
     end
   end
 end

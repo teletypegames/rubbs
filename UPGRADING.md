@@ -1,3 +1,23 @@
+# rubbs 2.3
+
+A model for every table: `BBS::Model` (a `Sequel::Model`) with the queries as
+its class methods, the board's databases declared in its domain
+(`database :db, MIGRATIONS`) and bound at start. `BBS::SQLite` and the
+domain's `database(path, *steps)` instance method are gone; the migrations are
+still counted in `PRAGMA user_version`, so the databases go on where they were.
+
+- `MIGRATIONS` (the old `Repository::MIGRATIONS` steps) go to `lib/domain/migrations.rb`; a
+  step that was a lambda gets the `Sequel::Database` now.
+- Each `CREATE TABLE` gets `class XModel < BBS::Model; table :x; end` in `lib/domain/model`;
+  the SQL of a table repository becomes class methods of its model, and the repository goes
+  (a repository stays for HTTP, files, an archive).
+- `db.query(sql, *args)` → `Model.where(…)` / `.all` / `.db.fetch(sql, *args).all` (rows have
+  Symbol keys); `db.insert` → `Model.create(…)` / `.insert`; `db.change` → `.where(…).update/delete`;
+  `db.get(...)['n']` → `.count`; `db.transaction` → `Model.db.transaction`.
+- `BBS::RateLimit.new(store: db)` takes the `Sequel::Database` (`databases[:main]`).
+- Tests: `BBS::Test.database(MIGRATIONS)` in place of a temporary `BBS::SQLite`.
+- `rake bbs:check` wants a model for each table and SQL only in the model layer.
+
 # rubbs 2.2
 
 A board's rake tasks and a check of its shape: `require 'bbs/rake'` and

@@ -54,7 +54,7 @@ Upgrading from 1.x: see [UPGRADING.md](UPGRADING.md). A complete small board to 
 15. [FrameBuffer & ANSI text](#15-framebuffer--ansi-text)
 16. [Markdown renderer](#16-markdown-renderer)
 17. [Banner & ERB screens](#17-banner--erb-screens)
-18. [Persistence and shared blocks (`Store`, `SQLite`, `Snapshot`, `HTTP`, `Cache`, `RateLimit`, `Text`, `Nodes`)](#18-persistence-and-shared-blocks-store-sqlite-snapshot-http-cache-ratelimit-text-nodes) — and QR codes (`BBS::QR`)
+18. [Persistence and shared blocks (`Model`, `Database`, `Store`, `Snapshot`, `HTTP`, `Cache`, `RateLimit`, `Text`, `Nodes`)](#18-persistence-and-shared-blocks-model-database-store-snapshot-http-cache-ratelimit-text-nodes) — and QR codes (`BBS::QR`)
 19. [AI characters (`BBS::AI`)](#19-ai-characters-bbsai)
 20. [Doors (`BBS::Door`)](#20-doors-bbsdoor) — telnet gateways (`BBS::Gateway`) and file downloads (`BBS::Zmodem`, `BBS::Xmodem`, `BBS::Transfer`)
 21. [Telnet, sessions & input model](#21-telnet-sessions--input-model) — and testing a board (`bbs/test`)
@@ -292,11 +292,14 @@ Instance methods:
 
 - `services` — every service by name, made now: what an Application and a
   `Petscii::Face` get as readers.
-- `start` — makes every service and begins the background work.
-  `BBS.board` calls it once at boot. Returns `self`.
-- `database(path, Schema)` or `database(path, *sql_steps)` — a migrated
-  `BBS::SQLite`: a schema object with `migrate(db)`, or the SQL steps of
-  `BBS::SQLite#migrate`.
+- `start` — opens the databases, makes every service and begins the
+  background work. `BBS.board` calls it once at boot. Returns `self`.
+- `databases` — the board's databases by name (`Sequel::Database` each),
+  opened and migrated on first use, the `BBS::Model` classes bound to them.
+
+The class macro `database(setting, migrations, name: :main)` declares a
+database: the file of the path setting `setting`, migrated by the
+`migrations` list (see [BBS::Model and BBS::Database](#bbsmodel-and-bbsdatabase)).
 
 Keep plain methods for anything else; the domain object is an ordinary
 class.
@@ -1584,35 +1587,67 @@ The ERB context exposes color helpers (`green`, `yellow`, `cyan`, `white`,
 and `big_banner(text, font:)`. Instance variables are populated from
 `vars` (resolved against `@ctx` if the value is a Symbol).
 
-## 18. Persistence and shared blocks (`Store`, `SQLite`, `Snapshot`, `HTTP`, `Cache`, `RateLimit`, `Text`, `Nodes`)
+## 18. Persistence and shared blocks (`Model`, `Database`, `Store`, `Snapshot`, `HTTP`, `Cache`, `RateLimit`, `Text`, `Nodes`)
 
 The parts every content board needs, so a board writes none of them by hand.
 
-### `BBS::SQLite`
+### `BBS::Model` and `BBS::Database`
 
-One SQLite file and its one connection, shared by the callers' threads
-behind a lock: WAL mode (a command-line tool of the board can use the file
-meanwhile), a busy timeout, foreign keys on. The schema is a list of
-migrations numbered by `PRAGMA user_version`; a file runs only the ones it
-has not had, each in a transaction.
+Each table of a board has its model in `lib/domain/model`: a `BBS::Model`
+(a `Sequel::Model`) whose class methods are the queries, so SQL lives
+nowhere else. The database is bound when the board starts, so a model file
+loads without a connection.
 
 ```ruby
-DB = BBS::SQLite.new('data/board.sqlite3')        # creates data/ when needed
-DB.migrate(
-  'CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT NOT NULL)',
-  'ALTER TABLE posts ADD COLUMN body TEXT',
-  ->(db) { db.insert('INSERT INTO posts (title) VALUES (?)', 'Welcome') }
-)
-DB.query('SELECT * FROM posts')                    # => [{ 'id' => 1, 'title' => 'Welcome', 'body' => nil }]
-DB.get('SELECT * FROM posts WHERE id = ?', 1)      # first row or nil
-DB.insert('INSERT INTO posts (title) VALUES (?)', 'Hi')   # => the new rowid
-DB.change('DELETE FROM posts WHERE id = ?', 2)     # => rows changed
-DB.transaction { … }                               # nested calls join the outer one
+# lib/domain/migrations.rb — the schema, one step per version (PRAGMA user_version)
+MIGRATIONS = [
+  'CREATE TABLE entries (id INTEGER PRIMARY KEY, name TEXT NOT NULL, text TEXT NOT NULL, written_at INTEGER NOT NULL)',
+  'CREATE INDEX entries_by_name ON entries (name)',
+  ->(db) { db[:entries].insert(name: 'sysop', text: 'Welcome', written_at: Time.now.to_i) }
+].freeze
+
+# lib/domain/model/entry_model.rb
+class EntryModel < BBS::Model
+  table :entries                                  # table :rfcs, database: :index for a second database
+
+  def self.newest = reverse(:id).all
+  def self.sign(name, text) = create(name: name, text: text, written_at: Time.now.to_i)
+  def day = Time.at(written_at).strftime('%Y-%m-%d')
+end
+
+# lib/domain/sample_bbs.rb
+class SampleBBS
+  include BBS::Domain
+
+  path     :db, 'data/sample.sqlite3'
+  database :db, MIGRATIONS                         # opened at start, the models bound
+end
 ```
+
+```ruby
+EntryModel.all
+EntryModel.where(name: 'ada').reverse(:id).limit(10).all
+EntryModel.group_and_count(:name).all
+EntryModel[3]&.update(text: 'better')
+EntryModel.db.fetch('SELECT … FROM fts WHERE fts MATCH ?', words).all   # plain SQL, in the model, where it is needed
+```
+
+Everything of `Sequel::Model` is there (datasets, associations, hooks,
+validations). `BBS::Database.open(path, migrations)` opens a file in WAL mode
+with foreign keys on and a busy timeout; the connection pool serves the
+callers' threads. The migrations are counted in `PRAGMA user_version`, so a
+database made with rubbs 2.2's `BBS::SQLite` goes on where it was. A step is
+SQL (one or more statements) or a callable given the `Sequel::Database`.
+In a test, `BBS::Test.database(MIGRATIONS)` is a fresh database with the
+models bound to it.
+
+`rake bbs:check` wants a model for every table (`models`) and SQL only in
+`lib/domain/model` and `lib/domain/migrations.rb` (`raw_sql`). A board keeps
+a repository only for what is not its database: HTTP, files, an archive.
 
 ### `BBS::Store`
 
-A thread-safe, upsert-by-`session_id` table in a `BBS::SQLite` file. Used by
+A thread-safe, upsert-by-`session_id` table in an SQLite file (`BBS::Database`). Used by
 `Flow#persist` but useful standalone.
 
 ```ruby
@@ -1638,8 +1673,6 @@ USERS.delete(sid)
   a header added later becomes a new column.
 - Values are cleaned with `BBS::Text.clean`; `find` / `all` return Hashes.
 
-A domain object opens its SQLite files with `database(path, …)`
-([§3](#3-the-board-bbsboard-and-bbsdomain)), migrated in one call.
 
 ### `BBS::Snapshot`
 
@@ -1746,7 +1779,7 @@ A sliding window per key, thread-safe; quiet keys are forgotten.
   LOGINS.record(key) unless password_ok?(name, password)
   ```
 
-- With a `BBS::SQLite` the events are kept in its `rate_limit_events` table
+- With a `store:` (the board's `Sequel::Database`) the events are kept in its `rate_limit_events` table
   under the limit's name, so a lockout outlasts a restart:
   `BBS::RateLimit.new(limit: 10, per: 600, store: DB, name: 'logins')`.
 
@@ -2851,7 +2884,7 @@ c64.take                                       # the bytes written since the las
 | `bbs/markdown.rb` | Markdown → ANSI line array renderer. |
 | `bbs/event.rb` | Unified key + mouse event objects. |
 | `bbs/store.rb`, `bbs/store/csv_import.rb` | Thread-safe upsert-by-session table on SQLite (imports the CSV file of earlier versions, broken rows set aside). |
-| `bbs/sqlite.rb` | One shared SQLite connection: WAL, lock, query helpers, `user_version` migrations. |
+| `bbs/database.rb`, `bbs/model.rb` | A board's SQLite through Sequel (WAL, `user_version` migrations) and the model of each table. |
 | `bbs/snapshot.rb` | A catalog as one gzipped JSON file in memory: seed, refresh, swap. |
 | `bbs/nodes.rb` | Node numbers of the calls. |
 | `bbs/http.rb` | Bounded HTTP GET/POST: deadline, body cap, safe redirects, public addresses only. |

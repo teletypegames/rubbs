@@ -1,10 +1,14 @@
 # frozen_string_literal: true
 
 # One line in the guestbook: who wrote what, and when.
-EntryModel = Data.define(:id, :name, :text, :written_at) do
-  def self.from_row(row)
-    new(id: row['id'], name: row['name'], text: row['text'], written_at: Time.at(row['written_at']))
-  end
+class EntryModel < BBS::Model
+  table :entries
 
-  def day = written_at.strftime('%Y-%m-%d')
+  def self.newest = reverse(:id).all
+
+  def self.sign(name, text) = create(name: name, text: text, written_at: Time.now.to_i)
+
+  def written = Time.at(written_at)
+
+  def day = written.strftime('%Y-%m-%d')
 end

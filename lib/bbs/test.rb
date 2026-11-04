@@ -1,11 +1,26 @@
 # frozen_string_literal: true
 
 require 'bbs'
+require 'tmpdir'
+require 'fileutils'
 
 module BBS
   # Helpers for the tests of a board, loaded with <tt>require 'bbs/test'</tt>
   # (not by <tt>require 'bbs'</tt>).
   module Test
+    # A throwaway database for a test: a fresh SQLite file migrated by
+    # +migrations+, the BBS::Model classes of +name+ bound to it. Returns the
+    # Sequel::Database; the file goes when the process ends.
+    #
+    #   def setup = BBS::Test.database(MIGRATIONS)
+    def self.database(migrations = [], name: :main)
+      dir = Dir.mktmpdir('bbs-test')
+      at_exit { FileUtils.rm_rf(dir) }
+      db = Database.open(File.join(dir, 'test.sqlite3'), migrations)
+      Model.bind(name => db)
+      db
+    end
+
     # A caller's line without a socket: the keys it will press go in, what
     # the board writes is kept. It answers what a page, a screen or a flow
     # asks of a BBS::Session.

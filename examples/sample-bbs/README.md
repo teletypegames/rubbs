@@ -20,9 +20,9 @@ env-example                             every setting, with its default (SAMPLE_
 Rakefile                                BBS::Rake.board: rake test, rake bbs:check, rake
 lib/domain.rb                           requires the domain in order
 lib/domain/
-  sample_bbs.rb                         the domain object: settings and services (BBS::Domain)
-  model/entry_model.rb                  one line of the guestbook
-  repository/entry_repository.rb        the lines in SQLite
+  sample_bbs.rb                         the domain object: settings, database, services (BBS::Domain)
+  migrations.rb                         the schema, one step per version
+  model/entry_model.rb                  the entries table: EntryModel < BBS::Model (.all, .where, .create …)
   service/guestbook_service.rb          the rules: answers :ok, :no_name, :empty, :too_long
 lib/ui/
   wording.rb                            what both faces say (UI::Wording)
@@ -36,6 +36,9 @@ test/                                   the service and both faces (bbs/test)
 
 - **`bbs.rb`** only declares: the title (from which the log tag `sample-bbs` and the
   environment prefix `SAMPLE_BBS_` come), the domain class, the two faces and the goodbye.
+- **Each table has its model** in `lib/domain/model` (`EntryModel < BBS::Model`, `table :entries`):
+  the queries are its class methods (`EntryModel.newest`), so no SQL is anywhere else. A board
+  keeps a repository only for what is not its database (HTTP, files).
 - **The domain** knows nothing of telnet. `GuestbookService#sign` answers with a Symbol;
   both faces put it in the words of `UI::Wording::SIGN` (the form with `errors`, the C64
   with `report`).

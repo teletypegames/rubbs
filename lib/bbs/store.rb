@@ -23,9 +23,9 @@ module BBS
   # is filled with the UTC time a row is created.
   class Store
     # The table that holds the rows.
-    TABLE = 'store'
+    TABLE = :store
     # The key column, kept even when +headers+ leave it out.
-    KEY = 'session_id'
+    KEY = :session_id
 
     # The column names (an Array of String) and the path the store was made
     # with (see the class description for the database file).
@@ -65,16 +65,16 @@ module BBS
     # Returns the row of +session_id+ as a Hash of column name to value, or
     # +nil+.
     def find(session_id)
-      row = db.get("SELECT * FROM #{TABLE} WHERE #{KEY} = ?", session_id.to_s)
+      row = rows.where(KEY => session_id.to_s).first
       row && project(row)
     end
 
     # Returns every row as an Array of Hash, oldest first.
-    def all = db.query("SELECT * FROM #{TABLE} ORDER BY rowid").map { |row| project(row) }
+    def all = rows.order(Sequel.lit('rowid')).map { |row| project(row) }
 
     # Removes the row of +session_id+, if there is one.
     def delete(session_id)
-      db.change("DELETE FROM #{TABLE} WHERE #{KEY} = ?", session_id.to_s)
+      rows.where(KEY => session_id.to_s).delete
       nil
     end
 
@@ -82,11 +82,13 @@ module BBS
 
     def db = @mutex.synchronize { @db ||= open }
 
+    def rows = db[TABLE]
+
     def open
-      SQLite.new(database_path).tap do |db|
-        db.query("CREATE TABLE IF NOT EXISTS #{TABLE} (#{KEY} TEXT UNIQUE)")
-        known = db.query("PRAGMA table_info(#{TABLE})").map { |column| column['name'] }
-        (@headers - known).each { |name| db.query("ALTER TABLE #{TABLE} ADD COLUMN #{quote(name)} TEXT") }
+      Database.open(database_path).tap do |db|
+        db.create_table?(TABLE) { String KEY, unique: true }
+        known = db.schema(TABLE, reload: true).map { |name, _| name.to_s }
+        (@headers - known).each { |name| db.alter_table(TABLE) { add_column name.to_sym, String } }
         import(db) if @path != database_path && File.exist?(@path)
       end
     end
@@ -94,8 +96,7 @@ module BBS
     def update(session_id, values)
       return if values.empty?
 
-      sets = values.keys.map { |name| "#{quote(name)} = ?" }.join(', ')
-      db.change("UPDATE #{TABLE} SET #{sets} WHERE #{KEY} = ?", *values.values, session_id.to_s)
+      rows.where(KEY => session_id.to_s).update(values.transform_keys(&:to_sym))
     end
 
     def add(session_id, fields)
@@ -105,21 +106,18 @@ module BBS
     end
 
     def insert(db, row)
-      names = row.keys.map { |name| quote(name) }.join(', ')
-      db.insert("INSERT OR IGNORE INTO #{TABLE} (#{names}) VALUES (#{(['?'] * row.size).join(', ')})", *row.values)
+      db[TABLE].insert_ignore.insert(row.transform_keys(&:to_sym))
     end
 
     def import(db)
-      return unless db.get("SELECT COUNT(*) AS n FROM #{TABLE}")['n'].zero?
+      return unless db[TABLE].empty?
 
-      csv = CsvImport.new(@path, [KEY, *@headers])
+      csv = CsvImport.new(@path, [KEY.to_s, *@headers])
       db.transaction { csv.rows.each { |row| insert(db, row.transform_values { |value| value && clean(value) }) } }
       BBS.log('store', csv.finish(database_path))
     end
 
-    def project(row) = @headers.to_h { |name| [name, row[name]] }
-
-    def quote(name) = %("#{name.gsub('"', '""')}")
+    def project(row) = @headers.to_h { |name| [name, row[name.to_sym]] }
 
     def clean(value) = Text.clean(value)
   end

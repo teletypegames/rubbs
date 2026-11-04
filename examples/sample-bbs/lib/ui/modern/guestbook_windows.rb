@@ -11,7 +11,7 @@ module UI
         height(-6)
         items { guestbook.all }
         label { |entry| "#{entry.day} #{entry.name}" }
-        detail { |entry| [bright(entry.name), dim(entry.written_at.strftime('%Y-%m-%d %H:%M')), '', entry.text] }
+        detail { |entry| [bright(entry.name), dim(entry.written.strftime('%Y-%m-%d %H:%M')), '', entry.text] }
         empty 'Nobody has signed yet. Be the first: F3.'
         action('Sign') { show(:sign) }
       end

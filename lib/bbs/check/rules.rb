@@ -17,18 +17,22 @@ module BBS
       /\btitle:\s*' [^']+ '/ => 'titles are plain; the frame pads them',
       /\bRateLimit\.caller_key\(/ => 'session.caller_key / caller_key',
       /\bwindow\([^)]*type:\s*:/ => 'window :name, :type do … end',
-      /\braise IOError,\s*['"][^'"]*hung up/ => 'raise BBS::Hangup'
+      /\braise IOError,\s*['"][^'"]*hung up/ => 'raise BBS::Hangup',
+      /\bBBS::SQLite\b/ => 'a BBS::Model for each table (rubbs 2.3)'
     }.freeze
 
-    # The layers of a board's domain, each a folder of lib/domain.
+    # The layers of a board's domain, each a folder of lib/domain; a board
+    # with no outside source (HTTP, files) has no repository.
     LAYERS = %w[model repository service].freeze
+    # The layers every board has.
+    REQUIRED_LAYERS = %w[model service].freeze
 
     rule(:layout, 'the files and folders of a rubbs board') do |board|
       %w[bbs.rb Rakefile Gemfile Gemfile.lock README.md lib/domain.rb].each do |path|
         board.fail(path, 'missing') unless board.file?(path)
       end
       board.fail('test/test_helper.rb', 'missing') if board.glob('test/**/test_helper.rb').empty?
-      LAYERS.each { |layer| board.fail("lib/domain/#{layer}/", 'missing') unless board.dir?("lib/domain/#{layer}") }
+      REQUIRED_LAYERS.each { |layer| board.fail("lib/domain/#{layer}/", 'missing') unless board.dir?("lib/domain/#{layer}") }
     end
 
     rule(:bbs_rb, 'bbs.rb is requires and one BBS.board declaration') do |board|
@@ -81,6 +85,36 @@ module BBS
         unless board.read(path).match?(%r{require(?:_relative)?\s+['"](?:\./)?(?:\.\./)*test_helper['"]})
           board.fail(path, "does not require 'test_helper'")
         end
+      end
+    end
+
+    # SQL in a string: what only the model layer and the migrations write.
+    # (A SPARQL query, <tt>SELECT ?item …</tt>, is not SQL.)
+    SQL = /
+      (?:['"]|^)\s*
+      (?:SELECT(?!\s+(?:DISTINCT\s+)?\?)|INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE|DELETE\s+FROM|
+         CREATE\s+(?:TABLE|INDEX)|ALTER\s+TABLE)\b
+    /x
+    # The files where SQL is at home.
+    SQL_HOMES = %r{\Alib/domain/(?:.*/)?(?:model/|migrations\.rb\z)}
+
+    # A table made by SQL or by Sequel's create_table.
+    TABLE = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`]?(\w+)|create_table\??\(:(\w+)/i
+
+    rule(:models, 'every table has its BBS::Model in lib/domain/model') do |board|
+      tables   = board.glob('lib/**/*.rb').flat_map { |path| board.read(path).scan(TABLE).map(&:compact).flatten }
+      modelled = board.glob('lib/domain/**/model/*.rb').flat_map { |path| board.read(path).scan(/^\s*table\s+:(\w+)/).flatten }
+      (tables.uniq - modelled).each do |table|
+        board.fail('lib/domain/model/', "the table #{table} has no model (table :#{table})")
+      end
+      if modelled.any? && !board.file?('lib/domain/migrations.rb')
+        board.fail('lib/domain/migrations.rb', 'missing: the migrations of the models')
+      end
+    end
+
+    rule(:raw_sql, 'SQL only in the model layer and lib/domain/migrations.rb') do |board|
+      board.ruby_files.grep_v(SQL_HOMES).each do |path|
+        board.fail(path, 'SQL outside the model layer: a method of the model') if board.read(path).match?(SQL)
       end
     end
 

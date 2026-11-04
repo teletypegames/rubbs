@@ -10,9 +10,10 @@ module BBS
   #     include BBS::Domain
   #
   #     setting :refresh, 3600                       # FEEDIA_BBS_REFRESH, an Integer
-  #     path    :db, 'data/feedia.sqlite3'           # FEEDIA_BBS_DB, against the board's root
+  #     path     :db, 'data/feedia.sqlite3'          # FEEDIA_BBS_DB, against the board's root
+  #     database :db, MIGRATIONS                     # opened at start, BBS::Model classes bound
   #
-  #     service(:feeds) { FeedService.new(FeedRepository.new(database(db, Schema))) }
+  #     service(:feeds) { FeedService.new }
   #     service(:inbox) { InboxService.new(feeds) }
   #
   #     background('catalog refresh', every: -> { refresh }) { feeds.refresh }
@@ -48,7 +49,7 @@ module BBS
       end
 
       # The declared services, settings and background jobs, in order.
-      def declared = @declared ||= { services: [], settings: {}, variables: {}, jobs: [] }
+      def declared = @declared ||= { services: [], settings: {}, variables: {}, jobs: [], databases: {} }
 
       # The environment variables the settings read, full names with
       # #env_prefix: what a board's +env-example+ lists.
@@ -89,6 +90,17 @@ module BBS
         define_method(name) { services_made.fetch(name) { services_made[name] = instance_exec(&block) } }
       end
 
+      # Declares a database of the board: the file of the +path+ setting
+      # +setting+, migrated by +migrations+ (BBS::Database.migrate), named
+      # +name+ (+:main+ for the first). #start opens it and binds the
+      # BBS::Model classes whose table lives in it; #databases has it.
+      #
+      #   path     :db, 'data/feedia.sqlite3'
+      #   database :db, MIGRATIONS
+      def database(setting, migrations = [], name: :main)
+        declared[:databases][name.to_sym] = [setting, migrations]
+      end
+
       # Declares background work that #start begins (BBS.background): its
       # +name+ for the log, +every+ seconds (a number, or a block evaluated
       # in the domain object, or +nil+ for once), +if+ a block (in the domain
@@ -125,9 +137,22 @@ module BBS
     # BBS::Petscii::Face get.
     def services = self.class.declared[:services].to_h { |name| [name, public_send(name)] }
 
-    # Makes every service and begins the background work. BBS.board calls it
-    # once at boot. Returns +self+.
+    # The board's databases by name, opened and migrated on first use
+    # (Sequel::Database each); the BBS::Model classes are bound to them.
+    def databases
+      return @databases if @databases
+
+      @databases = self.class.declared[:databases].to_h do |name, (setting, migrations)|
+        [name, Database.open(public_send(setting), migrations)]
+      end
+      Model.bind(@databases)
+      @databases
+    end
+
+    # Opens the databases, makes every service and begins the background
+    # work. BBS.board calls it once at boot. Returns +self+.
     def start
+      databases
       services
       self.class.declared[:jobs].each do |name, every, condition, options, work|
         next if condition && !instance_exec(&condition)
@@ -136,22 +161,6 @@ module BBS
         BBS.background(name, every: seconds, **options) { instance_exec(&work) }
       end
       self
-    end
-
-    # A BBS::SQLite at +path+, migrated: +schema+ is an object with a
-    # <tt>migrate(db)</tt> method, or the SQL steps of BBS::SQLite#migrate
-    # (an Array or several Strings), or nothing.
-    #
-    #   database(db, *ReadRepository::MIGRATIONS)
-    #   database(db, BlogSchema)
-    def database(path, *schema)
-      db = SQLite.new(path)
-      if schema.first.respond_to?(:migrate)
-        schema.first.migrate(db)
-      elsif schema.any?
-        db.migrate(*schema.flatten)
-      end
-      db
     end
 
     private

@@ -3,12 +3,11 @@
 # The guestbook's rules: a name and a text, not too long. It answers with a
 # Symbol the faces put in words (UI::Wording::SIGN).
 class GuestbookService
-  def initialize(entries, max_length:)
-    @entries    = entries
+  def initialize(max_length:)
     @max_length = max_length
   end
 
-  def all = @entries.all
+  def all = EntryModel.newest
 
   # :ok, :no_name, :empty or :too_long.
   def sign(name, text)
@@ -18,7 +17,7 @@ class GuestbookService
     return :empty if text.empty?
     return :too_long if text.length > @max_length
 
-    @entries.add(name, text)
+    EntryModel.sign(name, text)
     :ok
   end
 end
