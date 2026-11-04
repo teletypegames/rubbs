@@ -228,7 +228,8 @@ class AuthLineTest < Minitest::Test
     app = BBS::Application.define { theme :synchronet }.build(session: session, session_id: 's', context: {})
     seen = []
     form = app.log_in { |who| seen << who.name }
-    assert_equal :close, app.send(:submit_login, BBS.config.auth, { name: 'ada', password: 'secret1' }, form, ->(who) { seen << who.name })
+    after = ->(who) { seen << who.name }
+    assert_equal :close, app.send(:submit_login, BBS.config.auth, { name: 'ada', password: 'secret1' }, form, after)
     assert_equal ['Ada'], seen
     assert_equal 'Ada', session.identity.name
   end
