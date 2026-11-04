@@ -25,10 +25,15 @@ module BBS
 
     # The Sequel::Database at +path+ (made, with its folder, when missing),
     # migrated by +migrations+ (see ::migrate).
-    def self.open(path, migrations = [])
+    #
+    # [timeout]          milliseconds a write waits for a lock (BUSY_TIMEOUT)
+    # [transaction_mode] how its transactions begin: +nil+ (deferred) or
+    #                    +:immediate+ (a writer takes the lock at once)
+    def self.open(path, migrations = [], timeout: BUSY_TIMEOUT, transaction_mode: nil)
       FileUtils.mkdir_p(File.dirname(path.to_s))
-      db = Sequel.sqlite(path.to_s, timeout: BUSY_TIMEOUT,
+      db = Sequel.sqlite(path.to_s, timeout: timeout,
                                     connect_sqls: ['PRAGMA journal_mode = WAL', 'PRAGMA foreign_keys = ON'])
+      db.transaction_mode = transaction_mode if transaction_mode
       migrate(db, migrations)
       db
     end

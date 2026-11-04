@@ -97,8 +97,11 @@ module BBS
       #
       #   path     :db, 'data/feedia.sqlite3'
       #   database :db, MIGRATIONS
-      def database(setting, migrations = [], name: :main)
-        declared[:databases][name.to_sym] = [setting, migrations]
+      #
+      # +options+ are those of BBS::Database.open (+timeout+,
+      # +transaction_mode+).
+      def database(setting, migrations = [], name: :main, **options)
+        declared[:databases][name.to_sym] = [setting, migrations, options]
       end
 
       # Declares background work that #start begins (BBS.background): its
@@ -142,8 +145,8 @@ module BBS
     def databases
       return @databases if @databases
 
-      @databases = self.class.declared[:databases].to_h do |name, (setting, migrations)|
-        [name, Database.open(public_send(setting), migrations)]
+      @databases = self.class.declared[:databases].to_h do |name, (setting, migrations, options)|
+        [name, Database.open(public_send(setting), migrations, **options)]
       end
       Model.bind(@databases)
       @databases

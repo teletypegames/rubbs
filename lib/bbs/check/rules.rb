@@ -89,10 +89,11 @@ module BBS
     end
 
     # SQL in a string: what only the model layer and the migrations write.
-    # (A SPARQL query, <tt>SELECT ?item …</tt>, is not SQL.)
+    # (A SPARQL query, <tt>SELECT ?item …</tt>, and a constant named
+    # +SELECT+ are not SQL.)
     SQL = /
       (?:['"]|^)\s*
-      (?:SELECT(?!\s+(?:DISTINCT\s+)?\?)|INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE|DELETE\s+FROM|
+      (?:SELECT(?!\s*=|\s+(?:DISTINCT\s+)?\?)|INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE|DELETE\s+FROM|
          CREATE\s+(?:TABLE|INDEX)|ALTER\s+TABLE)\b
     /x
     # The files where SQL is at home.
