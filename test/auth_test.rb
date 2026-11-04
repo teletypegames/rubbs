@@ -233,4 +233,16 @@ class AuthLineTest < Minitest::Test
     assert_equal ['Ada'], seen
     assert_equal 'Ada', session.identity.name
   end
+
+  def test_a_command_with_a_condition
+    open = false
+    app = BBS::Application.define do
+      command(:peek, 'Peek', if: -> { open }) { :peeked }
+      menu 'Look', :peek
+    end.build(session: BBS::Test::Session.new, session_id: 's', context: {})
+    item = app.menubar.menus.first.items.first
+    refute item.enabled?
+    open = true
+    assert item.enabled?
+  end
 end

@@ -122,21 +122,24 @@ module BBS
       # <tt>…</tt>; +false+ binds the key without showing it), +about+ the
       # statusbar line while its menu item is highlighted, +role+ the
       # BBS::Auth role it is for (its menu item is greyed out, and its key
-      # says so, for a caller without it). The commands +:menu+ (F10) and
+      # says so, for a caller without it), +if+ a block evaluated in the
+      # application that says whether it can run now (greyed out
+      # otherwise). The commands +:menu+ (F10) and
       # +:log_off+ (Alt-X) are built in, and +:log_in+ and +:log_out+ for a
       # board with a login (BBS.board's +auth+); declaring one of them
       # replaces it.
       #
       #   command :search, 'Search…', key: 'F2' do search end
-      def command(name, label, key: nil, hint: nil, about: nil, role: nil, &action)
+      def command(name, label, key: nil, hint: nil, about: nil, role: nil, if: nil, &action)
         @commands[name.to_sym] = Command.new(
-          name:   name.to_sym,
-          label:  label,
-          key:    key,
-          hint:   hint,
-          about:  about,
-          action: action,
-          role:   role
+          name:      name.to_sym,
+          label:     label,
+          key:       key,
+          hint:      hint,
+          about:     about,
+          action:    action,
+          role:      role,
+          available: binding.local_variable_get(:if)
         )
       end
 
