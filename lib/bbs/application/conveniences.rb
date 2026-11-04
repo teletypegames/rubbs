@@ -118,8 +118,12 @@ module BBS
       # Opens the login box of the board's BBS::Auth::Setup: name and
       # password; a good pair makes the caller that account (see
       # BBS::Auth::Conveniences#identity), a wrong one is said in the box.
-      # Returns the window.
-      def log_in(title: 'Log in')
+      # Then the block, when given, runs in the application with the
+      # Identity (to say more than "Welcome", or to show what the account
+      # may now see); without one the caller is welcomed. Returns the window.
+      #
+      #   command(:log_in, 'Log in…') { log_in { |who| message('Not an editor.') unless who.role?(:blogger) } }
+      def log_in(title: 'Log in', &after)
         setup = auth_setup or return message(no_login)
         Windows::Form.open(
           self,
@@ -130,7 +134,7 @@ module BBS
             { key: :name, label: 'Name', max_length: 20 },
             { key: :password, label: 'Password', password: true, max_length: 200 }
           ],
-          on_submit:    ->(values, form) { submit_login(setup, values, form) }
+          on_submit:    ->(values, form) { submit_login(setup, values, form, after) }
         )
       end
 
@@ -142,7 +146,7 @@ module BBS
 
       private
 
-      def submit_login(setup, values, form)
+      def submit_login(setup, values, form, after = nil)
         result = setup.directory.log_in(values[:name].to_s.strip, values[:password].to_s, caller_key: caller_key)
         unless result.is_a?(Auth::Identity)
           form.error(Auth::Login::WORDS.fetch(result, Auth::Login::WORDS[:wrong]))
@@ -150,7 +154,7 @@ module BBS
         end
 
         @session.identity = result
-        message("Welcome, #{result.name}.", title: 'Log in')
+        after ? instance_exec(result, &after) : message("Welcome, #{result.name}.", title: 'Log in')
         :close
       end
 

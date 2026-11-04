@@ -221,4 +221,15 @@ class AuthLineTest < Minitest::Test
     assert_equal 'Ada', BBS::Auth::Token.verify(sent['RUBBS_AUTH_KEY'], aud: 'ttg-blog-bbs').name
     refute gateway.send(:forwarded, BBS::Test::Session.new).key?('RUBBS_AUTH_KEY')
   end
+
+  def test_a_login_box_runs_its_block_after_a_good_login
+    BBS.config.auth = BBS::Auth::Setup.new(directory: @directory, login: :menu, guests: true)
+    session = BBS::Test::Session.new
+    app = BBS::Application.define { theme :synchronet }.build(session: session, session_id: 's', context: {})
+    seen = []
+    form = app.log_in { |who| seen << who.name }
+    assert_equal :close, app.send(:submit_login, BBS.config.auth, { name: 'ada', password: 'secret1' }, form, ->(who) { seen << who.name })
+    assert_equal ['Ada'], seen
+    assert_equal 'Ada', session.identity.name
+  end
 end
