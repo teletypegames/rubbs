@@ -411,6 +411,11 @@ petscii: c64_art, title: 'PROFILE', note: 'One account for every board.', words:
 colors: {…}, c64: {…}))`; a board without one gets the plain look (no drawing, the defaults of
 `Look`).
 
+**At the splash.** On a board with a login the splash (`BBS::Splash`, the preset's) asks a caller who
+is not logged in `Login | Register | Guest` instead of PRESS ANY KEY: L and R open the profile at a
+login or a new account (`Profile.run(session, start:)`), G goes on as a guest. A call handed on from
+another board has no splash, so nobody is asked twice.
+
 **Tests.** `BBS::Test.accounts` (a fresh accounts database and a `Directory`),
 `BBS::Test.auth_secret`, and `BBS::Test::Session.new(identity:, forwarded:)`.
 

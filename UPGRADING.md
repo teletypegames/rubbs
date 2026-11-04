@@ -1,3 +1,12 @@
+# rubbs 2.7
+
+The splash of a board with a login asks a caller who is not logged in: `Login | Register | Guest`
+(white words, each key — L, R, G — green). L and R open the caller's profile
+(`BBS::Auth::Profile.run(session, start: :log_in / :register)`), G or the wait running out goes on
+as a guest. A call handed on from another board skips the splash, so it is asked once. `Splash.new(…,
+choices: nil)` keeps the plain prompt; `colors:` changes the words' and keys' colours. Nothing to
+change in a board.
+
 # rubbs 2.6
 
 The caller's profile on either face: `BBS::Auth::Profile` — the preset's drawing in the middle,

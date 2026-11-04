@@ -3,6 +3,7 @@
 $LOAD_PATH.unshift File.expand_path('../lib', __dir__)
 require 'bbs'
 require 'minitest/autorun'
+require 'minitest/mock'
 require 'socket'
 require 'tmpdir'
 require 'timeout'

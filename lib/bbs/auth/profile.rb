@@ -75,10 +75,12 @@ module BBS
       # The most rows of a C64 drawing.
       PETSCII_ROWS = 13
 
-      # Runs the profile for the caller on +session+ until they go back.
-      # Returns +nil+; raises BBS::Hangup when the line drops.
-      def self.run(session, setup: BBS.config.auth, look: BBS.config.preset.profile || DEFAULT)
-        new(session, setup, look).run
+      # Runs the profile for the caller on +session+ until they go back;
+      # with +start+ (+:log_in+ or +:register+) that is done first, as if
+      # taken from the menu. Returns +nil+; raises BBS::Hangup when the line
+      # drops.
+      def self.run(session, setup: BBS.config.auth, look: BBS.config.preset.profile || DEFAULT, start: nil)
+        new(session, setup, look).run(start: start)
       end
 
       # A profile for +session+ with +setup+ (a BBS::Auth::Setup, or +nil+
@@ -94,10 +96,15 @@ module BBS
       end
 
       # Shows the profile and its menu, does what is taken, and shows it
-      # again, until the caller goes back.
-      def run
+      # again, until the caller goes back; +start+ (+:log_in+,
+      # +:register+) is done first.
+      def run(start: nil)
         return say_once(@words[:no_login]) unless @setup
 
+        if start
+          header
+          act(start)
+        end
         loop do
           header
           choice = menu.run
