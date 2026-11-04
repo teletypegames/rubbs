@@ -49,14 +49,12 @@ module BBS
       # The Identity of +name+ with +password+ from the line +caller_key+, or
       # +:wrong+, +:locked+, +:busy+.
       def log_in(name, password, caller_key:)
-        return :locked if @guard.locked?(name, caller_key)
+        return locked(name) if @guard.locked?(name, caller_key)
 
         account = AccountModel.named(name)
         return failed(name, caller_key) unless Password.match?(account&.password_digest, password)
 
-        account.update(password_digest: Password.digest(password)) if Password.rehash?(account.password_digest)
-        account.update(last_seen_at: Time.now.utc.iso8601)
-        identity(account)
+        welcome(account, password)
       rescue Password::Busy
         :busy
       end
@@ -67,9 +65,11 @@ module BBS
       def register(name, password, confirm = password)
         clean = Names.clean(name)
         problem = registration_problem(clean, password, confirm)
-        return problem if problem
+        return problem.tap { Auth.event(:register_refused, reason: problem.to_s) } if problem
 
-        identity(create(clean, Password.digest(password), @roles, by: 'register'))
+        identity(create(clean, Password.digest(password), @roles, by: 'register')).tap do |found|
+          Auth.event(:register, name: found.name)
+        end
       rescue Password::Busy
         :busy
       end
@@ -96,6 +96,7 @@ module BBS
         return found if found.is_a?(Symbol)
 
         AccountModel.named(name).update(password_digest: Password.digest(fresh))
+        Auth.event(:password, name: found.name)
         :ok
       rescue Password::Busy
         :busy
@@ -105,6 +106,7 @@ module BBS
       def grant(name, role, by: nil)
         account = AccountModel.named(name) or return :unknown
         RoleModel.dataset.insert_conflict.insert(account_id: account.id, role: role.to_s, granted_at: now, granted_by: by)
+        Auth.event(:grant, name: account.name, role: role.to_s, by: by.to_s)
         :ok
       end
 
@@ -112,6 +114,7 @@ module BBS
       def revoke(name, role)
         account = AccountModel.named(name) or return :unknown
         RoleModel.where(account_id: account.id, role: role.to_s).delete
+        Auth.event(:revoke, name: account.name, role: role.to_s)
         :ok
       end
 
@@ -120,6 +123,22 @@ module BBS
 
       # The names of every account.
       def names = AccountModel.names
+
+      # The accounts in numbers, for a dashboard: +accounts+, +roles+ (a Hash
+      # of role => accounts), and the accounts made (+new_day+, +new_week+)
+      # and logged in (+seen_day+, +seen_week+) in the last day and week.
+      def statistics(now: Time.now)
+        day  = (now - 86_400).utc.iso8601
+        week = (now - (7 * 86_400)).utc.iso8601
+        {
+          accounts:  AccountModel.count,
+          roles:     RoleModel.group_and_count(:role).to_h { |row| [row[:role], row[:count]] },
+          new_day:   since(:created_at, day),
+          new_week:  since(:created_at, week),
+          seen_day:  since(:last_seen_at, day),
+          seen_week: since(:last_seen_at, week)
+        }
+      end
 
       # Brings in an account made elsewhere (an import): +digest+ as
       # BBS::Auth::Password keeps it, +id+ to keep one, +roles+. Joins the
@@ -136,8 +155,26 @@ module BBS
 
       def failed(name, caller_key)
         @guard.failed(name, caller_key)
-        BBS.log('login', 'wrong name or password', level: :warn, name: name.to_s[0, 40])
+        Auth.event(:login_failed, level: :warn, name: name.to_s[0, 40])
         :wrong
+      end
+
+      # The Identity of +account+ just logged in with +password+: its digest
+      # renewed when it is of fewer iterations, its last login noted.
+      def welcome(account, password)
+        account.update(password_digest: Password.digest(password)) if Password.rehash?(account.password_digest)
+        account.update(last_seen_at: now)
+        found = identity(account)
+        Auth.event(:login, name: found.name, roles: found.roles.join(','))
+        found
+      end
+
+      # The accounts whose +column+ is +time+ (ISO 8601) or later.
+      def since(column, time) = AccountModel.where(Sequel[column] >= time).count
+
+      def locked(name)
+        Auth.event(:locked, level: :warn, name: name.to_s[0, 40])
+        :locked
       end
 
       def registration_problem(name, password, confirm)

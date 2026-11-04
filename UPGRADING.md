@@ -1,3 +1,11 @@
+# rubbs 2.5.1
+
+Auth events for a log pipeline: every login, failed login, lockout, registration, password change, role
+change, logout and a caller handed on with a key (or refused) is one `auth` line with `event` and `asker`
+(the board the caller is on; for the API, the board that asked), from `BBS::Auth.event`. The old
+`login: wrong name or password` line is now `event=login_failed`. `BBS::Auth::Directory#statistics`
+gives the accounts in numbers. Nothing to change in a board.
+
 # rubbs 2.5
 
 Accounts, roles and a login for a network of boards: `BBS::Auth`. Nothing a

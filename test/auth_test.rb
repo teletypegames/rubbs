@@ -92,7 +92,7 @@ class AuthDirectoryTest < Minitest::Test
       @directory.register('Ada', 'secret1')
       2.times { assert_equal :wrong, @directory.log_in('ada', 'nope', caller_key: 'line:1') }
     end
-    assert_match(/wrong name or password/, err)
+    assert_match(/login_failed/, err)
     assert_equal :locked, @directory.log_in('ada', 'secret1', caller_key: 'line:2')
   end
 
@@ -105,6 +105,18 @@ class AuthDirectoryTest < Minitest::Test
     assert_equal :ok, @directory.change_password('ada', 'secret1', 'secret9', caller_key: 'line:1')
     assert_equal 'Ada', @directory.log_in('ada', 'secret9', caller_key: 'line:1').name
     assert_equal :unknown, @directory.grant('nobody', :sysop)
+  end
+
+  def test_statistics
+    capture_io do
+      @directory.register('Ada', 'secret1')
+      @directory.grant('ada', :blogger)
+      @directory.import('Old', BBS::Auth::Password.digest('x', iterations: 1000), created_at: '2020-01-01T00:00:00Z')
+      @directory.log_in('ada', 'secret1', caller_key: 'line:1')
+    end
+    stats = @directory.statistics
+    assert_equal [2, { 'blogger' => 1, 'member' => 1 }], [stats[:accounts], stats[:roles]]
+    assert_equal [1, 1, 1], stats.values_at(:new_day, :new_week, :seen_day)
   end
 
   def test_an_import_keeps_the_id_and_joins_roles

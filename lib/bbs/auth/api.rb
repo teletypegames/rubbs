@@ -100,7 +100,7 @@ module BBS
         case request['op']
         when 'known'      then { result: @directory.known?(name) }
         when 'look_alike' then { result: @directory.look_alike?(name) }
-        else outcome(account_op(request, name), request['aud'])
+        else outcome(Auth.asked_by(request['aud']) { account_op(request, name) }, request['aud'])
         end
       end
 

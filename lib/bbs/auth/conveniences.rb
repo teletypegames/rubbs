@@ -17,7 +17,10 @@ module BBS
 
       # Forgets who the caller is: from now on a guest. Returns the guest
       # Identity.
-      def log_out = (@session.identity = Identity.guest)
+      def log_out
+        Auth.event(:logout, name: identity.name) if signed_in?
+        @session.identity = Identity.guest
+      end
 
       private
 

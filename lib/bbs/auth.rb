@@ -43,6 +43,29 @@ module BBS
 
     # The modes of Setup#login.
     LOGINS = %i[call menu both].freeze
+    # The thread-local key of the board a request of BBS::Auth::API came
+    # from, the +asker+ of the events it causes.
+    ASKER = :bbs_auth_asker
+
+    # Logs an auth +event+ (a Symbol: +:login+, +:login_failed+, +:locked+,
+    # +:register+, +:register_refused+, +:password+, +:grant+, +:revoke+,
+    # +:handed_on+, +:token_refused+, +:logout+) as one +auth+ line with
+    # +event+, +asker+ (the board the caller is on: this one, or the one
+    # that asked the API) and +facts+, for a log pipeline to count. Returns
+    # +nil+.
+    def self.event(event, level: :info, **facts)
+      asker = Thread.current[ASKER] || BBS.config.log_tag
+      BBS.log('auth', event.to_s, level: level, event: event.to_s, asker: asker.to_s, **facts)
+    end
+
+    # Runs the block with +board+ as the asker of the events it logs.
+    def self.asked_by(board)
+      before = Thread.current[ASKER]
+      Thread.current[ASKER] = board
+      yield
+    ensure
+      Thread.current[ASKER] = before
+    end
 
     # The Identity of the caller on +session+ when the call came: the one a
     # neighbouring board handed on in RUBBS_AUTH_KEY (BBS::Telnet::Forwarded,
@@ -50,11 +73,17 @@ module BBS
     # not good is logged and the caller is a guest.
     def self.from_line(session)
       key = session.respond_to?(:forwarded) ? session.forwarded['RUBBS_AUTH_KEY'] : nil
-      return Identity.guest unless key
+      key ? handed_on(key, session.via.to_s) : Identity.guest
+    end
 
-      Token.verify(key, aud: BBS.config.log_tag)
+    # The Identity of the RUBBS_AUTH_KEY +key+ a call came with through the
+    # board +via+, or a guest when it is not good (both logged).
+    def self.handed_on(key, via)
+      identity = Token.verify(key, aud: BBS.config.log_tag)
+      event(:handed_on, name: identity.name, via: via)
+      identity
     rescue Token::Invalid => e
-      BBS.log('auth', e, level: :warn, via: session.via.to_s)
+      event(:token_refused, level: :warn, reason: e.class.name.split('::').last, via: via)
       Identity.guest
     end
   end
