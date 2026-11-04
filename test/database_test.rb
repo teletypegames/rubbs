@@ -65,6 +65,13 @@ class ModelTest < Minitest::Test
     assert_equal 'bye', NoteModel.where(author: 'bob').get(:text)
   end
 
+  def test_a_model_without_its_database_says_so
+    loose = Class.new(BBS::Model)
+    error = assert_raises(Sequel::DatabaseError) { loose.count }
+    assert_kind_of BBS::Model::Unbound, error.wrapped_exception
+    assert_raises(Sequel::DatabaseError) { loose.dataset.insert(text: 'y') }
+  end
+
   def test_threads_write_through_the_pool
     4.times.map { |i| Thread.new { 10.times { NoteModel.create(author: "t#{i}", text: 'x') } } }.each(&:join)
     assert_equal 40, NoteModel.count

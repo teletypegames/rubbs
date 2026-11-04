@@ -4,6 +4,14 @@ require 'sequel'
 require_relative 'database'
 
 module BBS
+  # The database every BBS::Model stands on until its board binds its own:
+  # it refuses every query and write (Model::Unbound), so nothing a model
+  # does before then goes unnoticed.
+  UNBOUND_DATABASE = Sequel.mock(host: 'sqlite',
+                                 fetch: ->(sql) { sql.end_with?('LIMIT 0') ? [] : raise(Model::Unbound, sql) },
+                                 numrows: ->(sql) { raise Model::Unbound, sql },
+                                 autoid: ->(sql) { raise Model::Unbound, sql })
+
   # The model of one table of a board's database: a Sequel::Model whose
   # table is named in the class and whose database is bound when the board
   # starts (BBS::Domain's +database+), so a model file needs no connection
@@ -27,8 +35,16 @@ module BBS
   # class: 'GameModel'</tt>), hooks and validations. A board's database may
   # be more than one: <tt>table :rfcs, database: :index</tt>.
   #
-  # Until a board binds its databases the models stand on a mock one.
-  class Model < Sequel::Model(Sequel.mock(host: 'sqlite'))
+  # Until a board binds its databases the models stand on UNBOUND_DATABASE.
+  class Model < Sequel::Model(UNBOUND_DATABASE)
+    # Raised (wrapped in a Sequel::DatabaseError) when a model is used before
+    # its database is bound: the board's databases were not opened
+    # (BBS::Domain#databases, BBS::Test.database).
+    class Unbound < StandardError
+      # The error for the SQL +sql+ a model sent.
+      def initialize(sql = nil) = super("a BBS::Model used before its database was bound#{": #{sql}" if sql}")
+    end
+
     class << self
       # Names the model's +table+ in the database +database+ (+:main+ by
       # default, the board's first).
