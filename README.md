@@ -402,6 +402,15 @@ with `BBS::Auth::Password.from_hex`. Wrong passwords are counted by name and by
 line (`BBS::Auth::Guard`); names are compared by their look (`BBS::Auth::Names`:
 a Cyrillic а is an a), so nobody registers a look-alike of another account.
 
+**The profile.** `BBS::Auth::Profile` is the caller's account on either face: the preset's
+drawing in the middle, the title (`PROFILE`), who is on the line, and a cursor menu — log in or
+make an account, change the password or log out, back. A board opens it with `profile` (on a
+`Petscii::Face`, or in an Application, where the built-in `:profile` command does it too). The
+look is the preset's: `BBS::Preset.new(profile: BBS::Auth::Profile::Look.new(modern: art,
+petscii: c64_art, title: 'PROFILE', note: 'One account for every board.', words: {…},
+colors: {…}, c64: {…}))`; a board without one gets the plain look (no drawing, the defaults of
+`Look`).
+
 **Tests.** `BBS::Test.accounts` (a fresh accounts database and a `Directory`),
 `BBS::Test.auth_secret`, and `BBS::Test::Session.new(identity:, forwarded:)`.
 

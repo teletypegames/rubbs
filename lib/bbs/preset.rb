@@ -15,9 +15,12 @@ module BBS
   # [qr]         the text of the goodbye screen's QR code, or +nil+ for none
   # [user_agent] what follows <tt>rubbs/<version></tt> in the User-Agent of
   #              BBS::HTTP, or +nil+
-  Preset = Data.define(:splash, :url, :qr, :user_agent) do
+  # [profile]    the look of the caller's profile (a
+  #              BBS::Auth::Profile::Look: the drawing over it, the title,
+  #              the words, the colours), or +nil+ for the plain one
+  Preset = Data.define(:splash, :url, :qr, :user_agent, :profile) do
     # Creates a preset; every part is optional.
-    def initialize(splash: nil, url: nil, qr: nil, user_agent: nil) = super
+    def initialize(splash: nil, url: nil, qr: nil, user_agent: nil, profile: nil) = super
   end
 
   # The preset of a board without one.

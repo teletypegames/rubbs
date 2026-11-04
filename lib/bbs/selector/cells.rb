@@ -99,9 +99,9 @@ module BBS
       private
 
       def draw
-        lines = (1..rows).map { |l| paint(line_segments(l)) }
+        lines = (1..rows).map { |l| "#{' ' * @indent}#{paint(line_segments(l))}" }
         @session.write(lines.join(Ansi::CRLF))
-        @cursor = Cursor.new(@session, row: lines.size, col: @width + 1)
+        @cursor = Cursor.new(@session, row: lines.size, col: @indent + @width + 1)
         @session.write(park)
       end
 
@@ -120,11 +120,11 @@ module BBS
       end
 
       # The cursor to the start of the lit item.
-      def park = @cursor.move(@layout.line_of(@index), @layout.column_of(@index, @width))
+      def park = @cursor.move(@layout.line_of(@index), @indent + @layout.column_of(@index, @width))
 
       # The bytes that write +text+ (exactly #width columns) on row +row+.
       def row_at(row, text)
-        out = @cursor.move(row, 1) << text
+        out = @cursor.move(row, @indent + 1) << text
         @cursor.wrote(@width)
         out
       end

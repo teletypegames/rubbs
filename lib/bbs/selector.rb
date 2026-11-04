@@ -129,6 +129,7 @@ module BBS
     #           <tt>{ 'd' => :delete }</tt> gives <tt>[:delete, post]</tt>
     # [back]    what #run returns for RUN/STOP, ← or Esc
     # [colors]  colours of the roles over COLORS
+    # [indent]  columns of air left of the menu (to centre it)
     #
     # Raises ArgumentError when no item can be selected.
     def initialize(
@@ -145,7 +146,8 @@ module BBS
       item_exits: {},
       back: nil,
       colors: {},
-      fill: false
+      fill: false,
+      indent: 0
     )
       raise ArgumentError, 'a selector needs an item to select' unless items.any?(&:selectable?)
 
@@ -161,6 +163,7 @@ module BBS
       @back    = back
       @colors  = self.class::COLORS.merge(colors)
       @typed   = +''
+      @indent  = indent
     end
 
     # Draws the menu, then reads keys until an item is taken or the caller

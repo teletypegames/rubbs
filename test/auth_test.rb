@@ -271,3 +271,63 @@ class AuthLineTest < Minitest::Test
     assert_equal [BBS::Auth::Login::WORDS[:unavailable]], told
   end
 end
+
+class AuthProfileTest < Minitest::Test
+  def setup
+    @directory = BBS::Test.accounts(roles: ['member'])
+    @setup = BBS::Auth::Setup.new(directory: @directory, login: :menu, guests: true)
+    @look  = BBS::Auth::Profile::Look.new(note: 'One account for every board.')
+  end
+
+  # A key alone is pressed as it is; a word in brackets is typed and RETURN pressed.
+  def keys(*presses) = presses.flat_map { |press| press.is_a?(Array) ? [*press.first.chars, :enter] : [press] }
+
+  def profile(*presses, petscii: false, identity: nil)
+    session = BBS::Test::Session.new(keys: keys(*presses), petscii: petscii, identity: identity)
+    capture_io { BBS::Auth::Profile.new(session, @setup, @look).run }
+    session
+  end
+
+  def test_a_guest_makes_an_account
+    session = profile('n', ['Ada'], ['secret1'], ['secret1'], ' ', 'b')
+    assert_equal ['Ada', %w[member]], [session.identity.name, session.identity.roles]
+    text = session.output
+    assert_includes text, 'PROFILE'
+    assert_includes text, 'One account for every board.'
+    assert_includes text, 'Your account is ready'
+    assert_includes text, 'Logged in as Ada'
+  end
+
+  def test_log_in_and_out_on_a_c64
+    @directory.register('Ada', 'secret1')
+    session = profile('l', ['ada'], ['secret1'], ' ', 'l', ' ', 'b', petscii: true)
+    assert session.identity.guest?
+    assert_includes session.output, 'Welcome, Ada.'
+    assert_includes session.output, 'You are logged out.'
+    assert_includes session.output, "\r\r"
+    assert_includes session.raw, BBS::Petscii::LOWERCASE.b
+  end
+
+  def test_the_menu_follows_who_is_on_the_line
+    ada = @directory.register('Ada', 'secret1')
+    signed = profile('b', identity: ada).output
+    assert_includes signed, 'Change password'
+    refute_includes signed, 'New account'
+    assert_includes profile('b').output, 'New account'
+  end
+
+  def test_the_drawing_is_in_the_middle
+    Dir.mktmpdir do |dir|
+      art = "size: [4, 1]\ncharset: cp437\npalette:\n  w: white\nchars: |2\n  XXXX\ncolors: |2\n  wwww\n"
+      File.write(File.join(dir, 'mini.yml'), art)
+      @look = BBS::Auth::Profile::Look.new(modern: BBS::Art.load(File.join(dir, 'mini.yml')))
+      assert_match(/^ {38}\e\[[0-9;]*mXXXX/, profile('b').output)
+    end
+  end
+
+  def test_a_board_without_a_login_says_so
+    session = BBS::Test::Session.new(keys: [' '])
+    BBS::Auth::Profile.new(session, nil, @look).run
+    assert_includes session.output, 'Nobody logs in on this board.'
+  end
+end

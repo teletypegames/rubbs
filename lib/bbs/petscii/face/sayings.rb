@@ -61,6 +61,10 @@ module BBS
         # The key the caller is known by for rate limits.
         def caller_key = @session.caller_key
 
+        # The caller's profile (BBS::Auth::Profile): log in, a new account,
+        # the password, log out, until they go back. Returns +nil+.
+        def profile = Auth::Profile.run(@session)
+
         # Logs the caller in with the board's BBS::Auth::Setup: a name and its
         # password as prompts (BBS::Auth::Login), the outcome as an alert or
         # a notice. Returns the BBS::Auth::Identity, or +nil+.

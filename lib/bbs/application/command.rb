@@ -51,8 +51,8 @@ module BBS
       KEY_WIDTH = 13
 
       # The built-in commands: +:menu+ (F10, only with a menubar),
-      # +:log_off+ (Alt-X), and +:log_in+ and +:log_out+ (BBS::Auth; greyed
-      # out on a board without a login), by name.
+      # +:log_off+ (Alt-X), and +:profile+, +:log_in+ and +:log_out+
+      # (BBS::Auth; greyed out on a board without a login), by name.
       def self.builtin(with_menubar: true)
         bye = new(
           name:   :log_off,
@@ -68,9 +68,17 @@ module BBS
         commands.to_h { |c| [c.name, c] }
       end
 
-      # The +:log_in+ and +:log_out+ commands, each available when it fits.
+      # The +:profile+, +:log_in+ and +:log_out+ commands, each available
+      # when it fits.
       def self.auth
         [
+          new(
+            name:      :profile,
+            label:     'Profile…',
+            about:     'Your account: log in, a new account, the password',
+            action:    proc { profile },
+            available: proc { BBS.config.auth }
+          ),
           new(
             name:      :log_in,
             label:     'Log in…',

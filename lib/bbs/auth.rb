@@ -11,6 +11,7 @@ require_relative 'auth/api'
 require_relative 'auth/remote'
 require_relative 'auth/login'
 require_relative 'auth/conveniences'
+require_relative 'auth/profile'
 
 module BBS
   # Who is on the line, the same on every board of a network: accounts with

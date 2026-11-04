@@ -138,6 +138,13 @@ module BBS
         )
       end
 
+      # The caller's profile (BBS::Auth::Profile) on the bare line, then the
+      # whole screen again. Returns +nil+.
+      def profile
+        with_line { Auth::Profile.run(@session) }
+        nil
+      end
+
       # Logs the caller out (BBS::Auth::Conveniences#log_out) and says so.
       def log_out_now
         log_out
