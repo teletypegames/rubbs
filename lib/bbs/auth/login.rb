@@ -46,14 +46,20 @@ module BBS
 
       # The login at the start of a call (Setup#at_call?): a name, then for an
       # account its password; with +guests+ an empty name or one without an
-      # account comes in as a guest (named, if a name was given). Returns
-      # +:ok+ (signed in, or a guest let in) or +:halt+ (the call ends).
+      # account comes in as a guest (named, if a name was given). When the
+      # directory cannot say whether the name has an account (a Remote whose
+      # home is away), the caller is told and may come in only as a guest
+      # without that name. Returns +:ok+ (signed in, or a guest let in) or
+      # +:halt+ (the call ends).
       def at_call
         return :ok if @session.identity.signed_in?
 
         name = @ask.call(@setup.guests ? 'name (Return: guest)' : 'name').to_s.strip
         return guest(nil) if name.empty?
-        return guest(name) unless @setup.directory.known?(name)
+
+        state = @setup.directory.account_state(name)
+        return unavailable if state == :unavailable
+        return guest(name) unless state == :known
 
         run(name) ? :ok : :halt
       end
@@ -63,6 +69,11 @@ module BBS
       def attempt(name)
         password = @ask.call('password', mask: '*') or return nil
         @setup.directory.log_in(name, password, caller_key: @session.caller_key)
+      end
+
+      def unavailable
+        @tell.call(WORDS[:unavailable])
+        guest(nil)
       end
 
       def guest(name)

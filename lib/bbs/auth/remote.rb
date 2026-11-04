@@ -23,8 +23,19 @@ module BBS
         @timeout = timeout
       end
 
-      # See BBS::Auth::Directory#known?. +false+ when the home is away.
-      def known?(name) = ask('known', name: name)['result'] == true
+      # See BBS::Auth::Directory#known?; +false+ when the home is away.
+      def known?(name) = account_state(name) == :known
+
+      # Whether +name+ has an account: +:known+, +:unknown+, or +:unavailable+
+      # when the home did not answer, so a board can tell "no such account"
+      # from "cannot say" and keep a name it cannot check from coming in as a
+      # guest.
+      def account_state(name)
+        answer = ask('known', name: name)
+        return :unavailable unless answer.key?('result')
+
+        answer['result'] == true ? :known : :unknown
+      end
 
       # See BBS::Auth::Directory#look_alike?.
       def look_alike?(name) = ask('look_alike', name: name)['result'] == true

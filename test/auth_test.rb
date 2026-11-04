@@ -137,7 +137,7 @@ class AuthRemoteTest < Minitest::Test
     assert_equal ['Ada', %w[member], :login], [ada.name, ada.roles, ada.source]
     capture_io { assert_equal :wrong, @remote.log_in('ada', 'nope', caller_key: 'line:1') }
     assert @remote.known?('ADA')
-    refute @remote.known?('bob')
+    assert_equal false, @remote.known?('bob')
     assert_equal 'Bob', @remote.register('Bob', 'secret2').name
   end
 
@@ -145,6 +145,7 @@ class AuthRemoteTest < Minitest::Test
     assert_equal({ error: 'signature' }, @api.answer('{"op":"known","name":"ada"}', 'forged'))
     BBS.config.auth_secrets = []
     capture_io { assert_equal :unavailable, @remote.log_in('ada', 'secret1', caller_key: 'line:1') }
+    capture_io { assert_equal :unavailable, @remote.account_state('ada') }
   end
 end
 
@@ -244,5 +245,17 @@ class AuthLineTest < Minitest::Test
     refute item.enabled?
     open = true
     assert item.enabled?
+  end
+
+  def test_a_name_that_cannot_be_checked_comes_in_only_as_a_nameless_guest
+    away = Object.new
+    def away.account_state(_) = :unavailable
+    setup = BBS::Auth::Setup.new(directory: away, login: :call, guests: true)
+    session = BBS::Test::Session.new
+    told = []
+    login = BBS::Auth::Login.new(setup, session, ask: ->(_, **) { 'Ada' }, tell: ->(t) { told << t })
+    assert_equal :ok, login.at_call
+    assert_nil session.identity.name
+    assert_equal [BBS::Auth::Login::WORDS[:unavailable]], told
   end
 end

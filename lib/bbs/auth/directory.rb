@@ -39,6 +39,10 @@ module BBS
       # Whether +name+ has an account.
       def known?(name) = !AccountModel.named(name).nil?
 
+      # Whether +name+ has an account: +:known+ or +:unknown+ (a Remote may
+      # also answer +:unavailable+: it cannot say).
+      def account_state(name) = known?(name) ? :known : :unknown
+
       # Whether +name+ looks like the name of another account.
       def look_alike?(name) = !AccountModel.look_alike(name).nil?
 
