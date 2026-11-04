@@ -214,7 +214,7 @@ return while the server runs.
 | `preset(preset)` | The board's `BBS::Preset` (below). Default `BBS::Preset::NONE`. |
 | `modern(face, goodbye: true)` / `modern { \|bbs\| … }` | The face of a modern terminal. |
 | `petscii(face, goodbye: true)` / `petscii { \|bbs\| … }` | The face of a Commodore 64. |
-| `goodbye(note, clear:, color:, bar:, art:)` / `goodbye { \|context\| … }` | The board's own line on the goodbye screen (its sources, its licence), or a block for a line of each call; the options of `BBS::Goodbye.show` (modern: `clear`; C64: the bar's `color` and text, `art` lines under it). `goodbye false` leaves the goodbye to the faces. |
+| `goodbye(note, clear:, color:, bar:, art:, greeting:)` / `goodbye { \|context, session\| … }` | The board's own line on the goodbye screen (its sources, its licence), or a block for a line of each call; the options of `BBS::Goodbye.show` (modern: `clear`; C64: the bar's `color` and text, `art` lines under it). `goodbye false` leaves the goodbye to the faces. |
 | `idle(seconds)` / `idle { \|bbs\| … }` | Seconds before a quiet caller is dropped (default 600); a block gets the domain object. |
 | `mouse(on)` | Whether the modern face uses the mouse (default `true`). |
 | `on_start { \|board\| … }` | Run once at boot with the domain object, after its `start`: an HTTP API beside the telnet port, say. |
@@ -354,6 +354,12 @@ thread:
 2. Performs Telnet negotiation (SGA, ECHO, NAWS — terminal size).
 3. Enables mouse reporting if `BBS.config.mouse` (and `mouse_on_connect`).
 4. Runs `FlowRunner.new(session, session_id, BBS.config.flow).run`.
+
+### The length of a call: `BBS.duration`
+
+Every call's context starts with `:started_at`, the time it came in;
+`BBS.duration(context[:started_at])` says how long it has lasted, the way a
+caller reads it: `45s`, `12m`, `2h 5m` (a number of seconds works too).
 
 ### Logging and background work: `BBS.log`, `BBS.background`
 
@@ -720,9 +726,23 @@ subclass, so classes nested in it see them too.
 |---|---|
 | `title(text) { … }` | The home title bar: `text`, and the block's text (evaluated in the face) at its right end. |
 | `masthead { … }` | What the call starts with, on a cleared screen: `art(lines)` (lines as they are), `logo(word, colors:, glyphs: {}, indent: 2)` (`BBS::BlockFont.petscii`, one colour per row), `line(text, color: LG, indent: 1)` or `line { … }`, `rule` (a dim rule across), `gap(count = 1)` (empty lines). The first main menu goes under it. |
-| `main_menu(hint: MENU_HINT, back: nil, home: :title, above: nil) { … }` | The main menu, a `BBS::Selector`: `item(key, label, about = nil, color: nil, if: nil) { … }` (a label or an about may be a lambda, for one that changes; `if` hides the item when it answers false; the block runs in the face), `each_of(source) { \|object, i\| item(…) }` (items made each round from what the lambda `source` gives), `heading(label = '')`, `log_off(about, label: 'log off', key: 'q')`. `back` is the key of the item ← (RUN/STOP) takes; by default the log-off item. `home` is what each round draws above the menu: the home title bar, or `:masthead`; `above` a lambda whose lines come between that and the menu. An item without a block only returns its key from `main_menu_choice`. |
+| `main_menu(hint: MENU_HINT, back: nil, home: :title, above: nil, gap: :before) { … }` | The main menu, a `BBS::Selector`: `item(key, label, about = nil, color: nil, if: nil) { … }` (a label or an about may be a lambda, for one that changes; `if` hides the item when it answers false; the block runs in the face), `each_of(source) { \|object, i\| item(…) }` (items made each round from what the lambda `source` gives), `heading(label = '')`, `log_off(about, label: 'log off', key: 'q')`. `back` is the key of the item ← (RUN/STOP) takes; by default the log-off item. `home` is what each round draws above the menu: the home title bar, or `:masthead`; `above` a lambda whose lines come above the menu; `gap` where the empty line goes (`:before` those lines, `:after`, or `false`). An item without a block only returns its key from `main_menu_choice`. |
 
-The main menu's cursor starts on the item taken last. A `BBS::Abort` in an
+A sub-menu is declared like the main menu and run from an item:
+
+```ruby
+sub_menu(:jargon, title: 'THE JARGON FILE', right: '4.4.7') do
+  item('1', 'word of the day', 'the same for everyone today') { word_of_the_day }
+  back 'to the main menu'
+end
+
+main_menu do
+  item('j', 'the jargon room', 'hacker slang') { sub_menu(:jargon) }
+  log_off
+end
+```
+
+Each menu's cursor starts on the item taken last from it. A `BBS::Abort` in an
 item (from `fail_with` or `loading … failed:`) leaves the caller at the menu.
 
 ### Another shape: overriding `run`
@@ -757,7 +777,7 @@ The face answers the methods of its `BBS::Petscii::Screen` itself (see
 | `title(text, right)` / `title` | A reversed title bar on a cleared screen; without arguments the home one. |
 | `rule`, `rule_line` | A dim rule written, or as a line for a list of lines. |
 | `page(heading, lines, right:, wait:, room:, numbers:)` | Lines a screenful at a time under a title. |
-| `pick(heading, items, …) { … }`, `each_pick(heading, items, label:, **options) { \|item\| … }` | A numbered list; `each_pick` again and again until the caller goes back, the title put back after each. |
+| `pick(heading, items, …) { … }`, `each_pick(heading, items, label:, **options) { \|item\| … }` | A numbered list; `each_pick` again and again until the caller goes back, the title put back after each (`items` may be a lambda, read each round). |
 | `menu`, `actions`, `choose` | A cursor menu at the cursor, a row of keys, one key of a few. |
 | `ask`, `prompt(label, hint:, text:, max:, mask:)`, `edit` | A line field (`prompt` returns `nil` for an empty answer), the full-screen editor. |
 | `alert(text, color: RD)`, `notice(text)` | Red (or `color`) / green, then a pause. |

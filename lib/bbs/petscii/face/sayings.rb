@@ -9,6 +9,18 @@ module BBS
       module Sayings
         include Colors
 
+        # Runs the sub-menu +name+ (Face.sub_menu) until the caller takes its
+        # back item or presses ←. A BBS::Abort in an item leaves them at it.
+        def sub_menu(name)
+          menu = self.class.sub_menus.fetch(name)
+          loop do
+            break if menu.take(self) == :log_off
+          rescue Abort
+            next
+          end
+          nil
+        end
+
         # Says +text+ in red (or +color+), waits, and ends what the caller
         # started (raises BBS::Abort).
         def fail_with(text, color: RD)

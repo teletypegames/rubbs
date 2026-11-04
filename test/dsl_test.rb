@@ -320,3 +320,48 @@ class GapsTest < Minitest::Test
     assert_kind_of BBS::Flow::Steps::Goodbye, flow.steps.last
   end
 end
+
+class LeftoversTest < Minitest::Test
+  class Cave < BBS::Petscii::Face
+    title 'CAVE'
+    masthead { line 'MASTHEAD' }
+
+    main_menu(above: -> { 'COUNT' }) do
+      item('j', 'jargon', 'the room') { sub_menu(:jargon) }
+      log_off
+    end
+
+    sub_menu(:jargon, title: 'THE JARGON FILE', right: -> { '4.4.7' }) do
+      item('1', 'word of the day') { context[:took] << :word }
+      back 'to the main menu'
+    end
+  end
+
+  def test_a_sub_menu_runs_under_its_title_until_back
+    session = BBS::Test::Session.new(keys: %w[j 1 q q])
+    face = Cave.new(session, { took: [] })
+    face.run
+    assert_equal [:word], face.context[:took]
+    assert_includes session.output, 'THE JARGON FILE'
+    assert_includes session.output, '4.4.7'
+    assert_match(/MASTHEAD\e\[0;37m\r\n\r\nCOUNT/, session.output)
+  end
+
+  def test_each_pick_reads_a_callable_list_each_round
+    session = BBS::Test::Session.new(keys: [:enter, :enter, 'q'])
+    screen = BBS::Petscii::Screen.new(session)
+    wall = %w[first]
+    seen = []
+    screen.each_pick('WALL', -> { wall.dup }) { |w| seen << w; wall.unshift('newer') }
+    assert_equal %w[first newer], seen
+  end
+
+  def test_durations_and_greetings
+    assert_equal '45s', BBS.duration(45)
+    assert_equal '12m', BBS.duration((12 * 60) + 5)
+    assert_equal '2h 5m', BBS.duration((2 * 3600) + (5 * 60))
+    assert_match(/\A\d+s\z/, BBS.duration(Time.now - 3))
+    assert_includes BBS::Goodbye.modern_text(title: 'TTG Blog BBS', greeting: 'Thanks for reading'),
+                    'Thanks for reading TTG Blog BBS.'
+  end
+end

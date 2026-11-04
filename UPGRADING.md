@@ -1,3 +1,18 @@
+# rubbs 2.1
+
+2.1 adds to the DSL; nothing of 2.0 changes, except where the empty line
+above a main menu goes when the menu has `above:` lines (now before them,
+as boards had it on 1.x; `gap: :after` gives the 2.0 order).
+
+- `main_menu(gap: :before | :after | false)`: where the empty line above the menu goes.
+- `sub_menu(:name, title:, right:) { item …; back 'to the main menu' }` on a face, run with
+  `sub_menu(:name)`; each menu keeps its own cursor (`face.cursors`).
+- `each_pick(heading, -> { wall.all }, …)`: a callable list is read again each round.
+- `goodbye(greeting: 'Thanks for reading')` (both faces), and a goodbye block gets the
+  session too: `goodbye { |context, session| … }`.
+- The call's context starts with `:started_at`; `BBS.duration(context[:started_at])` is
+  `45s`, `12m` or `2h 5m`.
+
 # Upgrading to rubbs 2.0
 
 2.0 makes rubbs a DSL: a board's code says what the board *is* (its name,

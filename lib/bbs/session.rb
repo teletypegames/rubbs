@@ -56,14 +56,15 @@ module BBS
 
     # Negotiates the telnet options, turns on mouse reporting when
     # BBS.config.mouse and BBS.config.mouse_on_connect are both set, and runs
-    # BBS.config.flow for the caller in a BBS::FlowRunner. Turns the mouse
+    # BBS.config.flow for the caller in a BBS::FlowRunner, whose context
+    # starts with +:started_at+ (when the call came in). Turns the mouse
     # off and closes the socket when the flow ends or raises. Raises
     # RuntimeError when BBS.config.flow is not set.
     def run
       negotiate
       enable_mouse if BBS.config.mouse && BBS.config.mouse_on_connect
       flow = BBS.config.flow or raise 'BBS.config.flow is not set'
-      FlowRunner.new(self, @session_id, flow).run
+      FlowRunner.new(self, @session_id, flow, context: { started_at: Time.now }).run
     ensure
       disable_mouse rescue nil
       @client.close rescue nil

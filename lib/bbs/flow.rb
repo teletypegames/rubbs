@@ -130,7 +130,8 @@ module BBS
     def face(face) = add(Steps::Face.new(face))
 
     # The goodbye screen of the caller's face (BBS::Goodbye.show) with the
-    # board's +note+ (a String, or a block given the context), and the
+    # board's +note+ (a String, or a block given the context and the
+    # session, which knows its face: <tt>session.petscii?</tt>), and the
     # +options+ of BBS::Goodbye.show; then the end of the flow.
     def goodbye(note = nil, **options, &dynamic) = add(Steps::Goodbye.new(dynamic || note, options))
 

@@ -122,11 +122,11 @@ module BBS
       end
 
       # The goodbye screen (BBS::Goodbye.show): its +note+ (a String or a
-      # callable given the context) and its +options+.
+      # callable given the context and the session) and its +options+.
       Goodbye = Struct.new(:note, :options) do
         # Shows it. Returns +:halt+: nothing comes after a goodbye.
         def run(runner)
-          text = note.respond_to?(:call) ? note.call(runner.context) : note
+          text = note.respond_to?(:call) ? note.call(runner.context, runner.session) : note
           BBS::Goodbye.show(runner.session, note: text, **(options || {}))
           :halt
         end

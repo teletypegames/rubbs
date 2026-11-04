@@ -84,11 +84,30 @@ module BBS
         # +each_of+, +log_off+. +hint+ is its hint row (default MENU_HINT),
         # +back+ the key of the item ← (RUN/STOP) takes (default the log-off
         # item), +home+ what each round draws above it (+:title+ or
-        # +:masthead+), +above+ a block of lines between that and the menu.
-        def main_menu(hint: MENU_HINT, back: nil, home: :title, above: nil, &block)
+        # +:masthead+), +above+ a block of lines above the menu, +gap+ where
+        # the empty line goes (+:before+ those lines, +:after+, or +false+).
+        def main_menu(hint: MENU_HINT, back: nil, home: :title, above: nil, gap: :before, &block)
           return @main_menu || superclass_value(:main_menu) unless block
 
-          @main_menu = MainMenu.new(hint, back, home: home, above: above, &block)
+          @main_menu = MainMenu.new(hint, back, home: home, above: above, gap: gap, &block)
+        end
+
+        # Declares the sub-menu +name+, a MainMenu under a title of its own
+        # (+title+, and +right+: a String or a block evaluated in the face),
+        # its items declared like the main menu's, +back+ (the item) leaving
+        # it. Face#sub_menu runs it. +above+ and +gap+ are those of #main_menu.
+        #
+        #   sub_menu(:jargon, title: 'THE JARGON FILE', right: '4.4.7') do
+        #     item('1', 'word of the day', 'the same for everyone today') { word_of_the_day }
+        #     back 'to the main menu'
+        #   end
+        def sub_menu(name, title:, right: '', hint: MENU_HINT, above: nil, gap: :before, &)
+          sub_menus[name] = MainMenu.new(hint, nil, home: [title, right], above: above, gap: gap, &)
+        end
+
+        # The declared sub-menus by name, the superclass's too.
+        def sub_menus
+          @sub_menus ||= superclass.respond_to?(:sub_menus) ? superclass.sub_menus.dup : {}
         end
 
         private
@@ -104,8 +123,12 @@ module BBS
       # board's domain object.
       attr_reader :screen, :session, :context, :board
 
-      # The key of the main menu's item taken last, where its cursor starts.
-      attr_accessor :menu_cursor
+      # The key of the item taken last from each menu (MainMenu => key),
+      # where the menu's cursor starts.
+      def cursors = @cursors ||= {}
+
+      # The key of the main menu's item taken last.
+      def menu_cursor = cursors[self.class.main_menu]
 
       # Whether the masthead is on the screen and the main menu goes under it
       # (set by #show_masthead, cleared by the menu).

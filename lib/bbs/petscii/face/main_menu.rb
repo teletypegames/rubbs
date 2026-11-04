@@ -13,15 +13,21 @@ module BBS
         Entry = Struct.new(:key, :label, :about, :action, :heading, :color, :shown, keyword_init: true)
 
         # Evaluates the declarations of the block; +hint+ is the hint row,
-        # +back+ the key ← takes (+nil+: log off), +home+ what is drawn above
-        # the menu each round (+:title+, the home title bar, or +:masthead+),
-        # +above+ a block whose lines (evaluated in the face) come between
-        # that and the menu.
-        def initialize(hint, back = nil, home: :title, above: nil, &)
+        # +back+ the key ← takes (+nil+: the log-off or back item).
+        #
+        # [home]  what is drawn above the menu each round: +:title+ (the
+        #         face's home title bar), +:masthead+, or <tt>[text, right]</tt>
+        #         (a title of its own; +right+ may be a block), as a sub-menu has
+        # [above] a block whose lines (evaluated in the face) come above the
+        #         menu
+        # [gap]   where the empty line goes: +:before+ the +above+ lines (the
+        #         default), +:after+ them, or +false+ for none
+        def initialize(hint, back = nil, home: :title, above: nil, gap: :before, &)
           @hint    = hint
           @back    = back || :log_off
           @home    = home
           @above   = above
+          @gap     = gap
           @entries = []
           instance_eval(&)
         end
@@ -58,31 +64,46 @@ module BBS
           @entries << Entry.new(key: key, label: label, about: about, action: :log_off)
         end
 
+        # The item that leaves a sub-menu (key +q+).
+        def back(about = nil, label: 'back', key: 'q')
+          @entries << Entry.new(key: key, label: label, about: about, action: :log_off)
+        end
+
         # Shows the menu on +face+ and runs the taken item. Returns
-        # +:log_off+ for the log-off item and ← (RUN/STOP), the item's key
-        # for an item without a block, else +nil+.
+        # +:log_off+ for the log-off (or back) item and ← (RUN/STOP), the
+        # item's key for an item without a block, else +nil+. The cursor
+        # starts on the item taken last from this menu.
         def take(face)
           draw_home(face)
           entries = expand(face)
-          picked  = face.menu(items(face, entries), index: index_of(entries, face.menu_cursor), back: @back,
+          picked  = face.menu(items(face, entries), index: index_of(entries, face.cursors[self]), back: @back,
                                                     hint: @hint)
-          face.menu_cursor = picked
+          face.cursors[self] = picked
           run(face, entries, picked)
         end
 
         private
 
         def draw_home(face)
+          draw_top(face)
+          above = Array(@above && face.instance_exec(&@above))
+          face.puts if @gap == :before
+          above.each { |line| face.puts(line) }
+          face.puts if @gap == :after
+        end
+
+        def draw_top(face)
           if face.masthead_up?
             face.masthead_up = false
           elsif @home == :masthead
             face.show_masthead
             face.masthead_up = false
+          elsif @home.is_a?(Array)
+            text, right = @home
+            face.title(text, right.respond_to?(:call) ? face.instance_exec(&right).to_s : right.to_s)
           else
             face.home
           end
-          Array(@above && face.instance_exec(&@above)).each { |line| face.puts(line) }
-          face.puts
         end
 
         def expand(face)

@@ -47,7 +47,8 @@ module BBS
 
         # Lets the caller #pick from +items+ under +heading+ again and again,
         # running the block with each one picked, until they go back. A
-        # BBS::Abort in the block leaves the caller at the list. +label+
+        # BBS::Abort in the block leaves the caller at the list. +items+ may
+        # be a callable, read again each round (a list that changes). +label+
         # names an item (a Symbol or a callable); +options+ are those of
         # #pick. Returns +nil+.
         #
@@ -55,7 +56,7 @@ module BBS
         def each_pick(heading, items, label: :to_s, **options)
           label = label.to_proc
           loop do
-            picked = pick(heading, items, **options, &label)
+            picked = pick(heading, items.respond_to?(:call) ? items.call : items, **options, &label)
             break if picked.nil?
 
             begin

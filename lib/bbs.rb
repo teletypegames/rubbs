@@ -122,6 +122,18 @@ module BBS
     warn "#{config.log_tag}: #{tag}: #{message}"
   end
 
+  # +seconds+ as a short duration for a caller: <tt>45s</tt>, <tt>12m</tt>,
+  # <tt>2h 5m</tt>. A Time is taken as the start of what lasted until now
+  # (<tt>BBS.duration(context[:started_at])</tt>).
+  def self.duration(seconds)
+    seconds = Time.now - seconds if seconds.is_a?(Time)
+    seconds = seconds.to_i
+    return "#{seconds}s" if seconds < 60
+    return "#{seconds / 60}m" if seconds < 3600
+
+    "#{seconds / 3600}h #{(seconds % 3600) / 60}m"
+  end
+
   # Runs the block in a BBS::Background thread named +name+ and returns the
   # Thread. An error is logged with BBS.log and the block run again after
   # +retry_after+ seconds, doubled after each failure up to +max_retry+.

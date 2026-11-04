@@ -12,6 +12,8 @@ module BBS
   #
   #   BBS::Goodbye.show(session, note: "The stories are their publishers'.")
   module Goodbye
+    # What the goodbye says before the board's name.
+    GREETING = 'Thanks for calling'
     # The most lines the QR code may take; an address that needs more
     # goes without one.
     QR_ROWS = 15
@@ -20,14 +22,14 @@ module BBS
     PAUSES = [1.2, 0.6, 0.4].freeze
 
     # The text of ::modern: the screen cleared (unless +clear+ is false),
-    # "Thanks for calling +title+." in white, then dim +note+ (when given)
+    # "+greeting+ +title+." in white (default "Thanks for calling"), then dim +note+ (when given)
     # and "More of us: +url+", the QR code of +qr+ (none for +nil+), then
     # NO CARRIER in red.
     def self.modern_text(title: BBS.config.title, note: nil, url: BBS.config.preset.url, clear: true,
-                         qr: BBS.config.preset.qr)
+                         qr: BBS.config.preset.qr, greeting: GREETING)
       more = more_text(note, url)
       a = Ansi
-      "#{a::RESET}#{a::CLEAR if clear}#{a::CRLF}  #{a::WHITE}Thanks for calling #{title}.#{a::RESET}#{a::CRLF}  " \
+      "#{a::RESET}#{a::CLEAR if clear}#{a::CRLF}  #{a::WHITE}#{greeting} #{title}.#{a::RESET}#{a::CRLF}  " \
         "#{a::DIM_GREY}#{more}#{a::RESET}#{a::CRLF * 2}#{modern_code(qr)}  " \
         "#{a::BRIGHT_RED}NO CARRIER#{a::RESET}#{a::CRLF * 2}"
     end
@@ -41,8 +43,8 @@ module BBS
     #
     # Returns +nil+.
     def self.modern(out, title: BBS.config.title, note: nil, url: BBS.config.preset.url, clear: true,
-                    qr: BBS.config.preset.qr)
-      out.write(modern_text(title: title, note: note, url: url, clear: clear, qr: qr))
+                    qr: BBS.config.preset.qr, greeting: GREETING)
+      out.write(modern_text(title: title, note: note, url: url, clear: clear, qr: qr, greeting: greeting))
       nil
     end
 
@@ -69,12 +71,12 @@ module BBS
     # Returns +nil+. Raises what the session raises when the caller has
     # hung up (IOError, Errno::EPIPE …).
     def self.petscii(screen, title: BBS.config.title, bar: nil, note: nil, url: BBS.config.preset.url,
-                     color: Petscii::Colors::CY, width: nil, qr: BBS.config.preset.qr, art: nil)
+                     color: Petscii::Colors::CY, width: nil, qr: BBS.config.preset.qr, art: nil, greeting: GREETING)
       screen = Petscii::Screen.new(screen) unless screen.respond_to?(:say)
       width ||= bar_width(screen)
       screen.cls
       screen.puts
-      [bar_line(bar || "thanks for calling #{title.to_s.downcase}", color, width), '', *Array(art)]
+      [bar_line(bar || "#{greeting} #{title}".downcase, color, width), '', *Array(art)]
         .each { |line| screen.puts(line) }
       block_given? ? yield(screen) : screen.say(more_text(note, url), color: Petscii::Colors::GR)
       screen.puts
@@ -88,15 +90,15 @@ module BBS
     # board's own line (its sources, its licence); +clear+ (modern: whether
     # the screen is cleared first), +color+, +bar+ and +art+ (C64: the
     # bar's colour and text, lines under it) are those of ::modern and
-    # ::petscii. A dropped line is not an error here: the caller has gone
+    # ::petscii, +greeting+ what both say before the board's name. A dropped line is not an error here: the caller has gone
     # already.
     #
     # Returns +nil+.
-    def self.show(session, note: nil, clear: true, color: Petscii::Colors::CY, bar: nil, art: nil)
+    def self.show(session, note: nil, clear: true, color: Petscii::Colors::CY, bar: nil, art: nil, greeting: GREETING)
       if session.respond_to?(:petscii?) && session.petscii?
-        petscii(session, note: note, color: color, bar: bar, art: art)
+        petscii(session, note: note, color: color, bar: bar, art: art, greeting: greeting)
       else
-        modern(session, note: note, clear: clear)
+        modern(session, note: note, clear: clear, greeting: greeting)
       end
     rescue *LINE_DROPPED
       nil
