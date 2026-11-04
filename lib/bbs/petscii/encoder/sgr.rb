@@ -10,8 +10,13 @@ module BBS
         # dim (2), reverse (7), normal intensity (22), reverse off (27) and
         # the default colour (39).
         SGR_PENS = {
-          0 => { bold: false, dim: false, fg: nil, rvs: false }, 1 => { bold: true }, 2 => { dim: true },
-          7 => { rvs: true }, 22 => { bold: false, dim: false }, 27 => { rvs: false }, 39 => { fg: nil }
+          0  => { bold: false, dim: false, fg: nil, rvs: false },
+          1  => { bold: true },
+          2  => { dim: true },
+          7  => { rvs: true },
+          22 => { bold: false, dim: false },
+          27 => { rvs: false },
+          39 => { fg: nil }
         }.freeze
         # SGR parameters of the normal foreground colours.
         SGR_FG = 30..37

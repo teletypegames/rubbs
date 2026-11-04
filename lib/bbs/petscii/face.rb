@@ -115,9 +115,37 @@ module BBS
         def superclass_value(name) = superclass.respond_to?(name) ? superclass.public_send(name) : nil
       end
 
-      def_delegators :@screen, :puts, :say, :write, :cls, :bell, :title_bar, :rule, :rule_line, :wrap, :fit,
-                     :plain, :key, :page, :pick, :ask, :edit, :pause, :choose, :actions, :menu, :within, :alert,
-                     :notice, :prompt, :confirm?, :number, :each_pick, :markdown, :qr, :page_size
+      def_delegators :@screen,
+                     :puts,
+                     :say,
+                     :write,
+                     :cls,
+                     :bell,
+                     :title_bar,
+                     :rule,
+                     :rule_line,
+                     :wrap,
+                     :fit,
+                     :plain,
+                     :key,
+                     :page,
+                     :pick,
+                     :ask,
+                     :edit,
+                     :pause,
+                     :choose,
+                     :actions,
+                     :menu,
+                     :within,
+                     :alert,
+                     :notice,
+                     :prompt,
+                     :confirm?,
+                     :number,
+                     :each_pick,
+                     :markdown,
+                     :qr,
+                     :page_size
 
       # The BBS::Petscii::Screen, the session, the call's context and the
       # board's domain object.

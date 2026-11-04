@@ -36,8 +36,15 @@ module BBS
     # than an entry) and +hint+ (a line about the entry that the
     # Application shows on the statusbar while the entry is highlighted, or
     # +nil+).
-    MenuItem = Struct.new(:label, :shortcut, :enabled, :on_select, :separator, :hint,
-                          keyword_init: true) do
+    MenuItem = Struct.new(
+      :label,
+      :shortcut,
+      :enabled,
+      :on_select,
+      :separator,
+      :hint,
+      keyword_init: true
+    ) do
       # The lower-case hotkey letter, or +nil+ (always for a separator).
       def hotkey = separator ? nil : Hotkey.letter(label)
 

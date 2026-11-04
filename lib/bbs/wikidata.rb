@@ -42,11 +42,19 @@ module BBS
     # Raises Error, or BBS::HTTP::Error when the service does not answer.
     def select(query)
       sleep @pause
-      response = HTTP.post(@endpoint, body: URI.encode_www_form(query: query), user_agent: @user_agent,
-                                      headers: { 'Accept' => 'application/sparql-results+json',
-                                                 'Content-Type' => 'application/x-www-form-urlencoded' },
-                                      open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT,
-                                      deadline: DEADLINE, max_bytes: MAX_BYTES)
+      response = HTTP.post(
+        @endpoint,
+        body:         URI.encode_www_form(query: query),
+        user_agent:   @user_agent,
+        headers:      {
+          'Accept'       => 'application/sparql-results+json',
+          'Content-Type' => 'application/x-www-form-urlencoded'
+        },
+        open_timeout: OPEN_TIMEOUT,
+        read_timeout: READ_TIMEOUT,
+        deadline:     DEADLINE,
+        max_bytes:    MAX_BYTES
+      )
       raise Error, "Wikidata answered #{response.status}" unless response.ok?
 
       JSON.parse(Text.utf8(response.body)).dig('results', 'bindings') || []

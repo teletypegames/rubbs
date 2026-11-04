@@ -51,8 +51,17 @@ module BBS
       # and rows below the button row.
       DEFAULT_PADDING = { sides: 2, top: 1, bottom: 2 }.freeze
       # The options of ::new and their defaults.
-      OPTIONS = { on_submit: nil, hint: nil, width: 60, height: nil, submit_label: '&Save',
-                  cancel_label: '&Cancel', padding: nil, on_cancel: nil, maximizable: false }.freeze
+      OPTIONS = {
+        on_submit:    nil,
+        hint:         nil,
+        width:        60,
+        height:       nil,
+        submit_label: '&Save',
+        cancel_label: '&Cancel',
+        padding:      nil,
+        on_cancel:    nil,
+        maximizable:  false
+      }.freeze
       # The rows that are not field rows besides the padding, the hint and
       # the gaps between fields: the status line, its gap and the button row.
       CHROME_ROWS = 4
@@ -166,8 +175,12 @@ module BBS
 
       def buttons
         on_submit, on_cancel = @options.values_at(:on_submit, :on_cancel)
-        [{ key: :submit, label: @options[:submit_label], primary: true,
-           on_click: ->(_w) { on_submit ? on_submit.call(values, self) : :close } },
+        [{
+          key:      :submit,
+          label:    @options[:submit_label],
+          primary:  true,
+          on_click: ->(_w) { on_submit ? on_submit.call(values, self) : :close }
+        },
          { key: :cancel, label: @options[:cancel_label], cancel: true, on_click: ->(_w) { on_cancel&.call(self) } }]
       end
 

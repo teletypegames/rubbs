@@ -48,13 +48,28 @@ module BBS
     # The months of the snow.
     SNOW = [12, 1, 2].freeze
     # The seasons by month (meteorological: winter is December to February).
-    SEASONS = { 12 => :winter, 1 => :winter, 2 => :winter, 3 => :spring, 4 => :spring, 5 => :spring,
-                6 => :summer, 7 => :summer, 8 => :summer, 9 => :autumn, 10 => :autumn, 11 => :autumn }.freeze
+    SEASONS = {
+      12 => :winter,
+      1  => :winter,
+      2  => :winter,
+      3  => :spring,
+      4  => :spring,
+      5  => :spring,
+      6  => :summer,
+      7  => :summer,
+      8  => :summer,
+      9  => :autumn,
+      10 => :autumn,
+      11 => :autumn
+    }.freeze
     # The time zones known without the +tzinfo+ gem: name => [standard
     # offset in seconds, whether it keeps EU summer time].
     ZONES = {
-      'UTC' => [0, false], 'Etc/UTC' => [0, false],
-      'Europe/London' => [0, true], 'Europe/Dublin' => [0, true], 'Europe/Lisbon' => [0, true],
+      'UTC'           => [0, false],
+      'Etc/UTC'       => [0, false],
+      'Europe/London' => [0, true],
+      'Europe/Dublin' => [0, true],
+      'Europe/Lisbon' => [0, true],
       **%w[Amsterdam Belgrade Berlin Bratislava Brussels Budapest Copenhagen Ljubljana Madrid Oslo Paris
            Prague Rome Stockholm Vienna Warsaw Zagreb Zurich].to_h { |c| ["Europe/#{c}", [3600, true]] },
       **%w[Athens Bucharest Helsinki Kyiv Riga Sofia Tallinn Vilnius].to_h { |c| ["Europe/#{c}", [7200, true]] }
@@ -146,8 +161,12 @@ module BBS
 
     def find_layers(jam)
       date = @time.to_date
-      { snow: SNOW.include?(date.month), pumpkin: pumpkin?(date), fireworks: fireworks?(date),
-        bunting: jam_day?(jam, date) }.select { |_, on| on }.keys
+      {
+        snow:      SNOW.include?(date.month),
+        pumpkin:   pumpkin?(date),
+        fireworks: fireworks?(date),
+        bunting:   jam_day?(jam, date)
+      }.select { |_, on| on }.keys
     end
 
     def pumpkin?(date) = date.month == PUMPKIN[0] && PUMPKIN[1].cover?(date.day)

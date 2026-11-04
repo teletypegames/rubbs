@@ -36,6 +36,7 @@ module BBS
       def line_key(byte)
         return Petscii.key(byte) if @petscii
         return if line_end_pair?(byte)
+
         key = Keys::CONTROL_KEYS[byte]
         return key if %i[enter backspace].include?(key)
 

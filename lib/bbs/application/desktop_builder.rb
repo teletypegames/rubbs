@@ -50,8 +50,12 @@ module BBS
       # the whole desktop with <tt>fill: true</tt>. A widget with a +tick+
       # method is ticked once a second.
       def widget(height: 1, **place, &make)
-        @items << Widgets::Desktop::Item.new(kind: :widget, content: make, style: nil,
-                                             place: place.merge(height: height))
+        @items << Widgets::Desktop::Item.new(
+          kind:    :widget,
+          content: make,
+          style:   nil,
+          place:   place.merge(height: height)
+        )
       end
 
       # A button that runs the block in the application.

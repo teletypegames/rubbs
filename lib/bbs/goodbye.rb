@@ -25,8 +25,14 @@ module BBS
     # "+greeting+ +title+." in white (default "Thanks for calling"), then dim +note+ (when given)
     # and "More of us: +url+", the QR code of +qr+ (none for +nil+), then
     # NO CARRIER in red.
-    def self.modern_text(title: BBS.config.title, note: nil, url: BBS.config.preset.url, clear: true,
-                         qr: BBS.config.preset.qr, greeting: GREETING)
+    def self.modern_text(
+      title: BBS.config.title,
+      note: nil,
+      url: BBS.config.preset.url,
+      clear: true,
+      qr: BBS.config.preset.qr,
+      greeting: GREETING
+    )
       more = more_text(note, url)
       a = Ansi
       "#{a::RESET}#{a::CLEAR if clear}#{a::CRLF}  #{a::WHITE}#{greeting} #{title}.#{a::RESET}#{a::CRLF}  " \
@@ -42,8 +48,15 @@ module BBS
     #                       note: 'Games from wikidata.org (CC0).')
     #
     # Returns +nil+.
-    def self.modern(out, title: BBS.config.title, note: nil, url: BBS.config.preset.url, clear: true,
-                    qr: BBS.config.preset.qr, greeting: GREETING)
+    def self.modern(
+      out,
+      title: BBS.config.title,
+      note: nil,
+      url: BBS.config.preset.url,
+      clear: true,
+      qr: BBS.config.preset.qr,
+      greeting: GREETING
+    )
       out.write(modern_text(title: title, note: note, url: url, clear: clear, qr: qr, greeting: greeting))
       nil
     end
@@ -70,8 +83,18 @@ module BBS
     #
     # Returns +nil+. Raises what the session raises when the caller has
     # hung up (IOError, Errno::EPIPE …).
-    def self.petscii(screen, title: BBS.config.title, bar: nil, note: nil, url: BBS.config.preset.url,
-                     color: Petscii::Colors::CY, width: nil, qr: BBS.config.preset.qr, art: nil, greeting: GREETING)
+    def self.petscii(
+      screen,
+      title: BBS.config.title,
+      bar: nil,
+      note: nil,
+      url: BBS.config.preset.url,
+      color: Petscii::Colors::CY,
+      width: nil,
+      qr: BBS.config.preset.qr,
+      art: nil,
+      greeting: GREETING
+    )
       screen = Petscii::Screen.new(screen) unless screen.respond_to?(:say)
       width ||= bar_width(screen)
       screen.cls

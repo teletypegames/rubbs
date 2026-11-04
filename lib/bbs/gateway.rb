@@ -96,8 +96,17 @@ module BBS
     #                   neighbour such as <tt>host.docker.internal</tt>
     # [forward]         send the other board who is calling (see above);
     #                   only for a board of one's own
-    def initialize(host:, port:, name: nil, terminal: 'XTERM-256COLOR', connect_timeout: CONNECT_TIMEOUT, idle: nil,
-                   translate: false, public_only: true, forward: false)
+    def initialize(
+      host:,
+      port:,
+      name: nil,
+      terminal: 'XTERM-256COLOR',
+      connect_timeout: CONNECT_TIMEOUT,
+      idle: nil,
+      translate: false,
+      public_only: true,
+      forward: false
+    )
       @host            = host
       @port            = port.to_i
       @name            = name || "#{host}:#{port}"

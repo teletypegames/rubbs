@@ -106,19 +106,43 @@ module BBS
 
       # The sixteen colours by name, as the C64 calls them.
       COLOR_NAMES = {
-        black: BLACK, white: WHITE, red: RED, cyan: CYAN, purple: PURPLE, green: GREEN, blue: BLUE,
-        yellow: YELLOW, orange: ORANGE, brown: BROWN, light_red: LIGHT_RED, dark_grey: DARK_GREY,
-        grey: GREY, light_green: LIGHT_GREEN, light_blue: LIGHT_BLUE, light_grey: LIGHT_GREY
+        black:       BLACK,
+        white:       WHITE,
+        red:         RED,
+        cyan:        CYAN,
+        purple:      PURPLE,
+        green:       GREEN,
+        blue:        BLUE,
+        yellow:      YELLOW,
+        orange:      ORANGE,
+        brown:       BROWN,
+        light_red:   LIGHT_RED,
+        dark_grey:   DARK_GREY,
+        grey:        GREY,
+        light_green: LIGHT_GREEN,
+        light_blue:  LIGHT_BLUE,
+        light_grey:  LIGHT_GREY
       }.freeze
 
       # The sixteen colours as [red, green, blue] (the palette of VICE and
       # the C64 wiki, the one the boards match accents against), by code.
       RGB = {
-        BLACK => [0, 0, 0], WHITE => [255, 255, 255], RED => [136, 0, 0], CYAN => [170, 255, 238],
-        PURPLE => [204, 68, 204], GREEN => [0, 204, 85], BLUE => [0, 0, 170], YELLOW => [238, 238, 119],
-        ORANGE => [221, 136, 85], BROWN => [102, 68, 0], LIGHT_RED => [255, 119, 119],
-        DARK_GREY => [51, 51, 51], GREY => [119, 119, 119], LIGHT_GREEN => [170, 255, 102],
-        LIGHT_BLUE => [0, 136, 255], LIGHT_GREY => [187, 187, 187]
+        BLACK       => [0, 0, 0],
+        WHITE       => [255, 255, 255],
+        RED         => [136, 0, 0],
+        CYAN        => [170, 255, 238],
+        PURPLE      => [204, 68, 204],
+        GREEN       => [0, 204, 85],
+        BLUE        => [0, 0, 170],
+        YELLOW      => [238, 238, 119],
+        ORANGE      => [221, 136, 85],
+        BROWN       => [102, 68, 0],
+        LIGHT_RED   => [255, 119, 119],
+        DARK_GREY   => [51, 51, 51],
+        GREY        => [119, 119, 119],
+        LIGHT_GREEN => [170, 255, 102],
+        LIGHT_BLUE  => [0, 136, 255],
+        LIGHT_GREY  => [187, 187, 187]
       }.freeze
 
       # The graphics of the uppercase set by the Unicode character they look
@@ -137,8 +161,7 @@ module BBS
       # look like: GLYPHS without LOWER_CHANGED (the lines, the cross, the
       # blocks, ▒ and the 0xa0-0xbf graphics stay), and the set's own
       # BBS::Petscii::LOWERCASE_GRAPHICS.
-      LOWER_GLYPHS = GLYPHS.reject { |_, code| LOWER_CHANGED.include?(code) }
-                           .merge(Petscii::LOWERCASE_GRAPHICS).freeze
+      LOWER_GLYPHS = GLYPHS.reject { |_, code| LOWER_CHANGED.include?(code) }.merge(Petscii::LOWERCASE_GRAPHICS).freeze
       # GLYPHS_REVERSED of the lower/upper set.
       LOWER_GLYPHS_REVERSED = GLYPHS_REVERSED.reject { |_, code| LOWER_CHANGED.include?(code) }.freeze
       # The two character sets a Canvas draws in: +:upper+

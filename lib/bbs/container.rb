@@ -68,9 +68,11 @@ module BBS
     # when the point is outside the bounds or the container is hidden.
     def hit_test(x, y)
       return nil unless bounds.contains?(x, y) && visible
+
       # iterate top-most last so we test in reverse
       @children.reverse.each do |child|
         next unless child.visible
+
         hit = child.hit_test(x, y)
         return hit if hit
       end

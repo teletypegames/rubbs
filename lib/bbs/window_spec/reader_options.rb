@@ -9,9 +9,13 @@ module BBS
       private
 
       def reader_options(context)
-        { lines: reader_lines(context), max_width: resolve(:max_width, context),
-          where: (->(view) { context.instance_exec(view, &@attrs[:where]).to_s } if @attrs[:where]),
-          actions: @actions.map { |a| reader_action(a, context) }, on_key: reader_keys(context) }
+        {
+          lines:     reader_lines(context),
+          max_width: resolve(:max_width, context),
+          where:     (->(view) { context.instance_exec(view, &@attrs[:where]).to_s } if @attrs[:where]),
+          actions:   @actions.map { |a| reader_action(a, context) },
+          on_key:    reader_keys(context)
+        }
       end
 
       def reader_keys(context)

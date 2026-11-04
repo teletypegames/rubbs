@@ -46,8 +46,12 @@ module BBS
         #
         # Returns the text when saved, +nil+ when the caller quit.
         def edit(text = '', title:, single_line: false, max: nil, autosave: nil, &on_autosave)
-          Editor.new(@session, text: text, title: title, single_line: single_line, max: max,
-                               cols: @cols, rows: @rows, autosave: autosave, &on_autosave).run
+          Editor.new(
+            @session,
+            text: text, title: title, single_line: single_line, max: max,
+                                           cols: @cols, rows: @rows, autosave: autosave,
+            &on_autosave
+          ).run
         end
 
         # Writes +text+ dim on a new line and waits for a key.
@@ -83,9 +87,15 @@ module BBS
             pause
             return nil
           end
-          Selector.list(@session, items, width: @cols - 1, height: page_size, hint: pick_hint(commands.merge(item_commands)),
-                                         exits: commands.keys.to_h { |k| [k, k] }.merge('q' => nil),
-                                         item_exits: item_commands.keys.to_h { |k| [k, k] }) do |item|
+          Selector.list(
+            @session,
+            items,
+            width:      @cols - 1,
+            height:     page_size,
+            hint:       pick_hint(commands.merge(item_commands)),
+            exits:      commands.keys.to_h { |k| [k, k] }.merge('q' => nil),
+            item_exits: item_commands.keys.to_h { |k| [k, k] }
+          ) do |item|
             plain(label.call(item))
           end
         end

@@ -36,9 +36,15 @@ module BBS
       # The built-in commands: +:menu+ (F10, only with a menubar) and
       # +:log_off+ (Alt-X), by name.
       def self.builtin(with_menubar: true)
-        bye  = new(name: :log_off, label: '&Log off', key: 'Alt-X', hint: 'Bye', about: 'Hang up',
-                   action: proc { log_off })
-        bar  = new(name: :menu, label: 'Menu', key: 'F10', hint: 'Menu', action: proc { menubar&.open(0) })
+        bye = new(
+          name:   :log_off,
+          label:  '&Log off',
+          key:    'Alt-X',
+          hint:   'Bye',
+          about:  'Hang up',
+          action: proc { log_off }
+        )
+        bar = new(name: :menu, label: 'Menu', key: 'F10', hint: 'Menu', action: proc { menubar&.open(0) })
         (with_menubar ? [bar, bye] : [bye]).to_h { |c| [c.name, c] }
       end
 

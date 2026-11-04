@@ -9,8 +9,13 @@ module BBS
 
       # The editing keys and the method each one calls.
       KEYS = {
-        left: :left, right: :right, home: :to_start, end: :to_end,
-        backspace: :backspace, delete: :delete, enter: :submit
+        left:      :left,
+        right:     :right,
+        home:      :to_start,
+        end:       :to_end,
+        backspace: :backspace,
+        delete:    :delete,
+        enter:     :submit
       }.freeze
 
       # The current text.
@@ -26,8 +31,15 @@ module BBS
 
       # Creates a text field holding a copy of +value+, with the cursor at
       # its end. +max_length+ defaults to 256.
-      def initialize(value: '', placeholder: '', max_length: 256,
-                     on_submit: nil, on_change: nil, password: false, **kw)
+      def initialize(
+        value: '',
+        placeholder: '',
+        max_length: 256,
+        on_submit: nil,
+        on_change: nil,
+        password: false,
+        **kw
+      )
         super(**kw)
         @placeholder = placeholder
         @max_length  = max_length

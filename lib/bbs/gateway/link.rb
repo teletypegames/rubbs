@@ -57,8 +57,13 @@ module BBS
       private
 
       def negotiation(terminal, petscii)
-        Negotiation.new(@session, terminal: terminal, petscii: petscii,
-                                  remote: ->(bytes) { send_remote(bytes) }, client: ->(bytes) { @client.write(bytes) })
+        Negotiation.new(
+          @session,
+          terminal: terminal,
+          petscii:  petscii,
+          remote:   ->(bytes) { send_remote(bytes) },
+          client:   ->(bytes) { @client.write(bytes) }
+        )
       end
 
       # The other board's bytes down to the caller, until it hangs up or

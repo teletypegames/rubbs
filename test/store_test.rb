@@ -70,8 +70,15 @@ class StoreTest < Minitest::Test
     store.upsert(session_id: 'a', name: 'Ada')
     s = store(%w[session_id timestamp name email])
     s.upsert(session_id: 'a', email: 'ada@example.org')
-    assert_equal({ 'session_id' => 'a', 'timestamp' => s.find('a')['timestamp'], 'name' => 'Ada',
-                   'email' => 'ada@example.org' }, s.find('a'))
+    assert_equal(
+      {
+        'session_id' => 'a',
+        'timestamp'  => s.find('a')['timestamp'],
+        'name'       => 'Ada',
+        'email'      => 'ada@example.org'
+      },
+      s.find('a')
+    )
   end
 
   def test_concurrent_upserts_keep_one_row_per_session

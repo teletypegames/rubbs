@@ -47,8 +47,12 @@ module BBS
 
       # The grids, checked against each other and the size, as rows of Cell.
       def read_grid(data)
-        grids = { chars: lines(data, 'chars', required: true), colors: lines(data, 'colors', required: true),
-                  reverse: lines(data, 'reverse'), background: lines(data, 'background') }
+        grids = {
+          chars:      lines(data, 'chars', required: true),
+          colors:     lines(data, 'colors', required: true),
+          reverse:    lines(data, 'reverse'),
+          background: lines(data, 'background')
+        }
         fail!('background is for cp437 art; a C64 has one background (use reverse)') if grids[:background] && petscii?
 
         Array.new(@rows) { |r| Array.new(@cols) { |c| read_cell(grids, r, c) } }
@@ -56,9 +60,12 @@ module BBS
 
       def read_cell(grids, row, col)
         at = ->(grid) { grid && grid[row][col] }
-        Cell.new(glyph(at[grids[:chars]], row, col), paint(at[grids[:colors]], 'colors', row, col),
-                 grids[:background] && paint(at[grids[:background]], 'background', row, col),
-                 reversed?(at[grids[:reverse]], row, col))
+        Cell.new(
+          glyph(at[grids[:chars]], row, col),
+          paint(at[grids[:colors]], 'colors', row, col),
+          grids[:background] && paint(at[grids[:background]], 'background', row, col),
+          reversed?(at[grids[:reverse]], row, col)
+        )
       end
 
       # The rows of grid +key+, each exactly #cols wide, #rows of them;

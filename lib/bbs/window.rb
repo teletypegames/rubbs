@@ -48,8 +48,10 @@ module BBS
     MIN_HEIGHT   = 7
     # Titles shown in the frame while the window is moved (+:move+) or sized
     # (+:size+) from the keyboard.
-    KBD_TITLES   = { move: ' Move: arrows · Shift+arrows or Tab: size · Enter: done ',
-                     size: ' Size: arrows · Tab: move · Enter: done ' }.freeze
+    KBD_TITLES   = {
+      move: ' Move: arrows · Shift+arrows or Tab: size · Enter: done ',
+      size: ' Size: arrows · Tab: move · Enter: done '
+    }.freeze
     # Width of a title bar gadget: <tt>[■]</tt>, <tt>[↑]</tt>.
     GADGET_WIDTH      = 3
     # Column of the close gadget, from the window's left edge.
@@ -115,8 +117,16 @@ module BBS
     # +close_key+, +maximizable+ and +movable+ set the attributes of the same
     # name; +kw+ (+id+, +bounds+, +theme+) go to Container.new. The window
     # starts not maximized and without a number.
-    def initialize(title: nil, modal: false, shadow: true, on_close: nil,
-                   close_key: :escape, maximizable: false, movable: true, **kw)
+    def initialize(
+      title: nil,
+      modal: false,
+      shadow: true,
+      on_close: nil,
+      close_key: :escape,
+      maximizable: false,
+      movable: true,
+      **kw
+    )
       super(**kw)
       @title       = title
       @modal       = modal

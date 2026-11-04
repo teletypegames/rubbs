@@ -10,8 +10,15 @@ module BBS
         # What a CSI sequence does, by its final byte: the method that
         # handles it.
         CSI_ACTIONS = {
-          'm' => :csi_sgr, 'J' => :csi_erase, 'H' => :csi_position, 'f' => :csi_position,
-          'A' => :csi_up, 'B' => :csi_down, 'C' => :csi_right, 'D' => :csi_left, 'G' => :csi_column
+          'm' => :csi_sgr,
+          'J' => :csi_erase,
+          'H' => :csi_position,
+          'f' => :csi_position,
+          'A' => :csi_up,
+          'B' => :csi_down,
+          'C' => :csi_right,
+          'D' => :csi_left,
+          'G' => :csi_column
         }.freeze
         # The bytes that start an escape sequence the Encoder reads: CSI, and
         # the character set designations it skips.

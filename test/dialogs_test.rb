@@ -46,7 +46,8 @@ class DialogsTest < Minitest::Test
     window = BBS::Dialogs.input(@app, prompt: 'Name?', value: 'Ada', on_submit: ->(v) { got << v })
     field = window.children.find { |c| c.is_a?(BBS::Widgets::TextInput) }
     assert_equal [['Label', '#18,10 46x1'], ['TextInput', '#18,12 46x1'], ['Button', '#32,14 8x1'],
-                  ['Button', '#42,14 10x1']], layout(window)
+                  ['Button', '#42,14 10x1']],
+                 layout(window)
     assert_equal :handled, field.handle_event(BBS::Event.key(:enter))
     button(window, 'OK').fire
     button(window, 'Cancel').fire

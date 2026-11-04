@@ -65,8 +65,7 @@ module BBS
     # [services]     Hash of the service objects by name
     # [window_specs] Hash of the declared BBS::WindowSpec objects by name
     # [doors]        Hash of the declared BBS::Door objects by name
-    attr_reader :session, :session_id, :context, :root, :menubar, :statusbar,
-                :windows, :theme, :services, :window_specs, :doors
+    attr_reader :session, :session_id, :context, :root, :menubar, :statusbar, :windows, :theme, :services, :window_specs, :doors
 
     # The desktop widget (BBS::Widgets::Desktop), or +nil+.
     attr_accessor :desktop
@@ -100,8 +99,20 @@ module BBS
     # [doors]        Hash of BBS::Door by name
     # [status]       block whose text is the right end of the statusbar
     # [clock]        whether the time follows it
-    def initialize(session:, session_id:, context: {}, theme: nil, on_idle: nil, on_tick: nil, helpers: nil,
-                   services: {}, window_specs: {}, doors: {}, status: nil, clock: false)
+    def initialize(
+      session:,
+      session_id:,
+      context: {},
+      theme: nil,
+      on_idle: nil,
+      on_tick: nil,
+      helpers: nil,
+      services: {},
+      window_specs: {},
+      doors: {},
+      status: nil,
+      clock: false
+    )
       @session      = session
       @session_id   = session_id
       @context      = context

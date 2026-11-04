@@ -58,8 +58,12 @@ module BBS
     # (reversed), +heading+ the headings, +about+ the about row, +hint+ the
     # status row.
     COLORS = {
-      text: Petscii::Colors::LG, key: Petscii::Colors::YE, bar: Petscii::Colors::CY,
-      heading: Petscii::Colors::DG, about: Petscii::Colors::GR, hint: Petscii::Colors::DG
+      text:    Petscii::Colors::LG,
+      key:     Petscii::Colors::YE,
+      bar:     Petscii::Colors::CY,
+      heading: Petscii::Colors::DG,
+      about:   Petscii::Colors::GR,
+      hint:    Petscii::Colors::DG
     }.freeze
     # The keys that return +back+.
     BACK_KEYS = %i[escape interrupt].freeze
@@ -127,8 +131,22 @@ module BBS
     # [colors]  colours of the roles over COLORS
     #
     # Raises ArgumentError when no item can be selected.
-    def initialize(session, items, width:, height: nil, columns: 1, index: nil, numbers: false, across: false,
-                   hint: nil, exits: {}, item_exits: {}, back: nil, colors: {}, fill: false)
+    def initialize(
+      session,
+      items,
+      width:,
+      height: nil,
+      columns: 1,
+      index: nil,
+      numbers: false,
+      across: false,
+      hint: nil,
+      exits: {},
+      item_exits: {},
+      back: nil,
+      colors: {},
+      fill: false
+    )
       raise ArgumentError, 'a selector needs an item to select' unless items.any?(&:selectable?)
 
       @session = session

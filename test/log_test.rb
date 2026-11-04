@@ -35,8 +35,17 @@ class LogTest < Minitest::Test
     BBS.config.log_format = :json
     _, err = capture_io { BBS::Log.with_session('abc') { BBS.log('call', 'ended', seconds: 3) } }
     record = JSON.parse(err)
-    assert_equal({ 'level' => 'info', 'board' => 'test-bbs', 'tag' => 'call', 'msg' => 'ended',
-                   'session' => 'abc', 'seconds' => 3 }, record.except('time'))
+    assert_equal(
+      {
+        'level'   => 'info',
+        'board'   => 'test-bbs',
+        'tag'     => 'call',
+        'msg'     => 'ended',
+        'session' => 'abc',
+        'seconds' => 3
+      },
+      record.except('time')
+    )
   end
 
   def test_json_error

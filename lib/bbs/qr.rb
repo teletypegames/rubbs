@@ -46,9 +46,7 @@ module BBS
     # The pen of a code: white light modules on black dark ones.
     PEN = "\e[97;40m"
     # A half-block cell of #ansi by its modules, <tt>[top dark?, bottom dark?]</tt>.
-    HALF_BLOCKS = {
-      [false, false] => '█', [false, true] => '▀', [true, false] => '▄', [true, true] => ' '
-    }.freeze
+    HALF_BLOCKS = { [false, false] => '█', [false, true] => '▀', [true, false] => '▄', [true, true] => ' ' }.freeze
     # The quadrant cells the C64 has a character for, by the bits of their
     # light modules: 8 upper left, 4 upper right, 2 lower left, 1 lower
     # right. Every other cell is the reverse of the one with the opposite

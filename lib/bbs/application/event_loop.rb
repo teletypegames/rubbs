@@ -88,6 +88,7 @@ module BBS
         @idle_elapsed += TICK_SECONDS
         tick!
         return unless @idle_max && @idle_elapsed >= @idle_max
+
         @kept_on = false
         @on_idle&.call(self)
         return start_idle if @kept_on

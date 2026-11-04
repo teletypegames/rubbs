@@ -9,34 +9,53 @@ module BBS
       private
 
       def options(context)
-        send(:"#{@type}_options", context).merge(title: resolve(:title, context).to_s,
-                                                 width: size(:width, context, context.cols),
-                                                 height: size(:height, context, context.rows)).compact
+        send(:"#{@type}_options", context).merge(
+          title:  resolve(:title, context).to_s,
+          width:  size(:width, context, context.cols),
+          height: size(:height, context, context.rows)
+        ).compact
       end
 
       def info_options(context)
-        { body: Array(resolve(:body, context)), scroll: resolve(:scroll, context), padding: resolve(:padding, context),
-          buttons: @buttons&.map { |b| button_descriptor(b, context) } }
+        {
+          body:    Array(resolve(:body, context)),
+          scroll:  resolve(:scroll, context),
+          padding: resolve(:padding, context),
+          buttons: @buttons&.map { |b| button_descriptor(b, context) }
+        }
       end
 
       def form_options(context)
-        { fields: resolve_fields(context), hint: resolve(:hint, context), submit_label: resolve(:submit_label, context),
-          cancel_label: resolve(:cancel_label, context), on_submit: submit_callback(context),
-          on_cancel: (->(_form) { context.instance_exec(&@attrs[:on_cancel]) } if @attrs[:on_cancel]) }
+        {
+          fields:       resolve_fields(context),
+          hint:         resolve(:hint, context),
+          submit_label: resolve(:submit_label, context),
+          cancel_label: resolve(:cancel_label, context),
+          on_submit:    submit_callback(context),
+          on_cancel:    (->(_form) { context.instance_exec(&@attrs[:on_cancel]) } if @attrs[:on_cancel])
+        }
       end
 
       def master_detail_options(context)
-        { items: Array(resolve(:items, context)), item_label: label_callback(context),
-          render_detail: detail_callback(context), list_width: resolved_list_width(context),
-          actions: @actions.empty? ? nil : @actions.map { |a| action_descriptor(a, context) },
-          empty_message: resolve(:empty, context), close_button: resolve(:close_button, context),
-          close_label: resolve(:close_label, context), **item_callbacks(context) }
+        {
+          items:         Array(resolve(:items, context)),
+          item_label:    label_callback(context),
+          render_detail: detail_callback(context),
+          list_width:    resolved_list_width(context),
+          actions:       @actions.empty? ? nil : @actions.map { |a| action_descriptor(a, context) },
+          empty_message: resolve(:empty, context),
+          close_button:  resolve(:close_button, context),
+          close_label:   resolve(:close_label, context),
+          **item_callbacks(context)
+        }
       end
 
       def item_callbacks(context)
         meta, pick = @attrs.values_at(:meta, :on_pick)
-        { bottom_meta: (meta_callback(meta, context) if meta),
-          on_activate: (->(item, _window) { context.instance_exec(item, &pick) } if pick) }
+        {
+          bottom_meta: (meta_callback(meta, context) if meta),
+          on_activate: (->(item, _window) { context.instance_exec(item, &pick) } if pick)
+        }
       end
 
       def meta_callback(meta, context)
@@ -44,11 +63,15 @@ module BBS
       end
 
       def stream_options(context)
-        { initial_lines: Array(resolve(:lines, context)), placeholder: resolve(:placeholder, context),
-          buffer_size: resolve(:buffer_size, context),
-          on_submit: stream_submit(context),
-          on_poll: (->(_app) { context.instance_exec(&@attrs[:on_poll]) } if @attrs[:on_poll]),
-          close_button: resolve(:close_button, context), close_label: resolve(:close_label, context) }
+        {
+          initial_lines: Array(resolve(:lines, context)),
+          placeholder:   resolve(:placeholder, context),
+          buffer_size:   resolve(:buffer_size, context),
+          on_submit:     stream_submit(context),
+          on_poll:       (->(_app) { context.instance_exec(&@attrs[:on_poll]) } if @attrs[:on_poll]),
+          close_button:  resolve(:close_button, context),
+          close_label:   resolve(:close_label, context)
+        }
       end
 
       def stream_submit(context)

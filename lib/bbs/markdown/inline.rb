@@ -5,8 +5,7 @@ module BBS
     # The inline marks of a line of Markdown turned into SGR codes.
     module Inline
       # The spans in the order they are styled, each with its style.
-      SPANS = [[LINK, :link], [CODE_SPAN, :code], [BOLD, :bold], [ITALIC_STAR, :italic],
-               [ITALIC_UNDERSCORE, :italic]].freeze
+      SPANS = [[LINK, :link], [CODE_SPAN, :code], [BOLD, :bold], [ITALIC_STAR, :italic], [ITALIC_UNDERSCORE, :italic]].freeze
 
       # Returns +text+ with links (the link text only), <tt>`code`</tt>,
       # <tt>**bold**</tt>, and <tt>*italic*</tt> or <tt>_italic_</tt> each

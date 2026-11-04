@@ -6,7 +6,7 @@ module BBS
     # The first one's roles are Theme::ROLES, and every preset defines all
     # of them.
     PRESETS = {
-      synchronet: {
+      synchronet:      {
         screen:               "\e[40m",
         text:                 "\e[0;37;40m",
         text_dim:             "\e[0;2;37;40m",
@@ -86,7 +86,7 @@ module BBS
         scrollbar:            "\e[0;36;44m",
         scrollbar_thumb:      "\e[1;37;46m"
       }.freeze,
-      dosnavigator: {
+      dosnavigator:    {
         screen:               "\e[47m",
         text:                 "\e[0;30;47m",
         text_dim:             "\e[0;2;30;47m",
@@ -126,7 +126,7 @@ module BBS
         scrollbar:            "\e[0;30;47m",
         scrollbar_thumb:      "\e[1;37;46m"
       }.freeze,
-      neumanntronics: {
+      neumanntronics:  {
         screen:               "\e[48;5;16m",
         text:                 "\e[0;38;5;73;48;5;16m",
         text_dim:             "\e[0;38;5;66;48;5;16m",
@@ -166,7 +166,7 @@ module BBS
         scrollbar:            "\e[0;38;5;66;48;5;16m",
         scrollbar_thumb:      "\e[0;38;5;73;48;5;16m"
       }.freeze,
-      mono: {
+      mono:            {
         screen:               '',
         text:                 "\e[0;37m",
         text_dim:             "\e[0;2;37m",

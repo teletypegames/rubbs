@@ -249,12 +249,14 @@ module BBS
           @session.write("#{color(:prompt)}#{resolve_prompt}#{reset}")
           line = @session.readline
           break if line.nil?
+
           dispatch(line.strip)
         end
       end
 
       def dispatch(input)
         return if input.empty?
+
         word, rest = input.split(Patterns::WHITESPACE, 2)
         entry = @definition.commands[word.downcase]
         if entry

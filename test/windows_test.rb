@@ -13,10 +13,15 @@ class WindowsTest < Minitest::Test
   def labels(window) = window.children.grep(BBS::Widgets::Label).map(&:text)
 
   def test_form_values_status_and_layout
-    form = BBS::Windows::Form.open(@app, title: ' F ', hint: 'Fill it in.', on_submit: nil,
-                                         fields: [{ key: :name, label: 'Name', value: 'Ada' },
-                                                  { key: :ok, label: 'OK?', type: :checkbox, value: true },
-                                                  { key: :notes, type: :textarea, value: "a\nb", rows: 3 }])
+    form = BBS::Windows::Form.open(
+      @app,
+      title:     ' F ',
+      hint:      'Fill it in.',
+      on_submit: nil,
+      fields:    [{ key: :name, label: 'Name', value: 'Ada' },
+                  { key: :ok, label: 'OK?', type: :checkbox, value: true },
+                  { key: :notes, type: :textarea, value: "a\nb", rows: 3 }]
+    )
     assert_equal({ name: 'Ada', ok: true, notes: "a\nb" }, form.values)
     form.error('Bad.')
     assert_equal ['Bad.', :error], [form.status_label.text, form.status_label.style_key]
@@ -30,8 +35,12 @@ class WindowsTest < Minitest::Test
 
   def test_form_submit_gets_the_values
     got = nil
-    form = BBS::Windows::Form.open(@app, title: 'x', fields: [{ key: :a, value: 'v' }],
-                                         on_submit: ->(values, _f) { got = values })
+    form = BBS::Windows::Form.open(
+      @app,
+      title:     'x',
+      fields:    [{ key: :a, value: 'v' }],
+      on_submit: ->(values, _f) { got = values }
+    )
     form.children.grep(BBS::Widgets::Button).first.on_click.call(nil)
     assert_equal({ a: 'v' }, got)
   end
@@ -49,9 +58,13 @@ class WindowsTest < Minitest::Test
   end
 
   def test_info_static_body_kinds
-    info = BBS::Windows::Info.open(@app, title: 'i', width: 40,
-                                         body: ['plain', :spacer, :rule, { text: 'styled', style: :accent },
-                                                { kv: [%w[Key value]] }])
+    info = BBS::Windows::Info.open(
+      @app,
+      title: 'i',
+      width: 40,
+      body:  ['plain', :spacer, :rule, { text: 'styled', style: :accent },
+              { kv: [%w[Key value]] }]
+    )
     assert_includes labels(info), 'plain'
     assert_includes labels(info), 'Key     '
     assert_includes labels(info), 'value'
@@ -68,9 +81,14 @@ class WindowsTest < Minitest::Test
   end
 
   def test_master_detail_renders_the_selected_item
-    md = BBS::Windows::MasterDetail.open(@app, title: 'm', items: %w[a b], item_label: :upcase.to_proc,
-                                               render_detail: ->(item, _w) { ["detail #{item}"] },
-                                               bottom_meta: ->(item) { "meta #{item}" })
+    md = BBS::Windows::MasterDetail.open(
+      @app,
+      title:         'm',
+      items:         %w[a b],
+      item_label:    :upcase.to_proc,
+      render_detail: ->(item, _w) { ["detail #{item}"] },
+      bottom_meta:   ->(item) { "meta #{item}" }
+    )
     assert_equal ['detail a'], md.detail_view.lines
     assert_equal 'meta a', md.meta_label.text
     md.replace_items([])
@@ -80,8 +98,14 @@ class WindowsTest < Minitest::Test
 
   def test_stream_keeps_the_buffer_and_submits
     sent = []
-    stream = BBS::Windows::Stream.open(@app, title: 's', buffer_size: 2, initial_lines: ['x'],
-                                             on_poll: ->(_a) { %w[y z] }, on_submit: ->(text, _a) { sent << text })
+    stream = BBS::Windows::Stream.open(
+      @app,
+      title:         's',
+      buffer_size:   2,
+      initial_lines: ['x'],
+      on_poll:       ->(_a) { %w[y z] },
+      on_submit:     ->(text, _a) { sent << text }
+    )
     stream.tick(@app)
     assert_equal %w[y z], stream.history.lines
     stream.input.value = 'hi'

@@ -51,9 +51,22 @@ module BBS
     #                    BBS.board, made once at boot): its +services+ are
     #                    the default services of an Application, and a
     #                    BBS::Petscii::Face gets it; default +nil+
-    attr_accessor :screens_dir, :flow, :on_session_end,
-                  :port, :theme, :mouse, :mouse_on_connect, :idle_seconds, :max_sessions,
-                  :max_sessions_per_ip, :ai_concurrency, :log_tag, :title, :env_prefix, :preset, :board
+    attr_accessor :screens_dir,
+                  :flow,
+                  :on_session_end,
+                  :port,
+                  :theme,
+                  :mouse,
+                  :mouse_on_connect,
+                  :idle_seconds,
+                  :max_sessions,
+                  :max_sessions_per_ip,
+                  :ai_concurrency,
+                  :log_tag,
+                  :title,
+                  :env_prefix,
+                  :preset,
+                  :board
 
     # [log_format]       how BBS.log writes a line: +:text+ (the default)
     #                    or +:json+, one object a line for a log pipeline;

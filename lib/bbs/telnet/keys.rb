@@ -16,8 +16,14 @@ module BBS
       CTRL_TO_LETTER = 0x60
       # The control bytes that are keys of their own; the other Ctrl-letters
       # are <tt>:ctrl_<letter></tt>.
-      CONTROL_KEYS = { Ascii::CR => :enter, Ascii::LF => :enter, Ascii::TAB => :tab, Ascii::BS => :backspace,
-                       Ascii::DEL => :backspace, Ascii::ETX => :interrupt }.freeze
+      CONTROL_KEYS = {
+        Ascii::CR  => :enter,
+        Ascii::LF  => :enter,
+        Ascii::TAB => :tab,
+        Ascii::BS  => :backspace,
+        Ascii::DEL => :backspace,
+        Ascii::ETX => :interrupt
+      }.freeze
       # The bytes that start a multibyte UTF-8 character.
       UTF8_LEAD = 0xc2..0xf4
       # The lowest lead byte of a four-byte UTF-8 character.

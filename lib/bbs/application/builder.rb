@@ -126,8 +126,14 @@ module BBS
       #
       #   command :search, 'Search…', key: 'F2' do search end
       def command(name, label, key: nil, hint: nil, about: nil, &action)
-        @commands[name.to_sym] = Command.new(name: name.to_sym, label: label, key: key, hint: hint, about: about,
-                                             action: action)
+        @commands[name.to_sym] = Command.new(
+          name:   name.to_sym,
+          label:  label,
+          key:    key,
+          hint:   hint,
+          about:  about,
+          action: action
+        )
       end
 
       # Declares a menu of the menubar. Its +entries+ are command names,
@@ -211,10 +217,20 @@ module BBS
       private
 
       def new_application(session, session_id, context)
-        Application.new(session: session, session_id: session_id, context: context, theme: @theme,
-                        helpers: @helper_module, services: app_services, window_specs: @window_specs,
-                        doors: @doors.dup, on_tick: on_app(@tick_block), on_idle: on_app(@idle_block),
-                        status: @status, clock: @clock)
+        Application.new(
+          session:      session,
+          session_id:   session_id,
+          context:      context,
+          theme:        @theme,
+          helpers:      @helper_module,
+          services:     app_services,
+          window_specs: @window_specs,
+          doors:        @doors.dup,
+          on_tick:      on_app(@tick_block),
+          on_idle:      on_app(@idle_block),
+          status:       @status,
+          clock:        @clock
+        )
       end
 
       def add_doors(app)
@@ -290,8 +306,14 @@ module BBS
       def add(label, shortcut, hint, on_select, enabled: true)
         label = Command.hotkeyed(label, @letters)
         @letters << Command.hotkey(label)
-        @items << Menubar::MenuItem.new(label: label, shortcut: shortcut, enabled: enabled, separator: false,
-                                        hint: hint, on_select: on_select)
+        @items << Menubar::MenuItem.new(
+          label:     label,
+          shortcut:  shortcut,
+          enabled:   enabled,
+          separator: false,
+          hint:      hint,
+          on_select: on_select
+        )
       end
     end
 

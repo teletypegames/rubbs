@@ -78,8 +78,17 @@ module BBS
     # session's idle limit itself: after <tt>session.idle_seconds</tt>
     # (Server::DEFAULT_TIMEOUT when unset) without a key it raises
     # IO::TimeoutError, as the line would.
-    def initialize(session, text: '', title: '', single_line: false, max: nil, cols: nil, rows: nil,
-                   autosave: nil, &on_autosave)
+    def initialize(
+      session,
+      text: '',
+      title: '',
+      single_line: false,
+      max: nil,
+      cols: nil,
+      rows: nil,
+      autosave: nil,
+      &on_autosave
+    )
       @session = session
       @screen  = Cursor.new(session)
       @buffer  = TextBuffer.new(text, max: max, single_line: single_line)

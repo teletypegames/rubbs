@@ -66,8 +66,12 @@ module BBS
         def build
           d = @descriptor
           @label = Widgets::Label.new(text: d[:label].to_s, style_key: :input_label) if d[:label]
-          Widgets::TextInput.new(value: d[:value].to_s, placeholder: d[:placeholder].to_s,
-                                 max_length: d[:max_length] || 256, password: d[:password] ? true : false)
+          Widgets::TextInput.new(
+            value:       d[:value].to_s,
+            placeholder: d[:placeholder].to_s,
+            max_length:  d[:max_length] || 256,
+            password:    d[:password] ? true : false
+          )
         end
       end
 

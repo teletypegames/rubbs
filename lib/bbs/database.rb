@@ -32,8 +32,11 @@ module BBS
     #                    BBS::SQLite did) or +nil+ (deferred)
     def self.open(path, migrations = [], timeout: BUSY_TIMEOUT, transaction_mode: :immediate)
       FileUtils.mkdir_p(File.dirname(path.to_s))
-      db = Sequel.sqlite(path.to_s, timeout: timeout,
-                                    connect_sqls: ['PRAGMA journal_mode = WAL', 'PRAGMA foreign_keys = ON'])
+      db = Sequel.sqlite(
+        path.to_s,
+        timeout:      timeout,
+        connect_sqls: ['PRAGMA journal_mode = WAL', 'PRAGMA foreign_keys = ON']
+      )
       db.transaction_mode = transaction_mode if transaction_mode
       migrate(db, migrations)
       db

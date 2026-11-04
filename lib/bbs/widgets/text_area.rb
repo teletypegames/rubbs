@@ -9,8 +9,14 @@ module BBS
 
       # The editing keys and the method each one calls.
       KEYS = {
-        left: :left, right: :right, up: :up, down: :down, home: :to_start, end: :to_end,
-        enter: :split_line, backspace: :backspace
+        left:      :left,
+        right:     :right,
+        up:        :up,
+        down:      :down,
+        home:      :to_start,
+        end:       :to_end,
+        enter:     :split_line,
+        backspace: :backspace
       }.freeze
 
       # Callable invoked as <tt>call(value, area)</tt> after each edit.

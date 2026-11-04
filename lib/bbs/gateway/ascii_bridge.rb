@@ -16,8 +16,16 @@ module BBS
     class AsciiBridge
       # The C64's special keys (BBS::Petscii.key) as an ANSI terminal sends
       # them; a key not listed (F1-F8) is not sent.
-      KEYS = { enter: "\r", backspace: "\b", escape: "\e", up: "\e[A", down: "\e[B",
-               right: "\e[C", left: "\e[D", home: "\e[H" }.freeze
+      KEYS = {
+        enter:     "\r",
+        backspace: "\b",
+        escape:    "\e",
+        up:        "\e[A",
+        down:      "\e[B",
+        right:     "\e[C",
+        left:      "\e[D",
+        home:      "\e[H"
+      }.freeze
       # Signs the C64 has a key for and ASCII has not, as their ASCII stand-in.
       SIGNS = { '£' => '#' }.freeze
       # The telnet IAC byte, doubled in what goes down so the caller's

@@ -21,6 +21,7 @@ module BBS
     # file does not exist.
     def self.render(name, vars = {}, dir: BBS.config.screens_dir)
       raise 'No screens_dir: set BBS.config.screens_dir or the flow\'s screens_dir' unless dir
+
       path = File.join(dir, "#{name}.erb")
       ctx  = Context.new(vars)
       ERB.new(File.read(path), trim_mode: '-').result(ctx.ctx_binding).gsub("\n", Ansi::CRLF)
@@ -53,9 +54,9 @@ module BBS
       # LF-separated.
       def big_banner(text, font: 'slant')
         Artii::Base.new(font: font).asciify(text)
-                   .split("\n")
-                   .map { |l| "  #{green}#{l}#{reset}" }
-                   .join("\n")
+          .split("\n")
+          .map { |l| "  #{green}#{l}#{reset}" }
+          .join("\n")
       end
 
       # Escape sequence that clears the screen and homes the cursor.

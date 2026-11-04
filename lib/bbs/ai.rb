@@ -216,8 +216,15 @@ module BBS
       # [read_timeout] seconds to wait for each read of the reply
       # [deadline]     seconds the whole request may take
       # [max_bytes]    the most bytes of reply text taken
-      def initialize(url:, model: nil, api_key: nil, open_timeout: 2, read_timeout: 30,
-                     deadline: DEADLINE, max_bytes: MAX_REPLY)
+      def initialize(
+        url:,
+        model: nil,
+        api_key: nil,
+        open_timeout: 2,
+        read_timeout: 30,
+        deadline: DEADLINE,
+        max_bytes: MAX_REPLY
+      )
         @url          = url.to_s
         @model        = model
         @api_key      = api_key
@@ -248,8 +255,13 @@ module BBS
         uri  = URI.join(@url, '/v1/chat/completions')
         body = { messages: messages, stream: true, **options }
         body[:model] = @model if @model
-        Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https',
-                        open_timeout: @open_timeout, read_timeout: @read_timeout) do |http|
+        Net::HTTP.start(
+          uri.host,
+          uri.port,
+          use_ssl:      uri.scheme == 'https',
+          open_timeout: @open_timeout,
+          read_timeout: @read_timeout
+        ) do |http|
           http.request(build_request(uri, body)) do |response|
             raise "HTTP #{response.code}" unless response.is_a?(Net::HTTPSuccess)
 

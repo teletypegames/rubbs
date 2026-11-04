@@ -50,8 +50,17 @@ module BBS
 
     # The theme role each part of the output is styled with.
     STYLE_ROLES = {
-      base: :text, h1: :text_bright, h2: :accent, h3: :label, bold: :text_bright, italic: :text_dim,
-      code: :label, link: :accent, quote: :text_dim, bullet: :accent, rule: :label
+      base:   :text,
+      h1:     :text_bright,
+      h2:     :accent,
+      h3:     :label,
+      bold:   :text_bright,
+      italic: :text_dim,
+      code:   :label,
+      link:   :accent,
+      quote:  :text_dim,
+      bullet: :accent,
+      rule:   :label
     }.freeze
 
     # Renders the Markdown +text+ as terminal lines.

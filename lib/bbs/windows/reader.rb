@@ -25,8 +25,16 @@ module BBS
       # widest the window gets (+max_width+), its size, and +on_key+: keys
       # (as BBS::Telnet#readkey names them) to callables taking the reader
       # and the key, run before the text sees the key.
-      OPTIONS = { lines: [], where: nil, actions: [], max_width: nil, width: nil, height: nil,
-                  maximizable: true, on_key: {} }.freeze
+      OPTIONS = {
+        lines:       [],
+        where:       nil,
+        actions:     [],
+        max_width:   nil,
+        width:       nil,
+        height:      nil,
+        maximizable: true,
+        on_key:      {}
+      }.freeze
 
       # Opens a reader on +app+ with the options of ::new. Returns it.
       def self.open(app, **)

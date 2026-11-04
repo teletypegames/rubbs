@@ -40,8 +40,18 @@ module BBS
       attr_reader :history, :input
 
       # The options of ::new and their defaults.
-      OPTIONS = { initial_lines: [], placeholder: '', on_submit: nil, on_poll: nil, buffer_size: 500, width: nil,
-                  height: nil, close_button: true, close_label: '&Close', maximizable: false }.freeze
+      OPTIONS = {
+        initial_lines: [],
+        placeholder:   '',
+        on_submit:     nil,
+        on_poll:       nil,
+        buffer_size:   500,
+        width:         nil,
+        height:        nil,
+        close_button:  true,
+        close_label:   '&Close',
+        maximizable:   false
+      }.freeze
 
       # Creates the window and its widgets, centred on +app+'s screen. It is
       # not opened; see #attach.

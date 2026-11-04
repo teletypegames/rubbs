@@ -13,7 +13,7 @@ Gem::Specification.new do |s|
   s.required_ruby_version = '>= 3.2'
   s.homepage    = 'https://wiki.teletypegames.org/engines/rubbs'
   s.metadata    = {
-    'source_code_uri' => 'https://git.teletypegames.org/engines/rubbs',
+    'source_code_uri'   => 'https://git.teletypegames.org/engines/rubbs',
     'documentation_uri' => 'https://wiki.teletypegames.org/rdoc/bbs/latest/'
   }
   s.add_dependency 'artii', '~> 2.1'

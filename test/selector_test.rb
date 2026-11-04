@@ -96,8 +96,15 @@ class CanvasMenuTest < Minitest::Test
     session = RawSession.new([], [])
     ticks = 0
     session.define_singleton_method(:readkey) { |**| (ticks += 1) < 3 ? :idle : :enter }
-    menu = BBS::Petscii::CanvasMenu.new(session, [BBS::Selector.item('GO', value: :go)],
-                                        canvas: BBS::Petscii::Canvas.new, row: 0, col: 0, width: 10, idle: 0.1) { 'x' }
+    menu = BBS::Petscii::CanvasMenu.new(
+      session,
+      [BBS::Selector.item('GO', value: :go)],
+      canvas: BBS::Petscii::Canvas.new,
+      row:    0,
+      col:    0,
+      width:  10,
+      idle:   0.1
+    ) { 'x' }
     assert_equal :go, menu.run
     assert_includes session.raw, 'x'
   end

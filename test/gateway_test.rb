@@ -39,8 +39,7 @@ class GatewayTest < Minitest::Test
   def test_the_board_asking_for_the_terminal_type_and_window_size
     run_link([T::IAC, T::DO, T::NAWS_OPT, T::IAC, T::DO, 24, T::IAC, T::SB, 24, 1, T::IAC, T::SE].pack('C*'))
     answer = @far.read_nonblock(1000).bytes
-    assert_equal [T::IAC, T::WILL, T::NAWS_OPT, T::IAC, T::SB, T::NAWS_OPT, 0, 80, 0, 24, T::IAC, T::SE],
-                 answer.first(12)
+    assert_equal [T::IAC, T::WILL, T::NAWS_OPT, T::IAC, T::SB, T::NAWS_OPT, 0, 80, 0, 24, T::IAC, T::SE], answer.first(12)
     assert_equal [T::IAC, T::WILL, 24, T::IAC, T::SB, 24, 0, *'ANSI'.bytes, T::IAC, T::SE], answer.drop(12)
   end
 

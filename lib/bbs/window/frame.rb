@@ -37,15 +37,28 @@ module BBS
       def render_shadow(frame)
         return unless @shadow && !@maximized
 
-        frame.shadow(x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height,
-                     sgr: style(:window_shadow))
+        frame.shadow(
+          x:      bounds.x,
+          y:      bounds.y,
+          width:  bounds.width,
+          height: bounds.height,
+          sgr:    style(:window_shadow)
+        )
       end
 
       def render_box(frame)
-        frame.box(x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height,
-                  sgr: @kbd_mode || @drag ? style(:window_title_focused) : style(:window_border),
-                  fill_sgr: style(:window_bg), style: focused || @modal ? :double : :single,
-                  title: shown_title, title_sgr: title_style, title_indent: close_gadget? ? TITLE_INDENT : 0)
+        frame.box(
+          x:            bounds.x,
+          y:            bounds.y,
+          width:        bounds.width,
+          height:       bounds.height,
+          sgr:          @kbd_mode || @drag ? style(:window_title_focused) : style(:window_border),
+          fill_sgr:     style(:window_bg),
+          style:        focused || @modal ? :double : :single,
+          title:        shown_title,
+          title_sgr:    title_style,
+          title_indent: close_gadget? ? TITLE_INDENT : 0
+        )
       end
 
       # The title with a space on each side, cut with an ellipsis where it

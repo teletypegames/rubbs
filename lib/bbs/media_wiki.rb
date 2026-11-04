@@ -56,8 +56,7 @@ module BBS
     def request(endpoint, params)
       raise self.class::Error, "busy: too many #{@name} requests at once" unless turn?
 
-      response = HTTP.get(address(endpoint, params), user_agent: @user_agent,
-                                                     headers: { 'Accept-Encoding' => 'identity' })
+      response = HTTP.get(address(endpoint, params), user_agent: @user_agent, headers: { 'Accept-Encoding' => 'identity' })
       raise self.class::Error, "#{@name} answered #{response.status}" unless response.ok?
 
       JSON.parse(Text.utf8(response.body))

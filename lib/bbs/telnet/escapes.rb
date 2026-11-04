@@ -9,8 +9,7 @@ module BBS
       # The second byte of an ESC sequence that starts an SS3 sequence.
       SS3_START = 'O'
       # The final bytes of the cursor keys, the same after CSI and SS3.
-      CURSOR_KEYS = { 'A' => :up, 'B' => :down, 'C' => :right, 'D' => :left,
-                      'H' => :home, 'F' => :end }.freeze
+      CURSOR_KEYS = { 'A' => :up, 'B' => :down, 'C' => :right, 'D' => :left, 'H' => :home, 'F' => :end }.freeze
       # The keys sent as SS3 and a final byte: the cursor keys and F1-F4.
       SS3_KEYS = CURSOR_KEYS.merge('P' => :f1, 'Q' => :f2, 'R' => :f3, 'S' => :f4).freeze
       # The keys sent as CSI and a letter: the cursor keys and Shift-Tab.
@@ -19,10 +18,26 @@ module BBS
       TILDE = '~'
       # The keys sent as <tt>ESC [ number ~</tt>, by number.
       TILDE_KEYS = {
-        1 => :home, 7 => :home, 2 => :insert, 3 => :delete, 4 => :end, 8 => :end,
-        5 => :page_up, 6 => :page_down,
-        11 => :f1, 12 => :f2, 13 => :f3, 14 => :f4, 15 => :f5, 17 => :f6,
-        18 => :f7, 19 => :f8, 20 => :f9, 21 => :f10, 23 => :f11, 24 => :f12
+        1  => :home,
+        7  => :home,
+        2  => :insert,
+        3  => :delete,
+        4  => :end,
+        8  => :end,
+        5  => :page_up,
+        6  => :page_down,
+        11 => :f1,
+        12 => :f2,
+        13 => :f3,
+        14 => :f4,
+        15 => :f5,
+        17 => :f6,
+        18 => :f7,
+        19 => :f8,
+        20 => :f9,
+        21 => :f10,
+        23 => :f11,
+        24 => :f12
       }.freeze
       # The modifier prefixes by xterm's second CSI parameter:
       # <tt>ESC [ 1 ; 2 A</tt> is Shift-Up, <tt>ESC [ 15 ; 5 ~</tt> Ctrl-F5.

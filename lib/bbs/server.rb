@@ -156,8 +156,12 @@ module BBS
     # holds "BBS busy" or "BBS crowded" (the Grafana VPS: BBS board counts
     # those).
     def refuse(client, address, verdict)
-      BBS.log("BBS #{verdict}", "#{BBS.config.max_sessions} callers at most, " \
-                                "#{BBS.config.max_sessions_per_ip} from one address; turned #{address} away", level: :warn)
+      BBS.log(
+        "BBS #{verdict}",
+        "#{BBS.config.max_sessions} callers at most, " \
+        "#{BBS.config.max_sessions_per_ip} from one address; turned #{address} away",
+        level: :warn
+      )
       client.write("#{REFUSALS.fetch(verdict)}#{Ansi::CRLF}") rescue nil
       client.close rescue nil
     end

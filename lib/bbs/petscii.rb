@@ -86,11 +86,28 @@ module BBS
     # and the left arrow key are +:escape+; Shift-F1 is F2 and so on; the
     # pound sign, the up arrow and Shift-SPACE are the characters they show.
     KEYS = {
-      0x0d => :enter, 0x14 => :backspace, 0x08 => :backspace, 0x7f => :backspace,
-      0x11 => :down, 0x91 => :up, 0x1d => :right, 0x9d => :left, 0x13 => :home,
-      0x03 => :escape, 0x5f => :escape,
-      0x85 => :f1, 0x89 => :f2, 0x86 => :f3, 0x8a => :f4, 0x87 => :f5, 0x8b => :f6, 0x88 => :f7, 0x8c => :f8,
-      0x5c => '£', 0x5e => '^', 0xa0 => ' '
+      0x0d => :enter,
+      0x14 => :backspace,
+      0x08 => :backspace,
+      0x7f => :backspace,
+      0x11 => :down,
+      0x91 => :up,
+      0x1d => :right,
+      0x9d => :left,
+      0x13 => :home,
+      0x03 => :escape,
+      0x5f => :escape,
+      0x85 => :f1,
+      0x89 => :f2,
+      0x86 => :f3,
+      0x8a => :f4,
+      0x87 => :f5,
+      0x8b => :f6,
+      0x88 => :f7,
+      0x8c => :f8,
+      0x5c => '£',
+      0x5e => '^',
+      0xa0 => ' '
     }.freeze
 
     # Codes that are the same in PETSCII and ASCII: space, digits,
@@ -125,8 +142,7 @@ module BBS
     ESCAPE_FINAL = /[A-Za-z~@`]/
 
     # The control bytes that go to the C64 as they are.
-    CONTROLS = [0x05, 0x07, 0x0e, 0x11, 0x12, 0x13, 0x14, 0x1c, 0x1d, 0x1e, 0x1f,
-                0x81, 0x8e, *0x90..0x9f].freeze
+    CONTROLS = [0x05, 0x07, 0x0e, 0x11, 0x12, 0x13, 0x14, 0x1c, 0x1d, 0x1e, 0x1f, 0x81, 0x8e, *0x90..0x9f].freeze
 
     # The PETSCII colours for the normal ANSI colours 0-7 (SGR 30-37). Black
     # is dark grey: the C64's terminal screen is black, and a black-on-grey
@@ -149,11 +165,30 @@ module BBS
     # Graphics both character sets have at the same code: the box drawing
     # with square corners, the blocks, £ ↑ ←.
     GRAPHICS = {
-      '─' => 0xc0, '│' => 0xdd, '┼' => 0xdb, '┌' => 0xb0, '┐' => 0xae, '└' => 0xad, '┘' => 0xbd,
-      '├' => 0xab, '┤' => 0xb3, '┬' => 0xb2, '┴' => 0xb1,
-      '▌' => 0xa1, '▄' => 0xa2, '▔' => 0xa3, '▁' => 0xa4, '▒' => 0xa6,
-      '▖' => 0xbb, '▗' => 0xac, '▘' => 0xbe, '▝' => 0xbc, '▚' => 0xbf,
-      '£' => 0x5c, '↑' => 0x5e, '←' => 0x5f
+      '─' => 0xc0,
+      '│' => 0xdd,
+      '┼' => 0xdb,
+      '┌' => 0xb0,
+      '┐' => 0xae,
+      '└' => 0xad,
+      '┘' => 0xbd,
+      '├' => 0xab,
+      '┤' => 0xb3,
+      '┬' => 0xb2,
+      '┴' => 0xb1,
+      '▌' => 0xa1,
+      '▄' => 0xa2,
+      '▔' => 0xa3,
+      '▁' => 0xa4,
+      '▒' => 0xa6,
+      '▖' => 0xbb,
+      '▗' => 0xac,
+      '▘' => 0xbe,
+      '▝' => 0xbc,
+      '▚' => 0xbf,
+      '£' => 0x5c,
+      '↑' => 0x5e,
+      '←' => 0x5f
     }.freeze
     # The rounded corners, which only the uppercase/graphics set has; the
     # lowercase set draws them as the square ones (LOOK_ALIKES).
@@ -161,36 +196,99 @@ module BBS
     # The graphics only the uppercase/graphics set has: the rounded
     # corners, the balls, the card suits, the diagonals.
     UPPERCASE_GRAPHICS = ROUNDED_CORNERS.merge(
-      '●' => 0xd1, '○' => 0xd7, '♥' => 0xd3, '♠' => 0xc1, '♣' => 0xd8, '♦' => 0xda, 'π' => 0xde,
-      '╲' => 0xcd, '╱' => 0xce, '╳' => 0xd6, '◤' => 0xa9, '◥' => 0xdf
+      '●' => 0xd1,
+      '○' => 0xd7,
+      '♥' => 0xd3,
+      '♠' => 0xc1,
+      '♣' => 0xd8,
+      '♦' => 0xda,
+      'π' => 0xde,
+      '╲' => 0xcd,
+      '╱' => 0xce,
+      '╳' => 0xd6,
+      '◤' => 0xa9,
+      '◥' => 0xdf
     ).freeze
     # The graphics only the lowercase set has: the tick.
     LOWERCASE_GRAPHICS = { '✓' => 0xba, '✔' => 0xba }.freeze
     # Characters the lowercase set shows as the graphic of a look-alike:
     # double and heavy lines as single ones, rounded corners as square ones.
     LOOK_ALIKES = {
-      '━' => '─', '═' => '─', '┃' => '│', '║' => '│', '|' => '│',
-      '╔' => '┌', '╭' => '┌', '╗' => '┐', '╮' => '┐', '╚' => '└', '╰' => '└', '╝' => '┘', '╯' => '┘',
-      '╠' => '├', '╣' => '┤', '╦' => '┬', '╩' => '┴', '╬' => '┼',
-      '░' => '▒', '▓' => '▒', '_' => '▁', '^' => '↑'
+      '━' => '─',
+      '═' => '─',
+      '┃' => '│',
+      '║' => '│',
+      '|' => '│',
+      '╔' => '┌',
+      '╭' => '┌',
+      '╗' => '┐',
+      '╮' => '┐',
+      '╚' => '└',
+      '╰' => '└',
+      '╝' => '┘',
+      '╯' => '┘',
+      '╠' => '├',
+      '╣' => '┤',
+      '╦' => '┬',
+      '╩' => '┴',
+      '╬' => '┼',
+      '░' => '▒',
+      '▓' => '▒',
+      '_' => '▁',
+      '^' => '↑'
     }.freeze
     # The typography of a modern board in ASCII, for the characters the C64
     # has no glyph for.
     ASCII_FORMS = {
-      '\\' => '/', '`' => "'", '{' => '(', '}' => ')', '~' => '-',
-      '–' => '-', '—' => '-', '―' => '-', '‘' => "'", '’' => "'", '“' => '"', '”' => '"', '„' => '"',
-      '…' => '...', '·' => '.', '•' => '*', '●' => '*', '◆' => '*', '★' => '*', '■' => '*', '☼' => '*',
-      '○' => 'o', '◄' => '<', '◀' => '<', '‹' => '<', '«' => '<', '►' => '>', '▶' => '>', '▸' => '>',
-      '›' => '>', '»' => '>', '→' => '>', '↓' => 'v', '×' => 'x', '°' => 'o', '≈' => '-', '∿' => '-',
-      '≋' => '-', ' ' => ' ', 'ß' => 'ss', 'π' => 'pi'
+      '\\' => '/',
+      '`'  => "'",
+      '{'  => '(',
+      '}'  => ')',
+      '~'  => '-',
+      '–'  => '-',
+      '—'  => '-',
+      '―'  => '-',
+      '‘'  => "'",
+      '’'  => "'",
+      '“'  => '"',
+      '”'  => '"',
+      '„'  => '"',
+      '…'  => '...',
+      '·'  => '.',
+      '•'  => '*',
+      '●'  => '*',
+      '◆'  => '*',
+      '★'  => '*',
+      '■'  => '*',
+      '☼'  => '*',
+      '○'  => 'o',
+      '◄'  => '<',
+      '◀'  => '<',
+      '‹'  => '<',
+      '«'  => '<',
+      '►'  => '>',
+      '▶'  => '>',
+      '▸'  => '>',
+      '›'  => '>',
+      '»'  => '>',
+      '→'  => '>',
+      '↓'  => 'v',
+      '×'  => 'x',
+      '°'  => 'o',
+      '≈'  => '-',
+      '∿'  => '-',
+      '≋'  => '-',
+      ' '  => ' ',
+      'ß'  => 'ss',
+      'π'  => 'pi'
     }.freeze
     # What the Encoder writes for a character of the lowercase set: the
     # PETSCII code point of its graphic (GRAPHICS, LOWERCASE_GRAPHICS,
     # LOOK_ALIKES), or its ASCII form.
     GLYPHS = GRAPHICS.merge(LOWERCASE_GRAPHICS)
-                     .then { |codes| codes.merge(LOOK_ALIKES.transform_values { |c| codes.fetch(c) }) }
-                     .transform_values { |code| code.chr(Encoding::UTF_8) }
-                     .merge(ASCII_FORMS).freeze
+      .then { |codes| codes.merge(LOOK_ALIKES.transform_values { |c| codes.fetch(c) }) }
+      .transform_values { |code| code.chr(Encoding::UTF_8) }
+      .merge(ASCII_FORMS).freeze
 
     # Translates a +byte+ the C64 sent into a key the way BBS::Telnet#readkey
     # returns keys: a Symbol of KEYS (+:enter+, +:backspace+, the arrows,
@@ -239,9 +337,29 @@ module BBS
 
     # Letters and signs the C64 has no glyph for, spelled in ASCII by
     # ::plain where the Encoder would show a question mark.
-    SPELLED = { 'æ' => 'ae', 'Æ' => 'Ae', 'œ' => 'oe', 'Œ' => 'Oe', 'ø' => 'o', 'Ø' => 'O', 'ł' => 'l', 'Ł' => 'L',
-                'đ' => 'd', 'Đ' => 'D', 'þ' => 'th', 'Þ' => 'Th', 'ð' => 'd', 'Ð' => 'D', 'ı' => 'i',
-                '″' => '"', '′' => "'", '¡' => '!', '¿' => '?', '§' => 'S.', '¶' => '' }.freeze
+    SPELLED = {
+      'æ' => 'ae',
+      'Æ' => 'Ae',
+      'œ' => 'oe',
+      'Œ' => 'Oe',
+      'ø' => 'o',
+      'Ø' => 'O',
+      'ł' => 'l',
+      'Ł' => 'L',
+      'đ' => 'd',
+      'Đ' => 'D',
+      'þ' => 'th',
+      'Þ' => 'Th',
+      'ð' => 'd',
+      'Ð' => 'D',
+      'ı' => 'i',
+      '″' => '"',
+      '′' => "'",
+      '¡' => '!',
+      '¿' => '?',
+      '§' => 'S.',
+      '¶' => ''
+    }.freeze
 
     # A character ::plain converts: anything but printable ASCII and ESC, so
     # ANSI colours pass through.

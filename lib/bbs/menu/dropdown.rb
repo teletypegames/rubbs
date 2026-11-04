@@ -36,8 +36,14 @@ module BBS
       # +selected+ highlighted.
       def render(frame, selected)
         frame.shadow(x: @x, y: @y, width: @width, height: @height, sgr: @style.call(:window_shadow))
-        frame.box(x: @x, y: @y, width: @width, height: @height,
-                  sgr: @style.call(:menu_border), fill_sgr: @style.call(:menu_bg))
+        frame.box(
+          x:        @x,
+          y:        @y,
+          width:    @width,
+          height:   @height,
+          sgr:      @style.call(:menu_border),
+          fill_sgr: @style.call(:menu_bg)
+        )
         @menu.items.each_with_index { |item, i| render_item(frame, item, @y + 1 + i, i == selected) }
       end
 

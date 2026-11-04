@@ -7,10 +7,12 @@ module BBS
   # The database every BBS::Model stands on until its board binds its own:
   # it refuses every query and write (Model::Unbound), so nothing a model
   # does before then goes unnoticed.
-  UNBOUND_DATABASE = Sequel.mock(host: 'sqlite',
-                                 fetch: ->(sql) { sql.end_with?('LIMIT 0') ? [] : raise(Model::Unbound, sql) },
-                                 numrows: ->(sql) { raise Model::Unbound, sql },
-                                 autoid: ->(sql) { raise Model::Unbound, sql })
+  UNBOUND_DATABASE = Sequel.mock(
+    host:    'sqlite',
+    fetch:   ->(sql) { sql.end_with?('LIMIT 0') ? [] : raise(Model::Unbound, sql) },
+    numrows: ->(sql) { raise Model::Unbound, sql },
+    autoid:  ->(sql) { raise Model::Unbound, sql }
+  )
 
   # The model of one table of a board's database: a Sequel::Model whose
   # table is named in the class and whose database is bound when the board

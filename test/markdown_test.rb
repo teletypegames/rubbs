@@ -13,7 +13,8 @@ class MarkdownTest < Minitest::Test
   def test_renders_the_corpus_as_before
     MARKDOWN_CORPUS.each do |name, text|
       [20, 40, 80].each do |w|
-        assert_equal EXPECTED["#{name}/#{w}/theme"], BBS::Markdown.to_lines(text, width: w, theme: BBS::Theme.synchronet),
+        assert_equal EXPECTED["#{name}/#{w}/theme"],
+                     BBS::Markdown.to_lines(text, width: w, theme: BBS::Theme.synchronet),
                      "#{name} at #{w} (theme)"
         assert_equal EXPECTED["#{name}/#{w}/hash"], lines(text, width: w), "#{name} at #{w} (hash)"
       end

@@ -22,8 +22,10 @@ class CommandDslTest < Minitest::Test
       command(:secret, 'Secret', key: 'F9', hint: false) { context[:taken] << :secret }
       menu 'Wiki', :search, :separator, :log_off
     end
-    assert_equal([['F2', 'Search', false], ['F9', 'Secret', true], %w[F10 Menu] + [false], ['Alt-X', 'Bye', false]],
-                 app.statusbar.hints.map { |h| [h.key, h.label, h.hidden] })
+    assert_equal(
+      [['F2', 'Search', false], ['F9', 'Secret', true], %w[F10 Menu] + [false], ['Alt-X', 'Bye', false]],
+      app.statusbar.hints.map { |h| [h.key, h.label, h.hidden] }
+    )
     labels = app.menubar.menus.first.items.map(&:label)
     assert_equal ['&Search…', '', '&Log off'], labels
     app.statusbar.handle_event(BBS::Event.key(:f9))

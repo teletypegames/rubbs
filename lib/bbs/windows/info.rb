@@ -48,8 +48,15 @@ module BBS
       DEFAULT_PADDING = { sides: 2, top: 1, bottom: 2 }.freeze
 
       # The options of ::new and their defaults.
-      OPTIONS = { body: [], buttons: nil, width: 60, height: nil, scroll: false, padding: nil,
-                  maximizable: false }.freeze
+      OPTIONS = {
+        body:        [],
+        buttons:     nil,
+        width:       60,
+        height:      nil,
+        scroll:      false,
+        padding:     nil,
+        maximizable: false
+      }.freeze
       # The body rows of a scrolling window without a height of its own.
       SCROLL_ROWS = 10
 

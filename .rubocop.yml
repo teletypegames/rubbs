@@ -6,25 +6,42 @@ AllCops:
     - "vendor/**/*"
     - "doc/**/*"
 
-# The house style aligns hashes, assignments and keyword arguments as tables.
-Layout/HashAlignment:
-  Enabled: false
-Layout/ExtraSpacing:
-  AllowForAlignment: true
+# The layout is the formatter's: `rubocop -a` puts every file in this shape.
+# What fits on a line (130) goes on one line; a call, a definition or a
+# hash that does not gets one argument (key, parameter) a line, the closing
+# bracket on a line of its own, and its keys lined up as a table.
 Layout/LineLength:
   Max: 130
   AutoCorrect: false
-# Continuation lines line up with what they continue, not with the call.
-Layout/FirstArgumentIndentation:
-  Enabled: false
-Layout/ArgumentAlignment:
-  Enabled: false
-Layout/MultilineMethodCallBraceLayout:
-  Enabled: false
-Layout/ClosingParenthesisIndentation:
-  Enabled: false
-Layout/EmptyLineAfterGuardClause:
-  Enabled: false
+Layout/RedundantLineBreak:
+  Enabled: true
+Layout/FirstMethodArgumentLineBreak:
+  Enabled: true
+  AllowMultilineFinalElement: true
+Layout/MultilineMethodArgumentLineBreaks:
+  Enabled: true
+  AllowMultilineFinalElement: true
+Layout/FirstMethodParameterLineBreak:
+  Enabled: true
+Layout/MultilineMethodParameterLineBreaks:
+  Enabled: true
+Layout/FirstHashElementLineBreak:
+  Enabled: true
+  AllowMultilineFinalElement: true
+Layout/MultilineHashKeyLineBreaks:
+  Enabled: true
+  AllowMultilineFinalElement: true
+Layout/FirstHashElementIndentation:
+  EnforcedStyle: consistent
+Layout/FirstArrayElementIndentation:
+  EnforcedStyle: consistent
+Layout/MultilineMethodCallIndentation:
+  EnforcedStyle: indented
+Layout/HashAlignment:
+  EnforcedColonStyle: table
+  EnforcedHashRocketStyle: table
+Layout/ExtraSpacing:
+  AllowForAlignment: true
 
 # Key tables (`when :x then …; :keep`) read best on one line.
 Style/BlockDelimiters:
@@ -50,7 +67,7 @@ Style/Documentation:
 # Small methods.
 Metrics/MethodLength:
   Max: 15
-  CountAsOne: [array, hash, heredoc]
+  CountAsOne: [array, hash, heredoc, method_call]
   Exclude:
     - "test/**/*"
 # Options are keyword arguments with defaults, documented one by one.
@@ -69,11 +86,12 @@ Metrics/BlockLength:
     - "bbs.gemspec"
 # Data (a table, a list, a heredoc) counts as one line: a preset is not code.
 Metrics/ClassLength:
-  CountAsOne: [array, hash, heredoc]
+  Max: 120
+  CountAsOne: [array, hash, heredoc, method_call]
   Exclude:
     - "test/**/*"
 Metrics/ModuleLength:
-  CountAsOne: [array, hash, heredoc]
+  CountAsOne: [array, hash, heredoc, method_call]
 
 # BBS::Cache#fetch takes a block, not a default.
 Style/RedundantFetchBlock:

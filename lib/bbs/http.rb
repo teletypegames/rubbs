@@ -88,8 +88,20 @@ module BBS
     class Request
       # Prepares a request; the options are those of HTTP.get, +method+ is
       # +:get+ or +:post+ and +body+ the body of a POST.
-      def initialize(method, url, body: nil, headers: {}, open_timeout: 5, read_timeout: 15, deadline: 30,
-                     max_bytes: MAX_BYTES, redirects: 3, user_agent: BBS.config.user_agent, public_only: true, to: nil)
+      def initialize(
+        method,
+        url,
+        body: nil,
+        headers: {},
+        open_timeout: 5,
+        read_timeout: 15,
+        deadline: 30,
+        max_bytes: MAX_BYTES,
+        redirects: 3,
+        user_agent: BBS.config.user_agent,
+        public_only: true,
+        to: nil
+      )
         @method      = method
         @url         = url.to_s
         @body        = body

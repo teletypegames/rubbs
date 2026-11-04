@@ -39,9 +39,18 @@ module BBS
     # item.
     class MasterDetail < Window
       # The options of ::new and their defaults.
-      OPTIONS = { list_width: nil, bottom_meta: nil, actions: nil, on_activate: nil, close_button: true,
-                  close_label: '&Close', empty_message: '  (empty)', width: nil, height: nil,
-                  maximizable: false }.freeze
+      OPTIONS = {
+        list_width:    nil,
+        bottom_meta:   nil,
+        actions:       nil,
+        on_activate:   nil,
+        close_button:  true,
+        close_label:   '&Close',
+        empty_message: '  (empty)',
+        width:         nil,
+        height:        nil,
+        maximizable:   false
+      }.freeze
 
       # Creates a master/detail window with the keywords of MasterDetail.new
       # and opens it on +app+.

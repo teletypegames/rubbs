@@ -20,8 +20,14 @@ module BBS
       #
       #   ask 'Article title:', title: 'Search' do |text| look_up(text) end
       def ask(prompt, title: 'Input', value: '', width: Dialogs::INPUT_WIDTH, &on_submit)
-        Dialogs.input(self, prompt: prompt, title: title, value: value, width: width,
-                            on_submit: ->(text) { instance_exec(text, &on_submit) unless text.strip.empty? })
+        Dialogs.input(
+          self,
+          prompt:    prompt,
+          title:     title,
+          value:     value,
+          width:     width,
+          on_submit: ->(text) { instance_exec(text, &on_submit) unless text.strip.empty? }
+        )
       end
 
       # Opens a Yes/No box; Yes runs the block. Returns the Window.
@@ -74,8 +80,13 @@ module BBS
       # the Window.
       def qr(text, title: 'QR code')
         code = qr_code(text) or return message('The screen is too small for this QR code.', title: title)
-        Windows::Info.open(self, title: title, body: code, padding: QR_PADDING,
-                                 width: FrameBuffer.visible_width(code.first) + QR_CHROME[0])
+        Windows::Info.open(
+          self,
+          title:   title,
+          body:    code,
+          padding: QR_PADDING,
+          width:   FrameBuffer.visible_width(code.first) + QR_CHROME[0]
+        )
       end
 
       # Opens the declared window +name+ with +extras+ (see BBS::WindowSpec),

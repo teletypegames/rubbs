@@ -36,8 +36,18 @@ module BBS
       # [title]        text set into the top edge, clipped to fit
       # [title_sgr]    style of the title (defaults to +sgr+)
       # [title_indent] edge characters drawn before the title
-      def box(x:, y:, width:, height:, sgr: nil, fill_sgr: nil, style: :single, title: nil, title_sgr: nil,
-              title_indent: 0)
+      def box(
+        x:,
+        y:,
+        width:,
+        height:,
+        sgr: nil,
+        fill_sgr: nil,
+        style: :single,
+        title: nil,
+        title_sgr: nil,
+        title_indent: 0
+      )
         return if width < 2 || height < 2
 
         edge = Edge.new(x, width, BOX_CHARS[style] || BOX_CHARS[:single], sgr)

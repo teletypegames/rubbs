@@ -65,8 +65,11 @@ module BBS
 
     # The window class of each type.
     WINDOWS = {
-      info: Windows::Info, form: Windows::Form, master_detail: Windows::MasterDetail,
-      stream: Windows::Stream, reader: Windows::Reader
+      info:          Windows::Info,
+      form:          Windows::Form,
+      master_detail: Windows::MasterDetail,
+      stream:        Windows::Stream,
+      reader:        Windows::Reader
     }.freeze
 
     # The types whose windows are maximizable unless the spec says.

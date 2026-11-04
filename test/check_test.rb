@@ -6,15 +6,22 @@ require 'fileutils'
 
 class CheckTest < Minitest::Test
   BOARD = {
-    'bbs.rb' => "require 'bbs'\nrequire_relative 'lib/domain'\n\nBBS.board 'Shop BBS', ShopBBS do\n  modern APP\nend\n",
-    'Rakefile' => '', 'Gemfile' => '', 'Gemfile.lock' => '', 'README.md' => '',
-    'lib/domain.rb' => '',
-    'lib/domain/shop_bbs.rb' => "class ShopBBS\n  include BBS::Domain\nend\n",
-    'lib/domain/model/item_model.rb' => "ItemModel = Data.define(:name)\n",
+    'bbs.rb'                                   => "require 'bbs'\nrequire_relative 'lib/domain'\n\n" \
+                                                  "BBS.board 'Shop BBS', ShopBBS do\n  modern APP\nend\n",
+    'Rakefile'                                 => '',
+    'Gemfile'                                  => '',
+    'Gemfile.lock'                             => '',
+    'README.md'                                => '',
+    'lib/domain.rb'                            => '',
+    'lib/domain/shop_bbs.rb'                   => "class ShopBBS\n  include BBS::Domain\nend\n",
+    'lib/domain/model/item_model.rb'           => "ItemModel = Data.define(:name)\n",
     'lib/domain/repository/item_repository.rb' => "class ItemRepository\nend\n",
-    'lib/domain/service/item_service.rb' => "class ItemService\nend\n",
-    'lib/ui/modern.rb' => '', 'lib/ui/petscii.rb' => '', 'lib/ui/wording.rb' => '',
-    'test/test_helper.rb' => '', 'test/item_test.rb' => "require 'test_helper'\n"
+    'lib/domain/service/item_service.rb'       => "class ItemService\nend\n",
+    'lib/ui/modern.rb'                         => '',
+    'lib/ui/petscii.rb'                        => '',
+    'lib/ui/wording.rb'                        => '',
+    'test/test_helper.rb'                      => '',
+    'test/item_test.rb'                        => "require 'test_helper'\n"
   }.freeze
 
   def with_board(changes = {})
@@ -34,10 +41,14 @@ class CheckTest < Minitest::Test
   end
 
   def test_what_is_out_of_shape_is_named_with_its_rule
-    changes = { 'bbs.rb' => "BBS.configure { |c| c.flow = BBS::Terminal.flow(title: 'X', modern: a, petscii: b) }\n",
-                'lib/ui/words.rb' => '', 'lib/ui/petscii.rb' => nil,
-                'lib/domain/service/item_service.rb' => "class Items\nend\n",
-                'lib/ui/modern.rb' => "x = ENV.fetch('X')\n" }
+    changes = {
+      'bbs.rb'                             => 'BBS.configure { |c| c.flow = ' \
+                                              "BBS::Terminal.flow(title: 'X', modern: a, petscii: b) }\n",
+      'lib/ui/words.rb'                    => '',
+      'lib/ui/petscii.rb'                  => nil,
+      'lib/domain/service/item_service.rb' => "class Items\nend\n",
+      'lib/ui/modern.rb'                   => "x = ENV.fetch('X')\n"
+    }
     with_board(changes) do |dir|
       rules = BBS::Check.run(dir).map(&:rule).uniq.sort
       assert_equal %i[bbs_rb domain faces names old_forms wording], rules
@@ -63,11 +74,13 @@ class CheckTest < Minitest::Test
   end
 
   def test_tables_need_models_and_sql_stays_in_them
-    changes = { 'lib/domain/migrations.rb' => "MIGRATIONS = ['CREATE TABLE items (id INTEGER PRIMARY KEY)', " \
-                                              "'CREATE TABLE tags (id INTEGER)'].freeze\n",
-                'lib/domain/model/item_model.rb' => "class ItemModel < BBS::Model\n  table :items\nend\n",
-                'lib/domain/service/item_service.rb' => "class ItemService\n  def all = db.fetch('SELECT * FROM items')\nend\n",
-                'lib/domain/repository/item_repository.rb' => "class ItemRepository\n  Q = 'SELECT ?item WHERE { }'\nend\n" }
+    changes = {
+      'lib/domain/migrations.rb'                 => "MIGRATIONS = ['CREATE TABLE items (id INTEGER PRIMARY KEY)', " \
+                                                    "'CREATE TABLE tags (id INTEGER)'].freeze\n",
+      'lib/domain/model/item_model.rb'           => "class ItemModel < BBS::Model\n  table :items\nend\n",
+      'lib/domain/service/item_service.rb'       => "class ItemService\n  def all = db.fetch('SELECT * FROM items')\nend\n",
+      'lib/domain/repository/item_repository.rb' => "class ItemRepository\n  Q = 'SELECT ?item WHERE { }'\nend\n"
+    }
     with_board(changes) do |dir|
       findings = BBS::Check.run(dir).map { |f| [f.rule, f.path] }
       assert_includes findings, [:models, 'lib/domain/model/']

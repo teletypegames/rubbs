@@ -61,8 +61,15 @@ module BBS
     # [timeout]      seconds to wait for the connection, and for each read
     #                and write
     # [label]        the tag of its BBS.log lines
-    def initialize(url, max: MAX, relay_max: RELAY_MAX, relay_window: RELAY_WINDOW, embeds: true,
-                   timeout: TIMEOUT, label: 'Discord')
+    def initialize(
+      url,
+      max: MAX,
+      relay_max: RELAY_MAX,
+      relay_window: RELAY_WINDOW,
+      embeds: true,
+      timeout: TIMEOUT,
+      label: 'Discord'
+    )
       @uri          = url.to_s.empty? ? nil : URI(url.to_s)
       @max          = max
       @relay        = relay_max && RateLimit.new(limit: relay_max, per: relay_window)
@@ -92,8 +99,14 @@ module BBS
     private
 
     def deliver(payload)
-      Net::HTTP.start(@uri.host, @uri.port, use_ssl: @uri.scheme == 'https', open_timeout: @timeout,
-                                            read_timeout: @timeout, write_timeout: @timeout) do |http|
+      Net::HTTP.start(
+        @uri.host,
+        @uri.port,
+        use_ssl:       @uri.scheme == 'https',
+        open_timeout:  @timeout,
+        read_timeout:  @timeout,
+        write_timeout: @timeout
+      ) do |http|
         request = Net::HTTP::Post.new(@uri, 'Content-Type' => 'application/json')
         request.body = payload
         response = http.request(request)

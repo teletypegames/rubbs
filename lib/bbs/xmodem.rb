@@ -71,11 +71,9 @@ module BBS
     # The telnet IAC byte, doubled in the data on a telnet line.
     TELNET_IAC = Telnet::IAC.chr.b.freeze
     # Asks the terminal for telnet BINARY mode both ways.
-    BINARY_ON  = [Telnet::IAC, Telnet::WILL, Telnet::BINARY_OPT,
-                  Telnet::IAC, Telnet::DO, Telnet::BINARY_OPT].pack('C*').freeze
+    BINARY_ON  = [Telnet::IAC, Telnet::WILL, Telnet::BINARY_OPT, Telnet::IAC, Telnet::DO, Telnet::BINARY_OPT].pack('C*').freeze
     # Leaves telnet BINARY mode both ways.
-    BINARY_OFF = [Telnet::IAC, Telnet::WONT, Telnet::BINARY_OPT,
-                  Telnet::IAC, Telnet::DONT, Telnet::BINARY_OPT].pack('C*').freeze
+    BINARY_OFF = [Telnet::IAC, Telnet::WONT, Telnet::BINARY_OPT, Telnet::IAC, Telnet::DONT, Telnet::BINARY_OPT].pack('C*').freeze
 
     # Raised inside the sender when the caller or the terminal cancels.
     class Cancelled < StandardError; end

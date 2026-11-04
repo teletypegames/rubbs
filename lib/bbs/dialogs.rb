@@ -80,8 +80,12 @@ module BBS
     def self.confirm(app, text, title: 'Confirm', on_yes: nil, on_no: nil)
       lines  = wrap(text, WRAP_WIDTH)
       window = text_box(app, lines, fit(lines, CONFIRM_MIN_WIDTH), title)
-      pair(window, Widgets::Button.new(label: '&Yes', on_click: closer(app, window) { on_yes&.call }),
-           Widgets::Button.new(label: '&No', on_click: closer(app, window) { on_no&.call }), BUTTON_WIDTH)
+      pair(
+        window,
+        Widgets::Button.new(label: '&Yes', on_click: closer(app, window) { on_yes&.call }),
+        Widgets::Button.new(label: '&No', on_click: closer(app, window) { on_no&.call }),
+        BUTTON_WIDTH
+      )
       show(app, window)
     end
 
@@ -98,8 +102,12 @@ module BBS
       field = Widgets::TextInput.new(value: value)
       field.on_submit = closer(app, window) { on_submit&.call(field.value) }
       place(window, field, PADDING, INPUT_ROW, inner)
-      pair(window, Widgets::Button.new(label: '&OK', on_click: field.on_submit),
-           Widgets::Button.new(label: '&Cancel', on_click: closer(app, window)), CANCEL_WIDTH)
+      pair(
+        window,
+        Widgets::Button.new(label: '&OK', on_click: field.on_submit),
+        Widgets::Button.new(label: '&Cancel', on_click: closer(app, window)),
+        CANCEL_WIDTH
+      )
       show(app, window, focus: field)
     end
 

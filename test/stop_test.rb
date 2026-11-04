@@ -6,8 +6,7 @@ require 'socket'
 # The server on a real port: the health probe and the stop in order.
 class StopTest < Minitest::Test
   def setup
-    @saved = [BBS.config.flow, BBS.config.shutdown_seconds, BBS.config.on_session_end, BBS.config.health,
-              BBS.config.log_format]
+    @saved = [BBS.config.flow, BBS.config.shutdown_seconds, BBS.config.on_session_end, BBS.config.health, BBS.config.log_format]
     BBS.config.shutdown_seconds = 0.5
     BBS.config.log_format = :text
     BBS.config.flow = BBS::Flow.define { call { readline } }
@@ -18,8 +17,7 @@ class StopTest < Minitest::Test
 
   def teardown
     @runner&.kill
-    BBS.config.flow, BBS.config.shutdown_seconds, BBS.config.on_session_end, BBS.config.health,
-      BBS.config.log_format = @saved
+    BBS.config.flow, BBS.config.shutdown_seconds, BBS.config.on_session_end, BBS.config.health, BBS.config.log_format = @saved
   end
 
   def test_health_probe

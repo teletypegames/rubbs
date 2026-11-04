@@ -14,8 +14,13 @@ class MenubarTest < Minitest::Test
   end
 
   def item(label, shortcut = nil, result = nil, enabled: true)
-    BBS::Menubar::MenuItem.new(label: label, shortcut: shortcut, enabled: enabled, separator: false,
-                               on_select: ->(i) { @chosen << i.display; result })
+    BBS::Menubar::MenuItem.new(
+      label:     label,
+      shortcut:  shortcut,
+      enabled:   enabled,
+      separator: false,
+      on_select: ->(i) { @chosen << i.display; result }
+    )
   end
 
   def separator = BBS::Menubar::MenuItem.new(label: '', enabled: false, separator: true)

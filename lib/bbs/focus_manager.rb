@@ -58,6 +58,7 @@ module BBS
     # Returns the widget's result, or +nil+ when nothing has the focus.
     def dispatch(event)
       return nil unless @focused
+
       @focused.handle_event(event)
     end
 

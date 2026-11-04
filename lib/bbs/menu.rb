@@ -27,8 +27,13 @@ module BBS
   class Menubar < Widget
     # The keys of an open menu and the method each one calls.
     KEYS = {
-      left: :previous_menu, right: :next_menu, up: :previous_item, down: :next_item,
-      escape: :close, f10: :close, enter: :activate
+      left:   :previous_menu,
+      right:  :next_menu,
+      up:     :previous_item,
+      down:   :next_item,
+      escape: :close,
+      f10:    :close,
+      enter:  :activate
     }.freeze
 
     # The Array of Menu entries, in bar order.
@@ -197,8 +202,13 @@ module BBS
     # column of the next one.
     def render_label(frame, menu, index, x)
       lit = @open_index == index
-      menu.render(frame, x, bounds.y, style(lit ? :menubar_selected : :menubar),
-                  style(lit ? :menubar_sel_hot : :menubar_hotkey))
+      menu.render(
+        frame,
+        x,
+        bounds.y,
+        style(lit ? :menubar_selected : :menubar),
+        style(lit ? :menubar_sel_hot : :menubar_hotkey)
+      )
     end
   end
 end

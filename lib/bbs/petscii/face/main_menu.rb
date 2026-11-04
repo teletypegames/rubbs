@@ -40,8 +40,14 @@ module BBS
         # +if+ is a block (evaluated in the face) that hides the item when it
         # answers false.
         def item(key, label, about = nil, color: nil, if: nil, &action)
-          @entries << Entry.new(key: key, label: label, about: about, action: action, color: color,
-                                shown: binding.local_variable_get(:if))
+          @entries << Entry.new(
+            key:    key,
+            label:  label,
+            about:  about,
+            action: action,
+            color:  color,
+            shown:  binding.local_variable_get(:if)
+          )
         end
 
         # Items made each round from what the block +source+ gives (evaluated
@@ -76,8 +82,7 @@ module BBS
         def take(face)
           draw_home(face)
           entries = expand(face)
-          picked  = face.menu(items(face, entries), index: index_of(entries, face.cursors[self]), back: @back,
-                                                    hint: @hint)
+          picked  = face.menu(items(face, entries), index: index_of(entries, face.cursors[self]), back: @back, hint: @hint)
           face.cursors[self] = picked
           run(face, entries, picked)
         end

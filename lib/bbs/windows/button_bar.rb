@@ -49,8 +49,11 @@ module BBS
         place(window, widgets, descriptors)
         widgets.each { |w| window.add(w) }
         pairs = descriptors.zip(widgets)
-        { widgets: widgets, primary: pairs.find { |d, _| d[:primary] }&.last,
-          by_key: pairs.select { |d, _| d[:key] }.to_h { |d, w| [d[:key], w] } }
+        {
+          widgets: widgets,
+          primary: pairs.find { |d, _| d[:primary] }&.last,
+          by_key:  pairs.select { |d, _| d[:key] }.to_h { |d, w| [d[:key], w] }
+        }
       end
 
       # Positions (or re-positions) the bar's +widgets+, built from

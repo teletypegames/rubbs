@@ -9,8 +9,17 @@ module BBS
       module Player
         # What a control code does, by code: the method that plays it.
         CONTROLS = {
-          CLEAR => :wipe, HOME => :home, RVS_ON => :rvs_on, RVS_OFF => :rvs_off, CR => :newline,
-          UPPERCASE => :upper, LOWERCASE => :lower, DOWN => :down, UP => :up, RIGHT => :advance, LEFT => :back
+          CLEAR     => :wipe,
+          HOME      => :home,
+          RVS_ON    => :rvs_on,
+          RVS_OFF   => :rvs_off,
+          CR        => :newline,
+          UPPERCASE => :upper,
+          LOWERCASE => :lower,
+          DOWN      => :down,
+          UP        => :up,
+          RIGHT     => :advance,
+          LEFT      => :back
         }.freeze
         # The codes the screen editor prints.
         PRINTED = [0x20..0x7f, 0xa0..0xff].freeze

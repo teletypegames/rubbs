@@ -9,9 +9,16 @@ module BBS
     class Encoder
       # What a control character does, by code: the method that handles it.
       CONTROL_ACTIONS = {
-        Ascii::ESC => :start_escape, Ascii::CR => :carriage_return, Ascii::LF => :line_feed,
-        Ascii::BS => :backspace, Ascii::TAB => :tab, Ascii::FF => :clear, CLEAR.ord => :clear,
-        HOME.ord => :home, RVS_ON.ord => :rvs_on, RVS_OFF.ord => :rvs_off
+        Ascii::ESC  => :start_escape,
+        Ascii::CR   => :carriage_return,
+        Ascii::LF   => :line_feed,
+        Ascii::BS   => :backspace,
+        Ascii::TAB  => :tab,
+        Ascii::FF   => :clear,
+        CLEAR.ord   => :clear,
+        HOME.ord    => :home,
+        RVS_ON.ord  => :rvs_on,
+        RVS_OFF.ord => :rvs_off
       }.freeze
       # The pen after a reset: no bold, no dim, the default colour.
       PLAIN_PEN = { bold: false, dim: false, fg: nil }.freeze

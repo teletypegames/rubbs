@@ -5,20 +5,20 @@ module BBS
     # The forms rubbs 2 replaced, each with what to write instead
     # (UPGRADING.md has the whole story).
     OLD_FORMS = {
-      /\bBBS\.configure\b/ => 'BBS.board says it (bbs.rb)',
-      /\bTerminal\.flow\b/ => 'BBS.board builds the terminal question',
+      /\bBBS\.configure\b/                            => 'BBS.board says it (bbs.rb)',
+      /\bTerminal\.flow\b/                            => 'BBS.board builds the terminal question',
       /\bGoodbye\.(?:modern|petscii|show)\(\s*runner/ => 'BBS.board says goodbye (goodbye … in bbs.rb)',
-      /rescue\s+IOError\s*,\s*Errno::EPIPE/ => 'a dropped line ends the call by itself (BBS::Hangup)',
-      /\bColors\.install\b/ => 'a BBS::Petscii::Face has the colours',
-      /\bctx\[:app\]/ => 'window blocks run in the application',
-      /\bwith_loading\b/ => 'loading(…, failed: …)',
-      /\bstatus_hint\b/ => 'command(…, key:)',
-      /\bmenubar\s+do\b/ => "menu 'Name', :command, …",
-      /\btitle:\s*' [^']+ '/ => 'titles are plain; the frame pads them',
-      /\bRateLimit\.caller_key\(/ => 'session.caller_key / caller_key',
-      /\bwindow\([^)]*type:\s*:/ => 'window :name, :type do … end',
-      /\braise IOError,\s*['"][^'"]*hung up/ => 'raise BBS::Hangup',
-      /\bBBS::SQLite\b/ => 'a BBS::Model for each table (rubbs 2.3)'
+      /rescue\s+IOError\s*,\s*Errno::EPIPE/           => 'a dropped line ends the call by itself (BBS::Hangup)',
+      /\bColors\.install\b/                           => 'a BBS::Petscii::Face has the colours',
+      /\bctx\[:app\]/                                 => 'window blocks run in the application',
+      /\bwith_loading\b/                              => 'loading(…, failed: …)',
+      /\bstatus_hint\b/                               => 'command(…, key:)',
+      /\bmenubar\s+do\b/                              => "menu 'Name', :command, …",
+      /\btitle:\s*' [^']+ '/                          => 'titles are plain; the frame pads them',
+      /\bRateLimit\.caller_key\(/                     => 'session.caller_key / caller_key',
+      /\bwindow\([^)]*type:\s*:/                      => 'window :name, :type do … end',
+      /\braise IOError,\s*['"][^'"]*hung up/          => 'raise BBS::Hangup',
+      /\bBBS::SQLite\b/                               => 'a BBS::Model for each table (rubbs 2.3)'
     }.freeze
 
     # The layers of a board's domain, each a folder of lib/domain; a board
