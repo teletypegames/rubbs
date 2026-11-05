@@ -16,6 +16,7 @@ module BBS
       WORDS = {
         wrong:       'Wrong name or password.',
         locked:      'Too many wrong passwords. Try again later.',
+        banned:      'This account is closed.',
         busy:        'The board is busy. Try again in a moment.',
         unavailable: 'Logging in is not possible right now. Try again later.'
       }.freeze

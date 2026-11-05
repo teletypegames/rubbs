@@ -19,6 +19,12 @@ module BBS
     # loop reads it, so a board can give one caller more
     # time (a sysop) or less; see #idle_seconds=.
     attr_reader :idle_seconds
+    # When the call came in (a Time).
+    attr_reader :started_at
+    # Where the caller is now, for a sysop's list of the calls
+    # (BBS.calls): the section they opened last (BBS::Log.use), the board a
+    # gateway carries them to (BBS::Gateway#call), or +nil+.
+    attr_accessor :place
 
     # Wraps +client+, the accepted socket (any IO with +read+, +write+ and
     # +close+), and notes its address (Telnet::Forwarded#peer_ip) while the
@@ -27,6 +33,7 @@ module BBS
       @client       = client
       @session_id   = SecureRandom.hex(8)
       @idle_seconds = BBS.config.idle_seconds
+      @started_at   = Time.now
       peer_ip
     end
 
@@ -37,6 +44,16 @@ module BBS
     def idle_seconds=(seconds)
       @idle_seconds = seconds
       @client.timeout = seconds || Server::DEFAULT_TIMEOUT if @client.respond_to?(:timeout=)
+    end
+
+    # Ends the call from any thread (a sysop hanging a caller up): the line
+    # is closed, so the caller's thread stops at its next read or write,
+    # inside a gateway too, and the call ends as dropped. Returns +nil+.
+    def hang_up
+      @client.close
+      nil
+    rescue StandardError
+      nil
     end
 
     # Tells the caller +text+ now, from any thread (the server's shutdown

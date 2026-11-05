@@ -23,6 +23,20 @@ class ServerTest < Minitest::Test
     assert_equal :ok, @server.admit('8.8.8.8')
   end
 
+  def test_the_calls_on_the_line_and_hanging_one_up
+    socket = Struct.new(:closed) { def close = self.closed = true }.new(false)
+    sessions = 2.times.map { BBS::Session.new(socket) }
+    threads = sessions.map { |s| Thread.new { @server.send(:enlist, s) } }.each(&:join)
+    assert_equal sessions.sort_by(&:started_at), @server.live
+    BBS::Server.current = @server
+    assert_equal 2, BBS.calls.size
+    sessions.first.hang_up
+    assert socket.closed
+  ensure
+    BBS::Server.current = nil
+    threads&.each(&:kill)
+  end
+
   def test_local_peers_are_not_limited_per_ip
     5.times { assert_equal :ok, @server.admit('172.18.0.5') }
     3.times { assert_equal :ok, @server.admit(nil) }

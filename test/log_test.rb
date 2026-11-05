@@ -57,6 +57,18 @@ class LogTest < Minitest::Test
     refute record.key?('session')
   end
 
+  def test_recent_lines_are_kept_in_order
+    capture_io do
+      BBS.log('index', 'loaded', rfcs: 9700)
+      BBS.log('fetch', RuntimeError.new('boom'))
+    end
+    first, last = BBS::Log.recent(2)
+    assert_equal ['index', :info, 'loaded', { rfcs: 9700 }], [first.tag, first.level, first.message, first.fields]
+    assert_equal [:error, 'RuntimeError: boom'], [last.level, last.message]
+    capture_io { (BBS::Log::RECENT + 5).times { |i| BBS.log('n', i.to_s) } }
+    assert_equal [BBS::Log::RECENT, (BBS::Log::RECENT + 4).to_s], [BBS::Log.recent.size, BBS::Log.recent.last.message]
+  end
+
   def test_unknown_level
     assert_raises(ArgumentError) { BBS.log('x', 'y', level: :loud) }
   end

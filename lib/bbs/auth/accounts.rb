@@ -10,7 +10,7 @@ module BBS
     #
     #   database :accounts_db, BBS::Auth::MIGRATIONS, name: :auth
     MIGRATIONS = [
-      <<~SQL
+      <<~SQL,
         CREATE TABLE accounts (
           id              INTEGER PRIMARY KEY,
           name            TEXT NOT NULL,
@@ -29,11 +29,17 @@ module BBS
           PRIMARY KEY (account_id, role)
         );
       SQL
+      <<~SQL
+        ALTER TABLE accounts ADD COLUMN banned_at TEXT;
+        ALTER TABLE accounts ADD COLUMN banned_by TEXT;
+        ALTER TABLE accounts ADD COLUMN ban_reason TEXT;
+      SQL
     ].freeze
 
     # An account: its name as written, the key and skeleton it is found and
-    # compared by (BBS::Auth::Names) and the digest of its password
-    # (BBS::Auth::Password).
+    # compared by (BBS::Auth::Names), the digest of its password
+    # (BBS::Auth::Password) and, for a banned account, when, by whom and why
+    # (+banned_at+, +banned_by+, +ban_reason+).
     class AccountModel < Model
       table :accounts, database: :auth
 
@@ -49,6 +55,9 @@ module BBS
 
       # The roles of the account, sorted.
       def roles = RoleModel.where(account_id: id).order(:role).select_map(:role)
+
+      # Whether the account is banned (it cannot log in).
+      def banned? = !banned_at.nil?
     end
 
     # A role of an account: a word the boards check (+sysop+, +blogger+), who

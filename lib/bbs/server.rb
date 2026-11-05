@@ -53,6 +53,7 @@ module BBS
       @listener = TCPServer.new('0.0.0.0', @port)
       @port     = @listener.addr[1]
       BBS.log('server', "listening on port #{@port}", port: @port, rubbs: BBS.version)
+      Server.current = self
       stop_on_term
       loop { serve(accept(@listener)) }
     rescue Interrupt
@@ -70,6 +71,17 @@ module BBS
 
     # The number of callers on the line now.
     def callers = @mu.synchronize { @sessions }
+
+    # The calls on the line now: their BBS::Session objects, the earliest
+    # first (BBS::Session#started_at). A sysop's screen lists them
+    # (BBS.calls) and can hang one up (BBS::Session#hang_up).
+    def live = @mu.synchronize { @live.values }.sort_by(&:started_at)
+
+    class << self
+      # The server whose #run is serving callers in this process, or +nil+
+      # before one starts. BBS.calls asks it.
+      attr_accessor :current
+    end
 
     # Takes a call from the IP +address+ (a String, +nil+ when unknown) when
     # there is room, and counts it. Returns the verdict:

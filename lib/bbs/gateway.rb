@@ -141,7 +141,23 @@ module BBS
     # (<tt>host:port</tt>), +seconds+ on the other board, who hung up
     # (+by+: +board+ or +caller+) and the +result+ (+ok+, or +failed+ when
     # it did not connect).
-    def call(session, _context = {})
+    def call(session, _context = {}, &) = visiting(session) { cross(session, &) }
+
+    private
+
+    # Runs the block with the board's name as the caller's place
+    # (BBS::Session#place), the place before it back afterwards.
+    def visiting(session)
+      return yield unless session.respond_to?(:place=)
+
+      place = session.place
+      session.place = "› #{@name}"
+      yield
+    ensure
+      session.place = place if session.respond_to?(:place=)
+    end
+
+    def cross(session)
       report  = Report.new(connected: false, received: 0)
       started = monotonic
       remote  = connect(session, report) or return
@@ -152,8 +168,6 @@ module BBS
       crossed(report, started) if report
       yield report if block_given? && report
     end
-
-    private
 
     def crossed(report, started)
       facts = { door: @name, host: "#{@host}:#{@port}", seconds: (monotonic - started).round }

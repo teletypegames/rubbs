@@ -31,8 +31,16 @@ module BBS
     USE_NAME = 40
     # The thread-local key of the current session (for its caller's IP).
     CALLER_KEY = :bbs_session
+    # Lines ::recent keeps.
+    RECENT = 500
 
-    @mutex = Mutex.new
+    # A line as ::recent keeps it: its +time+ (a Time), +level+ (a Symbol),
+    # +tag+, +message+ (the words; an exception's class and message) and
+    # +fields+ (a Hash, with +session+ and +ip+ when written in a call).
+    Entry = Data.define(:time, :level, :tag, :message, :fields)
+
+    @mutex  = Mutex.new
+    @recent = []
 
     class << self
       # Writes one line: +tag+ (what it is about), +message+ (a String or an
@@ -43,10 +51,20 @@ module BBS
         level ||= message.is_a?(Exception) ? :error : :info
         raise ArgumentError, "unknown log level #{level.inspect}" unless LEVELS.include?(level)
 
-        line = BBS.config.log_format.to_s == 'json' ? json(tag, message, level, fields) : text(tag, message, level, fields)
-        @mutex.synchronize { $stderr.write("#{line}\n") }
+        line  = BBS.config.log_format.to_s == 'json' ? json(tag, message, level, fields) : text(tag, message, level, fields)
+        entry = entry(tag, message, level, fields)
+        @mutex.synchronize do
+          $stderr.write("#{line}\n")
+          @recent << entry
+          @recent.shift while @recent.size > RECENT
+        end
         nil
       end
+
+      # The last lines written in this process (at most RECENT, or +limit+),
+      # the oldest first, as Entry values: a sysop's screen reads the log
+      # without the server's shell.
+      def recent(limit = RECENT) = @mutex.synchronize { @recent.last(limit) }
 
       # Runs the block with +session_id+ as the session of the lines it
       # writes in this thread. With +caller+ (the BBS::Session, or anything
@@ -74,6 +92,9 @@ module BBS
       def use(name, kind:, face:)
         name = use_name(name)
         return nil if name.empty?
+
+        caller = Thread.current[CALLER_KEY]
+        caller.place = name if caller.respond_to?(:place=)
 
         write('use', name, face: face.to_s, kind: kind.to_s)
       end
@@ -111,6 +132,12 @@ module BBS
         record.merge!(message.is_a?(Exception) ? error_facts(message, level) : { msg: message.to_s })
         record[:session] = session_id if session_id
         JSON.generate(record.merge(call_facts, fields))
+      end
+
+      def entry(tag, message, level, fields)
+        words = message.is_a?(Exception) ? "#{message.class}: #{message.message}" : message.to_s
+        facts = { session: session_id }.compact.merge(call_facts, fields)
+        Entry.new(time: Time.now, level: level, tag: tag.to_s, message: words, fields: facts)
       end
 
       # The +ip+ of the caller of this thread, when there is one.

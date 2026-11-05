@@ -114,6 +114,13 @@ module BBS
     Server.new(port: port).run
   end
 
+  # The calls on this board's line now (BBS::Server#live of
+  # BBS::Server.current): BBS::Session objects, the earliest first; empty
+  # when no server runs in this process.
+  #
+  #   BBS.calls.map { |s| [s.caller_name || 'guest', s.caller_ip, s.place] }
+  def self.calls = Server.current&.live || []
+
   # Writes one line to the log (stderr, BBS::Log): the board's
   # <tt>BBS.config.log_tag</tt>, +tag+ (what the line is about),
   # +message+ (a String or an exception: its class, message and, at the

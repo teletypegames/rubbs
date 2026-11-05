@@ -13,6 +13,7 @@ module BBS
     # The answers are Identity (source +:login+) or a Symbol:
     #
     # [:wrong]      no such name, or not its password
+    # [:banned]     the password is right, but a sysop banned the account
     # [:locked]     too many wrong passwords of late (BBS::Auth::Guard)
     # [:busy]       too many passwords checked at once
     # [:invalid]    not a name an account may have (BBS::Auth::Names::PATTERN)
@@ -22,6 +23,8 @@ module BBS
     # [:too_short]  the password is shorter than +min_password+
     # [:mismatch]   the password and its confirmation differ
     class Directory
+      include Sysop
+
       # The shortest password.
       MIN_PASSWORD = 6
 
@@ -53,6 +56,7 @@ module BBS
 
         account = AccountModel.named(name)
         return failed(name, caller_key) unless Password.match?(account&.password_digest, password)
+        return banned(account) if account.banned?
 
         welcome(account, password)
       rescue Password::Busy

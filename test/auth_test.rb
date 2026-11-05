@@ -107,6 +107,34 @@ class AuthDirectoryTest < Minitest::Test
     assert_equal :unknown, @directory.grant('nobody', :sysop)
   end
 
+  def test_a_banned_account_cannot_log_in
+    capture_io do
+      @directory.register('Ada', 'secret1')
+      @directory.grant('ada', :sysop, by: 'test')
+      assert_equal :ok, @directory.ban('ada', by: 'Tasi', reason: 'spam')
+      assert_equal :wrong, @directory.log_in('ada', 'nope', caller_key: 'line:1')
+      assert_equal :banned, @directory.log_in('ada', 'secret1', caller_key: 'line:1')
+      assert_equal :banned, @directory.change_password('ada', 'secret1', 'secret9', caller_key: 'line:1')
+    end
+    entry = @directory.entry('ADA')
+    assert_equal [true, 'Tasi', 'spam', %w[member sysop]], [entry.banned?, entry.banned_by, entry.ban_reason, entry.roles]
+    capture_io { assert_equal :ok, @directory.unban('ada', by: 'Tasi') }
+    assert_equal 'Ada', @directory.log_in('ada', 'secret1', caller_key: 'line:1').name
+    assert_equal :unknown, @directory.ban('nobody', by: 'Tasi')
+  end
+
+  def test_the_accounts_of_a_sysop_list
+    capture_io do
+      %w[Bob Ada Cecil].each { |name| @directory.register(name, 'secret1') }
+      @directory.grant('cecil', :blogger)
+    end
+    assert_equal %w[Ada Bob Cecil], @directory.accounts.map(&:name)
+    assert_equal %w[Cecil], @directory.accounts('blogger').map(&:name)
+    assert_equal %w[Ada], @directory.accounts('AD').map(&:name)
+    assert_equal %w[blogger member], @directory.accounts.last.roles
+    refute @directory.accounts.first.banned?
+  end
+
   def test_statistics
     capture_io do
       @directory.register('Ada', 'secret1')

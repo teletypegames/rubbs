@@ -416,6 +416,13 @@ is not logged in `Login | Register | Guest` instead of PRESS ANY KEY: L and R op
 login or a new account (`Profile.run(session, start:)`), G goes on as a guest. A call handed on from
 another board has no splash, so nobody is asked twice.
 
+**The sysop's side.** The home of the accounts lists them and bans them (`Directory::Sysop`):
+`accounts(query)` (every account, or those whose name or role has `query`, as `Directory::Entry`
+values with roles, `last_seen_at` and the ban), `entry(name)`, `ban(name, by:, reason:)` and
+`unban(name, by:)`. A banned account's right password gets `:banned` (*This account is closed.*),
+through the API too, so no board lets it in; its calls go on until a board hangs them up
+(`BBS::Session#hang_up`, see *The calls on the line*).
+
 **Tests.** `BBS::Test.accounts` (a fresh accounts database and a `Directory`),
 `BBS::Test.auth_secret`, and `BBS::Test::Session.new(identity:, forwarded:)`.
 
@@ -467,6 +474,20 @@ Every call's context starts with `:started_at`, the time it came in;
 `BBS.duration(context[:started_at])` says how long it has lasted, the way a
 caller reads it: `45s`, `12m`, `2h 5m` (a number of seconds works too).
 
+### The calls on the line: `BBS.calls`
+
+`BBS.calls` is the board's calls now (`BBS::Server#live` of the running
+`BBS::Server.current`), the earliest first: `BBS::Session` objects with
+`started_at`, `caller_ip`, `caller_name`, `call_via`, `face` and `place`, where
+the caller is (the section they opened last, `BBS::Log.use`, or `› Name` while a
+`BBS::Gateway` carries them to another board). `session.hang_up` ends a call
+from another thread (a sysop's screen): the line closes and the caller's
+thread stops at its next read or write.
+
+```ruby
+BBS.calls.map { |s| [s.caller_name || 'guest', s.caller_ip, BBS.duration(Time.now - s.started_at), s.place] }
+```
+
 ### Logging and background work: `BBS.log`, `BBS.background`
 
 Every line the library and the board write to the log goes through one
@@ -491,6 +512,11 @@ bbs-web):
 ```json
 {"time":"2026-11-05T14:30:23.174+01:00","level":"info","board":"sample-bbs","tag":"call","msg":"ended","session":"5354408d60f30097","ip":"203.0.113.7","seconds":95,"end":"hung_up","via":"telnet","face":"petscii","cols":40,"rows":25,"naws":false}
 ```
+
+The last 500 lines of the process stay in memory too: `BBS::Log.recent(limit)`
+gives them as `BBS::Log::Entry` values (`time`, `level`, `tag`, `message`,
+`fields`), the oldest first, so a sysop's screen can show the log without the
+server's shell.
 
 The server writes a line when it starts listening (`server`, with the
 `rubbs` version), when it stops, for each caller it turns away (`BBS busy`,

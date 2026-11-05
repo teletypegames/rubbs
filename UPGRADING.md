@@ -1,3 +1,15 @@
+# rubbs 2.9
+
+For a sysop's screen: `BBS.calls` (the calls on the line, `BBS::Server#live` of `BBS::Server.current`),
+`BBS::Session#started_at`, `#place` (the section opened last, or `› Name` inside a gateway) and
+`#hang_up` (ends a call from another thread); `BBS::Log.recent` (the last 500 log lines as
+`BBS::Log::Entry`). The home of the accounts lists and bans them (`Directory::Sysop`: `accounts`,
+`entry`, `ban`, `unban`); a banned account's login is `:banned` (*This account is closed.*), through
+the API too.
+
+The accounts database gets its second migration (`banned_at`, `banned_by`, `ban_reason`), run by the
+home board at its next start. Nothing to change in a board.
+
 # rubbs 2.8.1
 
 The `call ended` line kept `ip` and `via` only while the line was open, so it was written with no address and
