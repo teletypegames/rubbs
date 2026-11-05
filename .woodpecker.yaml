@@ -21,7 +21,7 @@ steps:
       - gem build rubbs.gemspec
       - echo "==> Load check"
       - gem install --no-document ./rubbs-*.gem
-      - ruby -e 'require "rubbs"; puts "Rubbs betoltve: " + [Rubbs::Common, Rubbs::Modern, Rubbs::Petscii].map { |m| m.constants.size }.sum.to_s + " konstans"'
+      - ruby -e 'require "rubbs"; puts "Rubbs betoltve, " + [Rubbs::Common, Rubbs::Modern, Rubbs::Petscii].map { |m| m.constants.size }.sum.to_s + " konstans"'
 
   # A minitest-suite: a biztonsági és stabilitási korlátok és a közös
   # blokkok (Text, SQLite, Store, HTTP, Cache, RateLimit) tesztjei.

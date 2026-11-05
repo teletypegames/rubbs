@@ -1,3 +1,8 @@
+# rubbs 3.0.1
+
+The pipeline of 3.0.0 did not run (its YAML did not parse), so 3.0.0 was not checked by CI and its API reference
+was not published; 3.0.1 is the same gem with the pipeline mended. Nothing to change in a board.
+
 # rubbs 3.0
 
 The gem is **rubbs** now, in three parts: `Rubbs::Common` (what both faces need), `Rubbs::Modern` (an ANSI
