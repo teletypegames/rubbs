@@ -83,7 +83,7 @@ Metrics/CyclomaticComplexity:
 Metrics/BlockLength:
   Exclude:
     - "test/**/*"
-    - "bbs.gemspec"
+    - "rubbs.gemspec"
 # Data (a table, a list, a heredoc) counts as one line: a preset is not code.
 Metrics/ClassLength:
   Max: 120
