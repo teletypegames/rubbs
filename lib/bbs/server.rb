@@ -52,7 +52,7 @@ module BBS
     def run
       @listener = TCPServer.new('0.0.0.0', @port)
       @port     = @listener.addr[1]
-      BBS.log('server', "listening on port #{@port}", port: @port)
+      BBS.log('server', "listening on port #{@port}", port: @port, rubbs: BBS.version)
       stop_on_term
       loop { serve(accept(@listener)) }
     rescue Interrupt
@@ -153,7 +153,7 @@ module BBS
     end
 
     # One line per turned-away caller, so a log pipeline can count them: it
-    # holds "BBS busy" or "BBS crowded" (the Grafana VPS: BBS board counts
+    # holds "BBS busy" or "BBS crowded" (the Grafana BBS: Overview board counts
     # those).
     def refuse(client, address, verdict)
       BBS.log(

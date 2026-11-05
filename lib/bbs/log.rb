@@ -13,7 +13,10 @@ module BBS
   #    "tag":"catalog refresh","msg":"getaddrinfo failed","error":"SocketError","retry_in":10}
   #
   # A line written in a caller's thread carries the session's id
-  # (+session+), so the lines of one call can be read together.
+  # (+session+), so the lines of one call can be read together, and the
+  # caller's IP address (+ip+: the forwarded one of a call through another
+  # board or bbs-web, see Telnet::Forwarded#caller_ip), so a log pipeline can
+  # count callers and tell where they come from.
   module Log
     # The levels of a line, mildest first.
     LEVELS = %i[debug info warn error fatal].freeze
@@ -21,6 +24,13 @@ module BBS
     BACKTRACE_LINES = 5
     # The thread-local key of the current session's id.
     SESSION_KEY = :bbs_session_id
+    # An ANSI escape sequence (a colour of a label), left out of a +use+
+    # line's name.
+    ANSI_CODE = /\e\[[0-9;?]*[A-Za-z]/
+    # The longest name of a +use+ line (Log.use), in characters.
+    USE_NAME = 40
+    # The thread-local key of the current session (for its caller's IP).
+    CALLER_KEY = :bbs_session
 
     @mutex = Mutex.new
 
@@ -39,23 +49,57 @@ module BBS
       end
 
       # Runs the block with +session_id+ as the session of the lines it
-      # writes in this thread. Returns the block's value.
-      def with_session(session_id)
-        before = Thread.current[SESSION_KEY]
+      # writes in this thread. With +caller+ (the BBS::Session, or anything
+      # with a +caller_ip+), each line also carries the caller's IP address
+      # as +ip+, asked for when the line is written (the address a gateway
+      # forwards comes in after the call does). Returns the block's value.
+      def with_session(session_id, caller: nil)
+        before = [Thread.current[SESSION_KEY], Thread.current[CALLER_KEY]]
         Thread.current[SESSION_KEY] = session_id
+        Thread.current[CALLER_KEY]  = caller
         yield
       ensure
-        Thread.current[SESSION_KEY] = before
+        Thread.current[SESSION_KEY], Thread.current[CALLER_KEY] = before
       end
 
       # The id of the session whose thread this is, or +nil+.
       def session_id = Thread.current[SESSION_KEY]
 
+      # Writes the +use+ line of a section the caller opened: +name+ (a
+      # command's name, or a menu item's label, see ::use_name), its +kind+
+      # (+:command+ for a BBS::Application command, +:menu+ for an item of a
+      # PETSCII menu) and the +face+ (+:modern+ or +:petscii+). Returns +nil+.
+      #
+      #   {"tag":"use","msg":"feeds","face":"modern","kind":"command",…}
+      def use(name, kind:, face:)
+        name = use_name(name)
+        return nil if name.empty?
+
+        write('use', name, face: face.to_s, kind: kind.to_s)
+      end
+
+      # +label+ as the name of a +use+ line: without colour codes and
+      # hotkey marks, lower case, only letters, digits and single spaces, at
+      # most USE_NAME characters.
+      def use_name(label)
+        plain = label.to_s.gsub(ANSI_CODE, '').downcase.gsub(/[^[:alnum:]]+/, ' ').strip
+        plain[0, USE_NAME].to_s.strip
+      end
+
+      # The IP address of the caller whose thread this is, as a String, or
+      # +nil+ (no call, or a line without an address).
+      def caller_ip
+        caller = Thread.current[CALLER_KEY] or return nil
+        caller.caller_ip&.to_s
+      rescue StandardError
+        nil
+      end
+
       private
 
       def text(tag, message, level, fields)
         words = message.is_a?(Exception) ? "#{message.class}: #{message.message}" : message.to_s
-        facts = fields.map { |key, value| " #{key}=#{value}" }.join
+        facts = call_facts.merge(fields).map { |key, value| " #{key}=#{value}" }.join
         line  = "#{BBS.config.log_tag}: #{tag}: #{words}#{facts}"
         return line unless message.is_a?(Exception) && %i[error fatal].include?(level)
 
@@ -66,7 +110,13 @@ module BBS
         record = { time: Time.now.iso8601(3), level: level, board: BBS.config.log_tag, tag: tag.to_s }
         record.merge!(message.is_a?(Exception) ? error_facts(message, level) : { msg: message.to_s })
         record[:session] = session_id if session_id
-        JSON.generate(record.merge(fields))
+        JSON.generate(record.merge(call_facts, fields))
+      end
+
+      # The +ip+ of the caller of this thread, when there is one.
+      def call_facts
+        ip = caller_ip
+        ip ? { ip: ip } : {}
       end
 
       def error_facts(error, level)

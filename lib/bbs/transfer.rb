@@ -19,17 +19,38 @@ module BBS
 
     # Sends +data+ as the file +name+ on +session+ by +protocol+. Returns
     # +:ok+, +:cancelled+ or +:timeout+; raises BBS::Hangup when the line
-    # drops.
+    # drops. Writes a +transfer+ line of how it went.
     def self.send(session, protocol, name, data)
       result = case protocol
                when :zmodem    then Zmodem.send_files(session, [[name, data]])
                when :xmodem_1k then Xmodem.send_file(session, data, one_k: true)
                else Xmodem.send_file(session, data)
                end
+      transferred(result, protocol, name, data)
       raise Hangup if result == :hangup
 
       result
     end
+
+    # The message of the +transfer+ line (::send) by the result of a
+    # download; any other (the line hung up) is +dropped+.
+    OUTCOMES = { ok: 'sent', cancelled: 'cancelled', timeout: 'timeout' }.freeze
+
+    # The +transfer+ line of a download: +sent+, +cancelled+, +timeout+ or
+    # +dropped+, with the +file+'s name, its +bytes+ and the +protocol+
+    # (+zmodem+, +xmodem_1k+, +xmodem+).
+    def self.transferred(result, protocol, name, data)
+      outcome = OUTCOMES.fetch(result, 'dropped')
+      BBS.log(
+        'transfer',
+        outcome,
+        level:    outcome == 'sent' ? :info : :warn,
+        file:     name.to_s,
+        bytes:    data.to_s.bytesize,
+        protocol: protocol.to_s
+      )
+    end
+    private_class_method :transferred
 
     # What to tell the caller before the transfer of +name+ (+size+ bytes),
     # and, for XMODEM, the name to save it as (+save_as+, default +name+).

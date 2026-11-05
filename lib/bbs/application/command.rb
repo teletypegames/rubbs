@@ -9,9 +9,11 @@ module BBS
     Command = Struct.new(:name, :label, :key, :hint, :about, :action, :role, :available, keyword_init: true) do
       # Runs the action in +app+. Returns +:halt+ when the action did, else
       # +:handled+. A command for a role the caller lacks says so instead.
+      # Each run but the menubar's (+:menu+) writes a +use+ line (Log.use).
       def run(app)
         return refuse(app) unless available?(app)
 
+        Log.use(name, kind: :command, face: :modern) unless name == :menu
         app.instance_exec(&action) == :halt ? :halt : :handled
       end
 

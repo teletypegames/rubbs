@@ -129,6 +129,21 @@ module BBS
   # Returns +nil+.
   def self.log(tag, message, level: nil, **fields) = Log.write(tag, message, level: level, **fields)
 
+  # The version of rubbs running, a String (+"2.8.0"+): the loaded gem's,
+  # else the one in the checkout's bbs.gemspec; +"unknown"+ without either.
+  # The +server+ line of a board's start carries it (+rubbs+).
+  def self.version
+    @version ||= Gem.loaded_specs['bbs']&.version&.to_s || gemspec_version || 'unknown'
+  end
+
+  # The version written in the bbs.gemspec next to +lib+, or +nil+.
+  def self.gemspec_version
+    File.read(File.expand_path('../bbs.gemspec', __dir__))[/\.version\s*=\s*['"]([^'"]+)['"]/, 1]
+  rescue SystemCallError
+    nil
+  end
+  private_class_method :gemspec_version
+
   # +seconds+ as a short duration for a caller: <tt>45s</tt>, <tt>12m</tt>,
   # <tt>2h 5m</tt>. A Time is taken as the start of what lasted until now
   # (<tt>BBS.duration(context[:started_at])</tt>).

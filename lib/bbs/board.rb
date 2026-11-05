@@ -173,7 +173,7 @@ module BBS
     # flow with one.
     def flow
       faces = @faces.to_h { |name, face| [name, face_flow(face, @goodbye && !@own_goodbye.include?(name))] }
-      return faces.values.first if faces.size == 1
+      return Terminal.only(*faces.first) if faces.size == 1
 
       Terminal.flow(title: @title, modern: faces.fetch(:modern), petscii: faces.fetch(:petscii), splash: @preset.splash)
     end

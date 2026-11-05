@@ -38,6 +38,7 @@ module BBS
       end
 
       # The name of the board the call came through, or +nil+.
+      # (BBS::Session#call_via also names a call that was not forwarded.)
       def via = forwarded['BBS_VIA']
 
       # The caller's IP address as a String: the forwarded one when it is a

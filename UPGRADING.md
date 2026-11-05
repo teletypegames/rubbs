@@ -1,3 +1,17 @@
+# rubbs 2.8
+
+Log lines for a log pipeline to count callers and what they do (README, *Logging*): every line in a
+call carries `ip` next to `session` (`BBS::Log.with_session(id, caller: session)`); `call ended` also
+tells `via`, `face`, `cols`, `rows`, `naws` and `user`; new lines `use` (an Application command, a
+PETSCII menu item), `door crossed` (a door or a gateway), `transfer` (a download), `rate limit refused`;
+the `server` start line carries `rubbs` (`BBS.version`). `BBS::Session#face` and `#call_via`,
+`BBS::RateLimit#name`, `BBS::Terminal.only`.
+
+The lines of `BBS::DiscordWebhook` have the tag `discord` (msg `sent`, `failed`, `limited`) and the
+webhook's `label` as a field; before, the label was the tag and only failures were logged. A log query
+that looked for the label as the tag looks for `tag="discord"` and `label` now. Nothing to change in a
+board.
+
 # rubbs 2.7
 
 The splash of a board with a login asks a caller who is not logged in: `Login | Register | Guest`

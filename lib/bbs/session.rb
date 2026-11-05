@@ -62,6 +62,28 @@ module BBS
     # Sets who the caller is (a BBS::Auth::Identity).
     attr_writer :identity
 
+    # The face the call got, +:modern+ or +:petscii+ (set by
+    # BBS::Terminal.pick, or by the board for its only face); +nil+ while
+    # the caller has not got past the terminal question.
+    attr_accessor :face
+
+    # The name of the signed-in caller, or +nil+ for a guest. Unlike
+    # #identity it does not look at the line: a call whose identity was never
+    # asked for is a guest's.
+    def caller_name = @identity&.signed_in? ? @identity.name : nil
+
+    # Where the call came from: +"telnet"+ for a line from the internet,
+    # the name of the board or proxy that forwarded it (its +BBS_VIA+, such
+    # as +"bbs-web"+ or +"ttg-gate-bbs"+), or +"local"+ for a private or
+    # loopback line that forwarded nothing (a health check, Uptime Kuma, a
+    # door without +forward+). A line without an address is +"local"+ too.
+    def call_via
+      forwarded_via = forwarded['BBS_VIA'].to_s
+      return forwarded_via unless forwarded_via.empty?
+
+      Address.public?(peer_ip) ? 'telnet' : 'local'
+    end
+
     # The key the caller is known by for rate limits: their address, or the
     # line when it is local (BBS::RateLimit.caller_key).
     def caller_key = @caller_key ||= RateLimit.caller_key(self)

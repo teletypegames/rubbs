@@ -19,7 +19,7 @@ module BBS
   # is cut at +max+ characters, and at most +relay_max+ posts go out in
   # +relay_window+ seconds, however many callers post, so a crowd cannot
   # flood the channel: the rest are dropped and logged. Errors and answers
-  # other than 2xx are logged (BBS.log, with +label+ as the tag), never
+  # other than 2xx are logged (BBS.log, tag +discord+, with +label+), never
   # raised. Without a URL (+nil+ or empty) it is off and posts nothing.
   class DiscordWebhook
     # The default most characters of a post's content (Discord takes 2000).
@@ -60,7 +60,8 @@ module BBS
     # [embeds]       false to post with SUPPRESS_EMBEDS: no link previews
     # [timeout]      seconds to wait for the connection, and for each read
     #                and write
-    # [label]        the tag of its BBS.log lines
+    # [label]        the +label+ of its +discord+ log lines (+sent+,
+    #                +failed+, +limited+), which webhook it is
     def initialize(
       url,
       max: MAX,
@@ -72,7 +73,7 @@ module BBS
     )
       @uri          = url.to_s.empty? ? nil : URI(url.to_s)
       @max          = max
-      @relay        = relay_max && RateLimit.new(limit: relay_max, per: relay_window)
+      @relay        = relay_max && RateLimit.new(limit: relay_max, per: relay_window, name: 'discord relay')
       @embeds       = embeds
       @timeout      = timeout
       @label        = label
@@ -88,7 +89,7 @@ module BBS
     # webhook is off or the relay limit is reached (logged).
     def post(content)
       return unless enabled?
-      return BBS.log(@label, 'relay limit reached, not sent', level: :warn) unless @relay.nil? || @relay.allow?(:posts)
+      return BBS.log('discord', 'limited', level: :warn, label: @label) unless @relay.nil? || @relay.allow?(:posts)
 
       body = { content: content.to_s[0, @max], allowed_mentions: { parse: [] } }
       body[:flags] = SUPPRESS_EMBEDS unless @embeds
@@ -110,10 +111,14 @@ module BBS
         request = Net::HTTP::Post.new(@uri, 'Content-Type' => 'application/json')
         request.body = payload
         response = http.request(request)
-        BBS.log(@label, "HTTP #{response.code}", level: :warn) unless response.is_a?(Net::HTTPSuccess)
+        if response.is_a?(Net::HTTPSuccess)
+          BBS.log('discord', 'sent', label: @label)
+        else
+          BBS.log('discord', 'failed', level: :warn, label: @label, http: response.code.to_s)
+        end
       end
     rescue StandardError => e
-      BBS.log(@label, e, level: :warn)
+      BBS.log('discord', 'failed', level: :warn, label: @label, error: e.class.name, reason: e.message)
     end
   end
 end

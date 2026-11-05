@@ -483,18 +483,30 @@ BBS.log('catalog refresh', error, level: :warn, retry_in: 10)
 
 With `BBS_LOG_FORMAT=json` each line is a JSON object for a log pipeline
 (Loki, Elasticsearch): `time`, `level`, `board`, `tag`, `msg`, for an error
-`error` and `backtrace`, the facts given, and `session`, the id of the call
-whose thread wrote it, so the lines of one call can be read together:
+`error` and `backtrace`, the facts given, and in a call's thread `session`
+(the id of the call, so the lines of one call can be read together) and `ip`
+(the caller's address; the real one for a call forwarded by another board or
+bbs-web):
 
 ```json
-{"time":"2026-11-04T14:30:23.174+01:00","level":"info","board":"sample-bbs","tag":"call","msg":"ended","session":"5354408d60f30097","seconds":5,"end":"stopped"}
+{"time":"2026-11-05T14:30:23.174+01:00","level":"info","board":"sample-bbs","tag":"call","msg":"ended","session":"5354408d60f30097","ip":"203.0.113.7","seconds":95,"end":"hung_up","via":"telnet","face":"petscii","cols":40,"rows":25,"naws":false}
 ```
 
-The server writes a line when it starts listening, when it stops, for each
-caller it turns away (`BBS busy`, `BBS crowded`) and at the end of every call:
-how long it lasted and how it ended (`hung_up`, `dropped`, `error`,
-`stopped`). An error in a call is logged with its backtrace and ends only
-that call.
+The server writes a line when it starts listening (`server`, with the
+`rubbs` version), when it stops, for each caller it turns away (`BBS busy`,
+`BBS crowded`) and at the end of every call. An error in a call is logged with
+its backtrace and ends only that call. The lines the library writes for a log
+pipeline to count (Grafana's `BBS:` dashboards read them):
+
+| tag | msg | facts |
+|---|---|---|
+| `call` | `ended` | `seconds`; `end` (`hung_up`, `dropped`, `error`, `stopped`); `via`: `telnet` (a line from the internet), the board or proxy that forwarded the call (`bbs-web`, `ttg-gate-bbs` …), or `local` (a private line that forwarded nothing: a health check, Uptime Kuma); `face` (`modern`, `petscii`, `none` before the terminal question was answered); `cols`, `rows`; `naws` (whether the terminal reported its size); `user` (a signed-in caller's name, not for a guest) |
+| `use` | the section's name | a section the caller opened: `kind` `command` (an Application command, the command's name) or `menu` (a PETSCII menu item, its label in lower case); `face` |
+| `door` | `crossed` | a door or a gateway to another board: `door`, `host` (a gateway's), `seconds`, `by` (who hung up: `board`, `caller`), `result` (`ok`, `failed`) |
+| `transfer` | `sent`, `cancelled`, `timeout`, `dropped` | a download: `file`, `bytes`, `protocol` |
+| `discord` | `sent`, `failed`, `limited` | a `BBS::DiscordWebhook` post: `label`, for a failure `http` or `error` and `reason` |
+| `rate limit` | `refused` | a `BBS::RateLimit` without room: `limit` (the limits' names, `unnamed` without one) |
+| `auth` | the event | see [Accounts and login](#accounts-and-login-bbsauth) |
 
 Work out of the callers' way (an index loaded at boot, a catalog refreshed
 every hour) runs in a `BBS::Background` thread: an error is logged and the

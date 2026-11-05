@@ -131,11 +131,21 @@ module BBS
           end
         end
 
+        # The +use+ line of the taken +entry+ (Log.use), named by its label.
+        def used(face, entry)
+          label = entry.label.respond_to?(:call) ? face.instance_exec(&entry.label) : entry.label
+          Log.use(label, kind: :menu, face: :petscii)
+        rescue StandardError
+          nil
+        end
+
         def index_of(entries, key) = key && entries.index { |e| !e.heading && e.key == key }
 
         def run(face, entries, key)
           entry = entries.find { |e| !e.heading && e.key == key }
           return :log_off if key == :log_off || entry.nil? || entry.action == :log_off
+
+          used(face, entry)
           return key unless entry.action
 
           face.instance_exec(&entry.action)

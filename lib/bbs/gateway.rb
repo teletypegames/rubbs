@@ -136,17 +136,30 @@ module BBS
     #
     # With a block, yields a Report of the call once it is over (also when
     # the caller hung up and the IOError is on its way).
+    #
+    # Each call writes a +door crossed+ line: the +door+'s name, the +host+
+    # (<tt>host:port</tt>), +seconds+ on the other board, who hung up
+    # (+by+: +board+ or +caller+) and the +result+ (+ok+, or +failed+ when
+    # it did not connect).
     def call(session, _context = {})
-      report = Report.new(connected: false, received: 0)
-      remote = connect(session, report) or return
+      report  = Report.new(connected: false, received: 0)
+      started = monotonic
+      remote  = connect(session, report) or return
       raise IOError, 'the caller hung up' if carry(session, remote, report)
 
       back(session, "#{Ansi::RESET}#{Ansi::CRLF * 2}  #{@name} hung up. Press a key to return.")
     ensure
+      crossed(report, started) if report
       yield report if block_given? && report
     end
 
     private
+
+    def crossed(report, started)
+      facts = { door: @name, host: "#{@host}:#{@port}", seconds: (monotonic - started).round }
+      facts[:by] = report.hung_up.to_s if report.hung_up
+      BBS.log('door', 'crossed', **facts, result: report.connected ? 'ok' : 'failed')
+    end
 
     def idle_seconds = @idle || BBS.config.idle_seconds || Server::DEFAULT_TIMEOUT
 

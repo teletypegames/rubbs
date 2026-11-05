@@ -61,22 +61,42 @@ module BBS
     # the caller lands back on the board; IOError and SystemCallError (the
     # line dropped) are re-raised. Mouse reporting is switched back on
     # afterwards when <tt>BBS.config.mouse</tt> is set.
+    #
+    # A door whose program is not a BBS::Gateway (which writes its own)
+    # writes a +door crossed+ line when the program returns: the +door+'s
+    # name, the +seconds+ in it and the +result+ (+ok+, or +failed+ for an
+    # error of the program). A line that drops in the door writes none; its
+    # +call ended+ line follows.
     def run(session, context = {})
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      result  = 'ok'
       session.disable_mouse
       session.write("#{Ansi::RESET}#{Ansi::CLEAR}")
       start(session, context)
     rescue IOError, SystemCallError
+      result = nil
       raise
     rescue StandardError => e
+      result = 'failed'
       BBS.log("door #{@name}", e)
     ensure
       (session.enable_mouse if BBS.config.mouse) rescue nil
+      crossed(session, started, result) if result
     end
 
     private
 
+    def program_for(session) = session.respond_to?(:petscii?) && session.petscii? && @petscii ? @petscii : @program
+
+    def crossed(session, started, result)
+      return if program_for(session).is_a?(Gateway)
+
+      seconds = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round
+      BBS.log('door', 'crossed', door: @name.to_s, seconds: seconds, result: result)
+    end
+
     def start(session, context)
-      program = session.respond_to?(:petscii?) && session.petscii? && @petscii ? @petscii : @program
+      program = program_for(session)
       case program
       when FakeOS::Definition then FakeOS::Runner.new(session, program, context: context).run
       when Flow then run_flow(session, program, context)

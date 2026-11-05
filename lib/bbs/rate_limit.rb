@@ -53,25 +53,37 @@ module BBS
     # an Array of <tt>[limit, key]</tt> pairs.
     #
     #   BBS::RateLimit.allow_all?([[PER_CALLER, key], [PER_BOARD, :all]])
+    #
+    # A refusal writes a +rate limit refused+ line (level +info+) with the
+    # +limit+: the #name of each full limit (+unnamed+ for one without),
+    # joined by commas.
     def self.allow_all?(checks)
-      LOCK.synchronize do
-        next false unless checks.all? { |limit, key| limit.room?(key) }
-
-        checks.each { |limit, key| limit.record(key) }
-        true
+      full = LOCK.synchronize do
+        full = checks.reject { |limit, key| limit.room?(key) }
+        checks.each { |limit, key| limit.record(key) } if full.empty?
+        full
       end
+      return true if full.empty?
+
+      BBS.log('rate limit', 'refused', limit: full.map { |limit, _| limit.name || 'unnamed' }.uniq.join(','))
+      false
     end
 
     # Creates a limit of +limit+ events per +per+ seconds. With a +store+
     # (a Sequel::Database) the events are kept there under +name+ (a String,
-    # required then); without one, in memory.
+    # required then); without one, in memory. The +name+ also tells the
+    # limit in the log line of a refusal.
     def initialize(limit:, per:, store: nil, name: nil)
       raise ArgumentError, 'a stored RateLimit needs a name' if store && name.to_s.empty?
 
       @limit  = limit
       @per    = per
+      @name   = name&.to_s
       @events = store ? Table.new(store, name.to_s) : Memory.new
     end
+
+    # The limit's name (a String, the +limit+ of its log lines), or +nil+.
+    attr_reader :name
 
     # Returns whether +key+ may have one more event now, and counts it when
     # it may.

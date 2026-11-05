@@ -4,7 +4,8 @@ module BBS
   class Server
     # One call on a BBS::Server, from its session to its end: counted among
     # those on the line (BBS::Server::Stopping hangs up on them), its errors
-    # logged, +on_session_end+ called and one log line of how it went.
+    # logged, +on_session_end+ called and one log line of how it went
+    # (#call_facts).
     module Calls
       private
 
@@ -13,7 +14,7 @@ module BBS
         started = monotonic
         ending  = :hung_up
         enlist(session)
-        Log.with_session(session.session_id) { session.run }
+        Log.with_session(session.session_id, caller: session) { session.run }
       rescue IOError, Errno::EPIPE, Errno::ECONNRESET, Errno::ETIMEDOUT
         ending = :dropped
       rescue StandardError => e
@@ -36,7 +37,29 @@ module BBS
 
         ending = :stopped if @stopping && ending != :error
         end_session(session)
-        BBS.log('call', 'ended', session: session.session_id, seconds: (monotonic - started).round, end: ending)
+        BBS.log('call', 'ended', **call_facts(session, started, ending))
+      end
+
+      # The facts of the +call ended+ line: the session, the caller's
+      # address (+ip+), +seconds+, how it ended (+end+), where it came from
+      # (+via+, BBS::Session#call_via), the +face+ (+modern+, +petscii+ or
+      # +none+), the terminal's +cols+ and +rows+, whether it reported its
+      # size (+naws+) and the signed-in caller's name (+user+, not for a
+      # guest).
+      def call_facts(session, started, ending)
+        facts = {
+          session: session.session_id,
+          ip:      session.caller_ip,
+          seconds: (monotonic - started).round,
+          end:     ending,
+          via:     session.call_via,
+          face:    (session.face || :none).to_s,
+          cols:    session.term_cols,
+          rows:    session.term_rows,
+          naws:    session.naws_reported?
+        }
+        user = session.caller_name
+        user ? facts.merge(user: user) : facts
       end
 
       def end_session(session)

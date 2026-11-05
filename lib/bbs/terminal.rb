@@ -84,9 +84,24 @@ module BBS
       face
     end
 
+    # The flow of a board with one face, +name+ (+:modern+ or +:petscii+):
+    # +steps+ (a BBS::Flow), with the call's BBS::Session#face set to +name+
+    # from the start, as the question would set it.
+    def self.only(name, steps)
+      Flow.define do
+        call do
+          session.face = name if session.respond_to?(:face=)
+          nil
+        end
+        flow steps
+      end
+    end
+
     # Switches the line of +session+ to +face+: PETSCII on a C64, mouse
     # reporting on a modern terminal when <tt>BBS.config.mouse</tt> is on.
+    # The call's face is kept as BBS::Session#face.
     def self.switch(session, face)
+      session.face = face if session.respond_to?(:face=)
       if face == :petscii
         session.petscii!
       elsif BBS.config.mouse

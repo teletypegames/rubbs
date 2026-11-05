@@ -70,6 +70,9 @@ module BBS
       # Who the caller is (a BBS::Auth::Identity); a guest unless given,
       # changed by a login or a logout.
       attr_accessor :identity
+      # The face the call got (+:modern+ or +:petscii+, see
+      # BBS::Session#face), +nil+ until one is set.
+      attr_accessor :face
       # The variables a neighbouring board forwarded (see
       # BBS::Telnet::Forwarded#forwarded), a Hash; empty unless given.
       attr_reader :forwarded
