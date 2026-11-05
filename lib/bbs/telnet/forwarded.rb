@@ -11,11 +11,16 @@ module BBS
     # empty and everything falls back to the line itself.
     module Forwarded
       # The IP address of the line itself as a String (the gateway's, for a
-      # forwarded call), or +nil+ when it has none.
+      # forwarded call), or +nil+ when it has none. Asked once and kept, so
+      # it is still known after the line closed (the +call ended+ line).
       def peer_ip
-        line.remote_address.ip_address
-      rescue StandardError
-        nil
+        return @peer_ip if defined?(@peer_ip)
+
+        @peer_ip = begin
+          line.remote_address.ip_address
+        rescue StandardError
+          nil
+        end
       end
 
       # The variables the line sent with NEW-ENVIRON, believed or not: a

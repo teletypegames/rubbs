@@ -21,11 +21,13 @@ module BBS
     attr_reader :idle_seconds
 
     # Wraps +client+, the accepted socket (any IO with +read+, +write+ and
-    # +close+).
+    # +close+), and notes its address (Telnet::Forwarded#peer_ip) while the
+    # line is open.
     def initialize(client)
       @client       = client
       @session_id   = SecureRandom.hex(8)
       @idle_seconds = BBS.config.idle_seconds
+      peer_ip
     end
 
     # Sets this session's idle limit to +seconds+ (+nil+: no limit) and the

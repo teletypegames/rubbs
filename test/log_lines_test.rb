@@ -81,6 +81,18 @@ class LogLinesTest < Minitest::Test
     session.fake_line.close
   end
 
+  def test_the_address_outlives_the_line
+    server = TCPServer.new('127.0.0.1', 0)
+    client = TCPSocket.new('127.0.0.1', server.addr[1])
+    session = BBS::Session.new(server.accept)
+    session.line.close
+    assert_equal '127.0.0.1', session.peer_ip
+    assert_equal 'local', session.call_via
+  ensure
+    client&.close
+    server&.close
+  end
+
   def test_call_ended_facts
     session = session_from('8.8.8.8')
     session.face = :petscii

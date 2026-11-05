@@ -1,3 +1,9 @@
+# rubbs 2.8.1
+
+The `call ended` line kept `ip` and `via` only while the line was open, so it was written with no address and
+every call came out `local`: a session now notes its address when the call comes in
+(`Telnet::Forwarded#peer_ip`). Nothing to change in a board.
+
 # rubbs 2.8
 
 Log lines for a log pipeline to count callers and what they do (README, *Logging*): every line in a
