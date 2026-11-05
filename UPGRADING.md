@@ -1,3 +1,8 @@
+# rubbs 2.10
+
+`BBS::Auth::Profile.extra(key, label, hotkey:, if:) { |session| … }`: a board adds its own places to the
+profile's menu, above Back (`Profile.extras`, `Profile.clear_extras`). Nothing to change in a board.
+
 # rubbs 2.9
 
 For a sysop's screen: `BBS.calls` (the calls on the line, `BBS::Server#live` of `BBS::Server.current`),

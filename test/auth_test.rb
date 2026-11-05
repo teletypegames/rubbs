@@ -353,6 +353,19 @@ class AuthProfileTest < Minitest::Test
     end
   end
 
+  def test_a_board_adds_its_own_place
+    opened = []
+    BBS::Auth::Profile.extra(:sysop, 'SysOp', if: ->(s) { s.identity.role?(:sysop) }) { |s| opened << s.identity.name }
+    sysop = BBS::Auth::Identity.new(id: 1, name: 'Ada', roles: %w[sysop], source: :login)
+    shown = profile('s', 'b', identity: sysop).output
+    assert_includes shown, 'SysOp'
+    assert_equal ['Ada'], opened
+    member = BBS::Auth::Identity.new(id: 2, name: 'Bob', roles: %w[member], source: :login)
+    refute_includes profile('b', identity: member).output, 'SysOp'
+  ensure
+    BBS::Auth::Profile.clear_extras
+  end
+
   def test_a_board_without_a_login_says_so
     session = BBS::Test::Session.new(keys: [' '])
     BBS::Auth::Profile.new(session, nil, @look).run

@@ -75,6 +75,49 @@ module BBS
       # The most rows of a C64 drawing.
       PETSCII_ROWS = 13
 
+      # A place a board adds to the profile's menu (::extra): its +key+ (a
+      # Symbol), the +label+, the +hotkey+ letter, +visible+ (a callable
+      # given the session: whether the caller sees it now, or +nil+ for
+      # always) and the +action+ (a callable given the session; it draws
+      # its own screens, and the profile is shown again after it).
+      Extra = Data.define(:key, :label, :hotkey, :visible, :action) do
+        # Whether the caller on +session+ sees it.
+        def visible_to?(session) = visible.nil? || visible.call(session) ? true : false
+      end
+
+      # Adds a place to the profile's menu of every caller of this process,
+      # above Back: the board's own, which the library knows nothing of (a
+      # sysop's console, the caller's settings). A place of the same +key+
+      # is replaced. Returns the Extra.
+      #
+      # [key]    a Symbol
+      # [label]  the words on the menu
+      # [hotkey] the letter that takes it (the label's first by default)
+      # [if]     a callable given the session: whether the caller sees it
+      #
+      #   BBS::Auth::Profile.extra(:sysop, 'SysOp', if: ->(s) { s.identity.role?(:sysop) }) do |session|
+      #     Console.run(session)
+      #   end
+      def self.extra(key, label, hotkey: nil, if: nil, &action)
+        raise ArgumentError, 'an extra place needs a block' unless action
+
+        place = Extra.new(
+          key:     key.to_sym,
+          label:   label.to_s,
+          hotkey:  (hotkey || label.to_s[0]).to_s.downcase,
+          visible: binding.local_variable_get(:if),
+          action:  action
+        )
+        @extras = [*extras.reject { |e| e.key == place.key }, place]
+        place
+      end
+
+      # The places boards added (::extra), in order.
+      def self.extras = @extras ||= []
+
+      # Forgets the places boards added (a test's teardown).
+      def self.clear_extras = @extras = []
+
       # Runs the profile for the caller on +session+ until they go back;
       # with +start+ (+:log_in+ or +:register+) that is done first, as if
       # taken from the menu. Returns +nil+; raises BBS::Hangup when the line
@@ -110,7 +153,7 @@ module BBS
           choice = menu.run
           return nil if choice.nil? || choice == :back
 
-          header
+          header unless extras.any? { |e| e.key == choice }
           act(choice)
         end
       end
@@ -123,16 +166,24 @@ module BBS
 
       def items
         own = identity.signed_in? ? %i[password log_out] : %i[log_in register]
-        [*own, :back].map { |key| Selector.item(@words.fetch(key), key: @words.fetch(key)[0].downcase, value: key) }
+        own = own.map { |key| Selector.item(@words.fetch(key), key: @words.fetch(key)[0].downcase, value: key) }
+        [*own, *extras.map { |e| Selector.item(e.label, key: e.hotkey, value: e.key) },
+         Selector.item(@words[:back], key: @words[:back][0].downcase, value: :back)]
       end
 
+      def extras = Profile.extras.select { |e| e.visible_to?(@session) }
+
       def menu
-        width = [MENU_WIDTH, @words.values_at(:log_in, :register, :password, :log_out, :back).map(&:length).max + 6].max
-        cols  = petscii? ? Petscii::COLS - 1 : @session.term_cols.to_i
+        labels = @words.values_at(:log_in, :register, :password, :log_out, :back) + extras.map(&:label)
+        width  = [MENU_WIDTH, labels.map(&:length).max + 6].max
+        cols   = petscii? ? Petscii::COLS - 1 : @session.term_cols.to_i
         Selector.new(@session, items, width: width, indent: [(cols - width) / 2, 0].max, back: :back)
       end
 
       def act(choice)
+        extra = extras.find { |e| e.key == choice }
+        return extra.action.call(@session) if extra
+
         case choice
         when :log_in   then log_in
         when :register then register

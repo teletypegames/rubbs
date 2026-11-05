@@ -411,6 +411,15 @@ petscii: c64_art, title: 'PROFILE', note: 'One account for every board.', words:
 colors: {…}, c64: {…}))`; a board without one gets the plain look (no drawing, the defaults of
 `Look`).
 
+**A board's own places.** `BBS::Auth::Profile.extra(key, label, hotkey:, if:) { |session| … }` adds a
+place to the profile's menu, above Back, for every caller of the process (`if:` a callable given the
+session: whether the caller sees it). The library knows nothing of what it does: the board's block
+draws its own screens, and the profile is shown again after it.
+
+```ruby
+BBS::Auth::Profile.extra(:sysop, 'SysOp', if: ->(s) { s.identity.role?(:sysop) }) { |s| Console.run(s) }
+```
+
 **At the splash.** On a board with a login the splash (`BBS::Splash`, the preset's) asks a caller who
 is not logged in `Login | Register | Guest` instead of PRESS ANY KEY: L and R open the profile at a
 login or a new account (`Profile.run(session, start:)`), G goes on as a guest. A call handed on from
