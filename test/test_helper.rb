@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 $LOAD_PATH.unshift File.expand_path('../lib', __dir__)
-require 'bbs'
+require 'rubbs'
 require 'minitest/autorun'
 require 'minitest/mock'
 require 'socket'
@@ -23,8 +23,8 @@ class FakeLine
   end
 end
 
-# A BBS::Session on a FakeLine, with the caller's end at hand.
-class FakeSession < BBS::Session
+# A Rubbs::Common::Line::Session on a FakeLine, with the caller's end at hand.
+class FakeSession < Rubbs::Common::Line::Session
   attr_reader :fake_line
 
   def initialize(line = FakeLine.new)

@@ -4,7 +4,7 @@ module UI
   module Modern
     # The guestbook's two windows: the entries, and the form that signs it.
     module GuestbookWindows
-      extend BBS::Part
+      extend Rubbs::Modern::Part
 
       window :entries, :master_detail do
         title 'Guestbook'
@@ -24,7 +24,7 @@ module UI
         errors Wording::REGISTER
         on_submit do |values|
           found = directory.register(values[:name], values[:password], values[:again])
-          next found unless found.is_a?(BBS::Auth::Identity)
+          next found unless found.is_a?(Rubbs::Common::Auth::Identity)
 
           session.identity = found
           message "Welcome, #{found.name}.", title: 'New account'

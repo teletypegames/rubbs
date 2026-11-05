@@ -11,8 +11,8 @@ class GuestbookService
 
   # :ok, :no_name, :empty or :too_long.
   def sign(name, text)
-    name = BBS::Text.line(name.to_s)
-    text = BBS::Text.line(text.to_s)
+    name = Rubbs::Common::Text.line(name.to_s)
+    text = Rubbs::Common::Text.line(text.to_s)
     return :no_name if name.empty?
     return :empty if text.empty?
     return :too_long if text.length > @max_length

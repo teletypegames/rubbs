@@ -9,7 +9,7 @@ module UI
   module Modern
     TITLE = ['█▀▀ █▀█ █▀▄▀█ █▀█ █   █▀▀', '▀▀█ █▀█ █ ▀ █ █▀▀ █   █▀▀', '▀▀▀ ▀ ▀ ▀   ▀ ▀   ▀▀▀ ▀▀▀'].freeze
 
-    APP = BBS::Application.define do
+    APP = Rubbs::Modern::Application.define do
       theme :synchronet
 
       command(:read, 'Read the guestbook', key: 'F2', hint: 'Read') { show(:entries) }

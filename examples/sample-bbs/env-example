@@ -7,5 +7,5 @@ BBS_PORT=2323
 SAMPLE_BBS_DB=data/sample.sqlite3
 SAMPLE_BBS_MAX_LENGTH=200
 
-# The accounts (BBS::Auth): this board keeps its own
+# The accounts (Rubbs::Common::Auth): this board keeps its own
 SAMPLE_BBS_ACCOUNTS_DB=data/accounts.sqlite3

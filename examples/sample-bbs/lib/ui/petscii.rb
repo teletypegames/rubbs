@@ -4,7 +4,7 @@ require_relative 'wording'
 
 module UI
   # The board on a Commodore 64: the guestbook as a list, a line to sign it.
-  class Petscii < BBS::Petscii::Face
+  class Petscii < Rubbs::Petscii::Face
     title('SAMPLE BBS') { "#{guestbook.all.size} entries" }
 
     masthead do
@@ -38,7 +38,7 @@ module UI
       name = prompt('name', max: 20) or return
       password = prompt('password', mask: '*', max: 200) or return
       found = directory.register(name, password, prompt('again', mask: '*', max: 200).to_s)
-      return alert(Wording::REGISTER.fetch(found)) unless found.is_a?(BBS::Auth::Identity)
+      return alert(Wording::REGISTER.fetch(found)) unless found.is_a?(Rubbs::Common::Auth::Identity)
 
       @session.identity = found
       notice("Welcome, #{found.name}.")

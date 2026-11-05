@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # One line in the guestbook: who wrote what, and when.
-class EntryModel < BBS::Model
+class EntryModel < Rubbs::Common::Storage::Model
   table :entries
 
   def self.newest = reverse(:id).all

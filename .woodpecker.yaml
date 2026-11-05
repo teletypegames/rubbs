@@ -2,10 +2,10 @@
 # betölthető-e a függőségeivel együtt, zöld-e a minitest-suite (rake test),
 # tiszta-e a rubocop, és 100%-ban dokumentált-e RDoc szerint.
 #
-# Kiadás: verzióemelés a bbs.gemspec-ben, majd egy vX.Y.Z tag. A tag
+# Kiadás: verzióemelés a rubbs.gemspec-ben, majd egy vX.Y.Z tag. A tag
 # pipeline-ja ellenőrzi, hogy a tag a gemspec verzióját hirdeti, és
-# feltölti az RDoc-ot a Gitea generic registrybe (engines/bbs-rdoc), ahonnan
-# a wiki-fetcher a wiki.teletypegames.org/rdoc/bbs/ alá teszi.
+# feltölti az RDoc-ot a Gitea generic registrybe (engines/rubbs-rdoc), ahonnan
+# a wiki-fetcher a wiki.teletypegames.org/rdoc/rubbs/ alá teszi.
 #
 # Szükséges secret: gitea_token (globális) — package:write az engines orgban.
 steps:
@@ -18,10 +18,10 @@ steps:
         for f in $(find lib -name '*.rb'); do ruby -c "$f" >/dev/null || exit 1; done
         echo "$(find lib -name '*.rb' | wc -l) fajl rendben"
       - echo "==> Gem build"
-      - gem build bbs.gemspec
+      - gem build rubbs.gemspec
       - echo "==> Load check"
-      - gem install --no-document ./bbs-*.gem
-      - ruby -e 'require "bbs"; puts "BBS betoltve, " + BBS.constants.size.to_s + " konstans"'
+      - gem install --no-document ./rubbs-*.gem
+      - ruby -e 'require "rubbs"; puts "Rubbs betoltve: " + [Rubbs::Common, Rubbs::Modern, Rubbs::Petscii].map { |m| m.constants.size }.sum.to_s + " konstans"'
 
   # A minitest-suite: a biztonsági és stabilitási korlátok és a közös
   # blokkok (Text, SQLite, Store, HTTP, Cache, RateLimit) tesztjei.
@@ -61,7 +61,7 @@ steps:
   - name: tag-matches-version
     image: ruby:3.3-slim
     commands:
-      - V="$(ruby -e 'puts Gem::Specification.load("bbs.gemspec").version')"
+      - V="$(ruby -e 'puts Gem::Specification.load("rubbs.gemspec").version')"
       - test "$CI_COMMIT_TAG" = "v$$V" || { echo "a tag ($CI_COMMIT_TAG) nem a gemspec verzioja (v$$V)"; exit 1; }
     when:
       - event: tag
@@ -73,15 +73,15 @@ steps:
         from_secret: gitea_token
     commands:
       - gem install --no-document rdoc -v 8.1.0
-      - V="$(ruby -e 'puts Gem::Specification.load("bbs.gemspec").version')"
-      - rdoc -q -o doc --main README.md --title "bbs $$V" lib README.md
+      - V="$(ruby -e 'puts Gem::Specification.load("rubbs.gemspec").version')"
+      - rdoc -q -o doc --main README.md --title "rubbs $$V" lib README.md
       - COV="$(rdoc -C lib | sed -nE 's/^ *([0-9.]+)% documented.*/\1/p')"
       - |
-        ruby -rjson -e 'puts JSON.generate(gem: "bbs", version: ARGV[0], commit: ARGV[1], date: Time.now.utc.strftime("%F"), coverage: ARGV[2].to_f)' "$$V" "$CI_COMMIT_SHA" "$$COV" > doc/meta.json
+        ruby -rjson -e 'puts JSON.generate(gem: "rubbs", version: ARGV[0], commit: ARGV[1], date: Time.now.utc.strftime("%F"), coverage: ARGV[2].to_f)' "$$V" "$CI_COMMIT_SHA" "$$COV" > doc/meta.json
       - tar -czf rdoc.tar.gz -C doc .
       - |
         ruby -rnet/http -e '
-          uri = URI("https://git.teletypegames.org/api/packages/engines/generic/bbs-rdoc/#{ARGV[0]}/rdoc.tar.gz")
+          uri = URI("https://git.teletypegames.org/api/packages/engines/generic/rubbs-rdoc/#{ARGV[0]}/rdoc.tar.gz")
           req = Net::HTTP::Put.new(uri, "Authorization" => "token #{ENV.fetch("GITEA_TOKEN").strip}", "Content-Type" => "application/octet-stream")
           req.body = File.binread("rdoc.tar.gz")
           res = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |h| h.request(req) }

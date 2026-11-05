@@ -6,7 +6,7 @@ module UI
     ABOUT = 'Sample BBS — the sample board of rubbs: a guestbook on a modern terminal and on a Commodore 64. ' \
             'Read what callers wrote, and sign it yourself.'
 
-    # The answers of BBS::Auth::Directory#register.
+    # The answers of Rubbs::Common::Auth::Directory#register.
     REGISTER = {
       invalid:     'A name is letters and digits, at most 20.',
       reserved:    'That name is kept for the board.',

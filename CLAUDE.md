@@ -1,8 +1,8 @@
 # CLAUDE.md
 
-rubbs: the `bbs` gem, a Ruby library for telnet BBS servers. `README.md` is the
+rubbs: the `rubbs` gem, a Ruby library for telnet BBS servers. `README.md` is the
 user guide; the API reference is the RDoc published to the wiki at
-https://wiki.teletypegames.org/rdoc/bbs/latest/ on every release tag.
+https://wiki.teletypegames.org/rdoc/rubbs/latest/ on every release tag.
 
 ## Documenting code: write for RDoc
 
@@ -17,11 +17,11 @@ The API reference is generated from the source with RDoc, and CI fails below
   state changed). Not its history: the why of a change goes in the commit.
 - Use RDoc markup, not Markdown or YARD tags: `+code+` for a single word,
   `<tt>code with spaces</tt>`, `*bold*`, `_emphasis_`, cross-references by
-  name (`BBS::Session`, `#render`), labelled lists for options:
+  name (`Rubbs::Common::Line::Session`, `#render`), labelled lists for options:
 
     # Draws the window on +buffer+.
     #
-    # [buffer]  the BBS::FrameBuffer to draw into
+    # [buffer]  the Rubbs::Modern::FrameBuffer to draw into
     # [focused] whether the window has the keyboard focus
     #
     # Returns +self+.
@@ -36,8 +36,14 @@ The API reference is generated from the source with RDoc, and CI fails below
     rdoc -C lib          # must print 100.00% documented
     rdoc -o /tmp/bbs-doc --main README.md lib README.md   # look at the output
 
+## Layout
+
+`lib/rubbs/{common,modern,petscii}`: a folder is a namespace, one public
+constant a file, about 250 lines at most. `petscii` and `modern` use
+`common`, not each other. The tests follow it (`test/{common,modern,petscii}`).
+
 ## Releases
 
-The version lives in `bbs.gemspec`. A release is a version bump commit plus an
+The version lives in `rubbs.gemspec`. A release is a version bump commit plus an
 annotated tag `vX.Y.Z` matching it; pushing the tag publishes the RDoc. CI
 rejects a tag that does not match the gemspec version.

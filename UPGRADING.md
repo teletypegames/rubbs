@@ -1,3 +1,43 @@
+# rubbs 3.0
+
+The gem is **rubbs** now, in three parts: `Rubbs::Common` (what both faces need), `Rubbs::Modern` (an ANSI
+terminal) and `Rubbs::Petscii` (a Commodore 64), a folder each under `lib/rubbs/`, a folder a namespace
+(README, *Source layout*). There is no `BBS` any more and no alias of an old name: a board moves in one go.
+
+**What a board changes**
+
+- Gemfile: `gem 'rubbs', git: 'https://git.teletypegames.org/engines/rubbs.git'` (was `gem 'bbs'`); a gem that
+  depends on it: `add_dependency 'rubbs', '>= 3.0'`.
+- `require 'rubbs'`, `require 'rubbs/test'`, `require 'rubbs/rake'` (was `bbs`, `bbs/test`, `bbs/rake`).
+- `Rubbs.board`, `Rubbs.log`, `Rubbs.config`, `Rubbs.configure`, `Rubbs.calls`, `Rubbs.background`,
+  `Rubbs.duration`, `Rubbs.version` (was `BBS.…`).
+- Every constant by the table below: `BBS::X` is `Rubbs::<where>::X`, and what was under it stays under it
+  (`BBS::Telnet::Parser` is `Rubbs::Common::Line::Telnet::Parser`). The kit: `BBS::Kit::Petscii` is
+  `Rubbs::Petscii::Kit`, `BBS::Kit::Modern` is `Rubbs::Modern::Kit`. The C64's glyph table moved into its own
+  module: `Rubbs::Petscii::Glyphs::GRAPHICS` (and `ROUNDED_CORNERS`, `UPPERCASE_GRAPHICS`, `LOWERCASE_GRAPHICS`,
+  `LOOK_ALIKES`, `ASCII_FORMS`, `GLYPHS`).
+
+| now under | the former `BBS::` constants |
+|---|---|
+| `Rubbs` | `Petscii` (it is `Rubbs::Petscii`), `Rake`, `Test` |
+| `Rubbs::Common` | `AI`, `Art`, `Auth`, `FakeOS`, `Log`, `Season`, `Text` |
+| `Rubbs::Common::Board` | `Background`, `BoardDefinition`, `Check`, `Config`, `Domain`, `Preset` |
+| `Rubbs::Common::Call` | `Door`, `Flow`, `FlowRunner`, `Goodbye`, `Renderer`, `Splash`, `Terminal` |
+| `Rubbs::Common::Files` | `Transfer`, `Xmodem`, `Zmodem` |
+| `Rubbs::Common::Line` | `Abort`, `Address`, `Ascii`, `Gateway`, `Hangup`, `Health`, `LINE_DROPPED`, `Nodes`, `RateLimit`, `Server`, `Session`, `Telnet` |
+| `Rubbs::Common::Screens` | `Cursor`, `Editor`, `Field`, `Page`, `Pages`, `Paint`, `Selector`, `TextBuffer` |
+| `Rubbs::Common::Storage` | `Cache`, `Database`, `Model`, `Snapshot`, `Store`, `UNBOUND_DATABASE` |
+| `Rubbs::Common::Text` | `Banner`, `BlockFont`, `Hotkey`, `Markdown`, `Patterns`, `QR` |
+| `Rubbs::Common::Web` | `DiscordWebhook`, `HTTP`, `MediaWiki`, `Wikidata`, `Wikipedia` |
+| `Rubbs::Modern` | `Ansi`, `Application`, `Dialogs`, `FrameBuffer`, `Menubar`, `Part`, `Statusbar`, `Style`, `Theme`, `Widgets`, `Window`, `WindowContext`, `WindowSpec`, `Windows` |
+| `Rubbs::Modern::Widgets` | `Container`, `Event`, `FocusManager`, `Widget` |
+
+**What stays:** the environment (`BBS_LOG_FORMAT`, `BBS_LOG_TAG`, `BBS_MAX_SESSIONS`, `BBS_MAX_SESSIONS_PER_IP`,
+`BBS_SHUTDOWN_SECONDS`, `BBS_PORT`), what goes over the line between boards (`BBS_VIA`, `BBS_CLIENT_IP`,
+`RUBBS_AUTH_KEY`, `X-RuBBS-Signature`), the health probe (`BBS-HEALTH`, `bin/bbs-health`), the rake tasks
+(`bbs:check` …), a board's `bbs.rb`, and the log lines. The API reference moves to
+https://wiki.teletypegames.org/rdoc/rubbs/.
+
 # rubbs 2.11
 
 `BBS::Kit`: the screens of TTG Gate BBS as a kit for a board's own menus (README, *A board's own menus*):

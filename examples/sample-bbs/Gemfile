@@ -3,8 +3,8 @@
 source 'https://rubygems.org'
 
 # The rubbs of this checkout. A board of its own takes it from git:
-#   gem 'bbs', git: 'https://git.teletypegames.org/engines/rubbs.git'
-gem 'bbs', path: '../..'
+#   gem 'rubbs', git: 'https://git.teletypegames.org/engines/rubbs.git'
+gem 'rubbs', path: '../..'
 
 group :development do
   gem 'minitest', '~> 5.25'

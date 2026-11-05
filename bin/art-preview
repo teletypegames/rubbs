@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# art-preview: checks and shows a BBS::Art YAML drawing while it is drawn.
+# art-preview: checks and shows a Rubbs::Common::Art YAML drawing while it is drawn.
 #
 #   art-preview art/house.yml                     # ANSI on this terminal + a summary
 #   art-preview art/house.yml -l snow,pumpkin     # with layers stacked
@@ -13,7 +13,7 @@
 # checkout (bin/art-preview). Exits 1 with the mistake when the art is wrong.
 
 $LOAD_PATH.unshift File.expand_path('../lib', __dir__)
-require 'bbs'
+require 'rubbs'
 require 'optparse'
 require 'zlib'
 
@@ -53,7 +53,7 @@ def glyph_of(rom, base, cell) = rom.byteslice(base + ((screen_code(cell.code) + 
 
 # Paints the glyph of +cell+ at +row+, +col+ into +pixels+ at +scale+.
 def paint_cell(pixels, glyph, cell, (row, col), scale)
-  fg = BBS::Petscii::Canvas::RGB.fetch(cell.color || BBS::Petscii::Canvas::LIGHT_BLUE)
+  fg = Rubbs::Petscii::Canvas::RGB.fetch(cell.color || Rubbs::Petscii::Canvas::LIGHT_BLUE)
   glyph.each_with_index do |bits, y|
     8.times { |x| dot(pixels, ((row * 8) + y) * scale, ((col * 8) + x) * scale, scale, fg) unless bits[7 - x].zero? }
   end
@@ -68,11 +68,11 @@ end
 # play onto, drawn with the character ROM at +scale+.
 def screenshot(bytes, path, chargen, scale)
   rom    = File.binread(chargen)
-  screen = BBS::Petscii::Canvas.new.feed(bytes)
+  screen = Rubbs::Petscii::Canvas.new.feed(bytes)
   base   = screen.charset == :lower ? 2048 : 0
   pixels = Array.new(200 * scale) { Array.new(320 * scale, [0, 0, 0]) }
-  BBS::Petscii::Canvas::ROWS.times do |row|
-    BBS::Petscii::Canvas::COLS.times do |col|
+  Rubbs::Petscii::Canvas::ROWS.times do |row|
+    Rubbs::Petscii::Canvas::COLS.times do |col|
       cell = screen.cell(row, col)
       paint_cell(pixels, glyph_of(rom, base, cell), cell, [row, col], scale)
     end
@@ -97,20 +97,20 @@ parser.parse!
 abort parser.banner unless ARGV.size == 1
 
 begin
-  art = BBS::Art.load(ARGV[0], layers: options[:all] ? :all : options[:layers])
-rescue BBS::Art::Error, SystemCallError => e
+  art = Rubbs::Common::Art.load(ARGV[0], layers: options[:all] ? :all : options[:layers])
+rescue Rubbs::Common::Art::Error, SystemCallError => e
   abort "art-preview: #{e.message}"
 end
 
 unless options[:quiet]
   lines = art.ansi_lines
   if options[:spots]
-    fb = BBS::FrameBuffer.new(art.cols, art.rows)
+    fb = Rubbs::Modern::FrameBuffer.new(art.cols, art.rows)
     art.draw(fb)
     art.hotspots.each_value do |h|
       h.height.times { |r| fb.move(h.col + 1, h.row + r + 1); fb.write('*' * h.width, sgr: "\e[0;30;105m") }
     end
-    lines = fb.diff(BBS::FrameBuffer.new(art.cols, art.rows)).then { |d| ["\e[2J#{d}\e[#{art.rows + 1};1H"] }
+    lines = fb.diff(Rubbs::Modern::FrameBuffer.new(art.cols, art.rows)).then { |d| ["\e[2J#{d}\e[#{art.rows + 1};1H"] }
   end
   puts lines
 end

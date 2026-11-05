@@ -1,0 +1,128 @@
+# frozen_string_literal: true
+
+require 'time'
+require_relative 'store/csv_import'
+
+module Rubbs
+  module Common
+    module Storage
+      # A small thread-safe table keyed by session id, for keeping what callers
+      # entered, in a BBS::SQLite file. The file and the table are created on
+      # first use; a column added to +headers+ later is added to the table.
+      #
+      #   store = Rubbs::Common::Storage::Store.new(path: 'data/callers.csv', headers: %w[session_id timestamp name])
+      #   store.upsert(session_id: ctx[:session_id], name: 'Ada')
+      #
+      # A +path+ ending in <tt>.csv</tt> names the CSV file of earlier versions:
+      # the database is the <tt>.sqlite3</tt> file beside it, and on first use
+      # (or at boot, with #open!) the rows of the CSV file (when it exists and
+      # the table is empty) are imported in one transaction and the CSV file is
+      # renamed to <tt><name>.csv.imported</tt>. A row that is not CSV, has more
+      # fields than the header or no +session_id+ is skipped and set aside in
+      # <tt><name>.csv.rejected</tt> (see Store::CsvImport).
+      #
+      # The +session_id+ column is the key; a +timestamp+ column, when present,
+      # is filled with the UTC time a row is created.
+      class Store
+        # The table that holds the rows.
+        TABLE = :store
+        # The key column, kept even when +headers+ leave it out.
+        KEY = :session_id
+
+        # The column names (an Array of String) and the path the store was made
+        # with (see the class description for the database file).
+        attr_reader :headers, :path
+
+        # Creates a store at +path+ with the column names +headers+. The file is
+        # not touched until the first read or write.
+        def initialize(path:, headers:)
+          @path    = path.to_s
+          @headers = headers.map(&:to_s)
+          @mutex   = Mutex.new
+        end
+
+        # Opens the database now (creating the file and the table, importing a
+        # CSV file) instead of on first use, so a board can do it at boot.
+        # Returns +self+.
+        def open!
+          db
+          self
+        end
+
+        # The path of the SQLite file: +path+, or the <tt>.sqlite3</tt> file
+        # beside it when +path+ names a CSV file.
+        def database_path = @path.sub(/\.csv\z/, '.sqlite3')
+
+        # Updates the row of +session_id+ with +fields+, or adds a new row when
+        # there is none. Keys that are not columns are ignored; values are
+        # stored as strings cleaned with Rubbs::Common::Text.clean.
+        #
+        # Returns +self+.
+        def upsert(session_id:, **fields)
+          values = fields.filter_map { |name, value| [name.to_s, clean(value)] if @headers.include?(name.to_s) }.to_h
+          db.transaction { find(session_id) ? update(session_id, values) : add(session_id, fields) }
+          self
+        end
+
+        # Returns the row of +session_id+ as a Hash of column name to value, or
+        # +nil+.
+        def find(session_id)
+          row = rows.where(KEY => session_id.to_s).first
+          row && project(row)
+        end
+
+        # Returns every row as an Array of Hash, oldest first.
+        def all = rows.order(Sequel.lit('rowid')).map { |row| project(row) }
+
+        # Removes the row of +session_id+, if there is one.
+        def delete(session_id)
+          rows.where(KEY => session_id.to_s).delete
+          nil
+        end
+
+        private
+
+        def db = @mutex.synchronize { @db ||= open }
+
+        def rows = db[TABLE]
+
+        def open
+          Database.open(database_path).tap do |db|
+            db.create_table?(TABLE) { String KEY, unique: true }
+            known = db.schema(TABLE, reload: true).map { |name, _| name.to_s }
+            (@headers - known).each { |name| db.alter_table(TABLE) { add_column name.to_sym, String } }
+            import(db) if @path != database_path && File.exist?(@path)
+          end
+        end
+
+        def update(session_id, values)
+          return if values.empty?
+
+          rows.where(KEY => session_id.to_s).update(values.transform_keys(&:to_sym))
+        end
+
+        def add(session_id, fields)
+          row = @headers.to_h { |name| [name, fields[name.to_sym]&.then { |value| clean(value) }] }
+          row['timestamp'] = Time.now.utc.iso8601 if @headers.include?('timestamp')
+          insert(db, row.merge(KEY => session_id.to_s))
+        end
+
+        def insert(db, row)
+          db[TABLE].insert_ignore.insert(row.transform_keys(&:to_sym))
+        end
+
+        def import(db)
+          return unless db[TABLE].empty?
+
+          csv = CsvImport.new(@path, [KEY.to_s, *@headers])
+          db.transaction { csv.rows.each { |row| insert(db, row.transform_values { |value| value && clean(value) }) } }
+          Rubbs.log('store', csv.finish(database_path))
+        end
+
+        def project(row) = @headers.to_h { |name| [name, row[name.to_sym]] }
+
+        def clean(value) = Text.clean(value)
+      end
+    end
+  end
+end

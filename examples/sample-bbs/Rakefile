@@ -1,5 +1,5 @@
 # frozen_string_literal: true
 
-require 'bbs/rake'
+require 'rubbs/rake'
 
-BBS::Rake.board
+Rubbs::Rake.board
