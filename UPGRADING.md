@@ -1,3 +1,24 @@
+# rubbs 3.1
+
+The faces draw their own: a screen of both faces keeps what it says and how it waits in `Rubbs::Common` and
+leaves the drawing to `Rubbs::Modern` and `Rubbs::Petscii`. What a board changes:
+
+| was | is |
+|---|---|
+| `art.ansi_lines` | `Rubbs::Modern::Art.lines(art)` |
+| `art.ansi` | `Rubbs::Modern::Art.text(art)` |
+| `art.draw(frame, x:, y:, width:, height:)` | `Rubbs::Modern::Art.draw(art, frame, x:, y:, width:, height:)` |
+| `art.draw_canvas(canvas, row:, col:)` | `Rubbs::Petscii::Art.draw(art, canvas, row:, col:)` |
+| `art.canvas` | `Rubbs::Petscii::Art.canvas(art)` |
+| `art.petscii` | `Rubbs::Petscii::Art.bytes(art)` |
+| `Rubbs::Common::Call::Goodbye.modern(out, …)` | `Rubbs::Modern::Goodbye.show(out, …)` |
+| `Rubbs::Common::Call::Goodbye.modern_text(…)` | `Rubbs::Modern::Goodbye.text(…)` |
+| `Rubbs::Common::Call::Goodbye.petscii(screen, …)` | `Rubbs::Petscii::Goodbye.show(screen, …)` |
+| `Rubbs::Common::Call::Goodbye::PAUSES` | `Rubbs::Petscii::Goodbye::PAUSES` |
+
+`Rubbs::Common::Call::Goodbye.show(session, …)`, `Rubbs::Common::Call::Splash` and `Rubbs::Common::Auth::Profile`
+are as they were: they pick the face (`Modern::Splash`, `Petscii::Splash`, `Modern::Profile`, `Petscii::Profile`).
+
 # rubbs 3.0.1
 
 The pipeline of 3.0.0 did not run (its YAML did not parse), so 3.0.0 was not checked by CI and its API reference

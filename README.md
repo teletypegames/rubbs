@@ -2712,10 +2712,10 @@ end
 ```
 
 `Rubbs::Common::Call::Goodbye.show(session, note:)` (the `goodbye` step) picks the face of
-the line. On a modern terminal (`Goodbye.modern`) it writes "Thanks for
+the line. On a modern terminal (`Rubbs::Modern::Goodbye.show`) it writes "Thanks for
 calling" and the board's title, the note, "More of us:" and the preset's
 `url`, the QR code of the preset's `qr`, and NO CARRIER, in one write; on a
-C64 (`Goodbye.petscii`) a reversed bar, the note and the address, the QR
+C64 (`Rubbs::Petscii::Goodbye.show`) a reversed bar, the note and the address, the QR
 code in the middle, then `+++`, `ATH0` and NO CARRIER a moment apart. The
 title comes from `Rubbs.config.title`, the address and the QR code from the
 `Rubbs::Common::Board::Preset`; without a `url` there is no "More of us:", without a `qr` no
@@ -2724,7 +2724,7 @@ that says goodbye its own way (`modern APP, goodbye: false`) can still call
 the building blocks with its own words:
 
 ```ruby
-Rubbs::Common::Call::Goodbye.petscii(screen, color: YE, note: 'Bye for now.') do |s|
+Rubbs::Petscii::Goodbye.show(screen, color: YE, note: 'Bye for now.') do |s|
   s.puts " #{GR}the wiki on the web:#{LG}"           # in place of the note and the address
 end
 ```
@@ -2869,10 +2869,10 @@ hotspots:
 
 ```ruby
 house = Rubbs::Common::Art.load('art/house.yml').with(*Rubbs::Common::Season.now.layers)  # only the layers it lists
-session.write(house.ansi)                        # modern: 256-colour ANSI lines
-house.draw(frame, x: 1, y: 2)                    # … or into a Rubbs::Modern::FrameBuffer
-session.write_raw(house.petscii)                 # C64: a whole frame
-house.draw_canvas(canvas, row: 1, col: 10)       # … or onto a canvas
+session.write(Rubbs::Modern::Art.text(house))    # modern: 256-colour ANSI lines
+Rubbs::Modern::Art.draw(house, frame, x: 1, y: 2) # … or into a Rubbs::Modern::FrameBuffer
+session.write_raw(Rubbs::Petscii::Art.bytes(house)) # C64: a whole frame
+Rubbs::Petscii::Art.draw(house, canvas, row: 1, col: 10) # … or onto a canvas
 house.hotspot(:window_1)                         # => Art::Hotspot col=6 row=2 …
 ```
 
@@ -3106,7 +3106,13 @@ c64.take                                       # the bytes written since the las
 
 The gem is three parts, a folder each, and a folder is a namespace
 (`lib/rubbs/petscii/canvas/output.rb` is `Rubbs::Petscii::Canvas::Output`).
-`petscii` and `modern` use `common`; they do not use each other.
+`petscii` and `modern` use `common`; they do not use each other. A screen of
+both faces keeps what it says and how it waits in `common` and leaves the drawing
+to each face: `Rubbs::Modern::Art` / `Rubbs::Petscii::Art` (a drawing),
+`Modern::Splash` / `Petscii::Splash`, `Modern::Goodbye` / `Petscii::Goodbye`,
+`Modern::Profile` / `Petscii::Profile` (the head of the caller's profile). The
+line-by-line screens (`Selector`, `Field`, `Editor`, `Cursor`) write ANSI on
+either face; a C64 line turns it into PETSCII (`Rubbs::Petscii::Encoder`).
 
 | Path | Namespace | What |
 |---|---|---|

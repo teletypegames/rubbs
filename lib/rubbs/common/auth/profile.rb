@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative 'profile/drawing'
+require_relative 'profile/head'
 
 module Rubbs
   module Common
@@ -19,7 +19,7 @@ module Rubbs
       #                                       petscii: Rubbs::Common::Art.load('art/mini-c64.yml'))
       #   Rubbs::Common::Board::Preset.new(profile: look, …)
       class Profile
-        include Drawing
+        include Head
 
         # How a profile looks:
         #
@@ -135,8 +135,8 @@ module Rubbs
           @look    = look
           @words   = WORDS.merge(look.words)
           @colors  = COLORS.merge(look.colors)
-          @c64     = C64_COLORS.merge(look.c64)
-          @runner  = Call::FlowRunner.new(session, session.session_id, Call::Flow.new)
+          @c64_colors = C64_COLORS.merge(look.c64)
+          @runner = Call::FlowRunner.new(session, session.session_id, Call::Flow.new)
         end
 
         # Shows the profile and its menu, does what is taken, and shows it
@@ -159,7 +159,17 @@ module Rubbs
           end
         end
 
+        # The look (Look).
+        attr_reader :look
+        # The colours of the head's roles on a modern terminal (COLORS with the look's).
+        attr_reader :colors
+        # The colours of the head's roles on a C64 (C64_COLORS with the look's).
+        attr_reader :c64_colors
+
         private
+
+        # The head of the caller's face, drawn by that face.
+        def header = (petscii? ? Petscii::Profile : Modern::Profile).header(@session, self)
 
         def identity = @session.identity
 

@@ -208,3 +208,14 @@ module Rubbs
     Common::Board::Background.new(name, every: every, retry_after: retry_after, max_retry: max_retry, &).start
   end
 end
+
+# The faces of the two-faced screens: how each draws a Rubbs::Common::Art, a
+# splash, a goodbye and the head of a profile.
+require_relative 'rubbs/modern/art'
+require_relative 'rubbs/modern/goodbye'
+require_relative 'rubbs/modern/profile'
+require_relative 'rubbs/modern/splash'
+require_relative 'rubbs/petscii/art'
+require_relative 'rubbs/petscii/goodbye'
+require_relative 'rubbs/petscii/profile'
+require_relative 'rubbs/petscii/splash'

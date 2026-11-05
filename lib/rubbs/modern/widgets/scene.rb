@@ -69,7 +69,7 @@ module Rubbs
           return unless drawable?
 
           view = self.view
-          @art.draw(frame, x: view.x, y: view.y, width: view.width, height: view.height)
+          Art.draw(@art, frame, x: view.x, y: view.y, width: view.width, height: view.height)
           @fills.each do |name, block|
             spot = @art.hotspots[name]
             paint(frame, spot, block.call(spot), view) if spot

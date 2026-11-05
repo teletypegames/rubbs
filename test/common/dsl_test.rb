@@ -363,7 +363,7 @@ class LeftoversTest < Minitest::Test
     assert_equal '12m', Rubbs.duration((12 * 60) + 5)
     assert_equal '2h 5m', Rubbs.duration((2 * 3600) + (5 * 60))
     assert_match(/\A\d+s\z/, Rubbs.duration(Time.now - 3))
-    assert_includes Rubbs::Common::Call::Goodbye.modern_text(title: 'TTG Blog BBS', greeting: 'Thanks for reading'),
+    assert_includes Rubbs::Modern::Goodbye.text(title: 'TTG Blog BBS', greeting: 'Thanks for reading'),
                     'Thanks for reading TTG Blog BBS.'
   end
 end

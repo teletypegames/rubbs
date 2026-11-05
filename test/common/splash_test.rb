@@ -44,7 +44,7 @@ class SplashTest < Minitest::Test
   def test_modern_shows_the_drawing_centred_and_waits_for_a_key
     assert show(:modern)
     out = @session.received.force_encoding('UTF-8')
-    assert_includes out, "#{' ' * 38}#{Rubbs::Common::Art.parse(MODERN).ansi_lines.first}"
+    assert_includes out, "#{' ' * 38}#{Rubbs::Modern::Art.lines(Rubbs::Common::Art.parse(MODERN)).first}"
     assert_includes out, "#{' ' * 27}#{Rubbs::Modern::Ansi::GREY}#{Rubbs::Common::Call::Splash::PROMPT}"
   end
 

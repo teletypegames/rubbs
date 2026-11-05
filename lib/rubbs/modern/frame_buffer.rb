@@ -66,7 +66,7 @@ module Rubbs
       # itself shifted and stays in its bounds:
       #
       #   frame.clip(view.x, view.y, view.width, view.height) do
-      #     art.draw(frame, x: view.x, y: view.y - scroll)
+      #     Rubbs::Modern::Art.draw(art, frame, x: view.x, y: view.y - scroll)
       #   end
       #
       # Returns the block's value.

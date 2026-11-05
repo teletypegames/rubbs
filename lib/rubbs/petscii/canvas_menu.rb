@@ -22,7 +22,7 @@ module Rubbs
     # Selector's COLORS.
     #
     #   canvas = Rubbs::Petscii::Canvas.new
-    #   house.draw_canvas(canvas)                      # a Rubbs::Common::Art
+    #   Rubbs::Petscii::Art.draw(house, canvas)        # a Rubbs::Common::Art
     #   items = [Rubbs::Common::Screens::Selector.item('CORK BOARD', key: 'm', value: :boards, color: :light_blue),
     #            Rubbs::Common::Screens::Selector.item('GAMES ROOM', key: 'r', value: :doors, color: :orange),
     #            Rubbs::Common::Screens::Selector.item('LEAVE', key: 'q', value: :quit)]

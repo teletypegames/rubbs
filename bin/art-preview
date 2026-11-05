@@ -103,10 +103,10 @@ rescue Rubbs::Common::Art::Error, SystemCallError => e
 end
 
 unless options[:quiet]
-  lines = art.ansi_lines
+  lines = Rubbs::Modern::Art.lines(art)
   if options[:spots]
     fb = Rubbs::Modern::FrameBuffer.new(art.cols, art.rows)
-    art.draw(fb)
+    Rubbs::Modern::Art.draw(art, fb)
     art.hotspots.each_value do |h|
       h.height.times { |r| fb.move(h.col + 1, h.row + r + 1); fb.write('*' * h.width, sgr: "\e[0;30;105m") }
     end
@@ -121,7 +121,7 @@ puts "#{ARGV[0]}: #{art.cols}×#{art.rows} #{art.charset}, palette #{art.palette
 art.hotspots.each_value { |h| puts "  hotspot #{h.name}: col #{h.col}, row #{h.row}, #{h.width}×#{h.height}" }
 
 if art.petscii?
-  frame = art.petscii
+  frame = Rubbs::Petscii::Art.bytes(art)
   puts "  PETSCII frame: #{frame.bytesize} bytes"
   if options[:hex]
     frame.bytes.each_slice(16).with_index do |b, i|

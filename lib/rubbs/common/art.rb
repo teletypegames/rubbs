@@ -6,9 +6,9 @@ module Rubbs
   module Common
     # A drawing kept as readable, diffable text: a YAML file of a character
     # grid and a colour grid, for either face of a board. The modern face
-    # draws it in 256-colour ANSI (#ansi_lines, #draw on a Rubbs::Modern::FrameBuffer,
-    # Rubbs::Modern::Widgets::Scene), the C64 face as raw PETSCII on a
-    # Rubbs::Petscii::Canvas (#draw_canvas, #petscii).
+    # draws it in 256-colour ANSI (Rubbs::Modern::Art: lines, on a
+    # Rubbs::Modern::FrameBuffer, in a Rubbs::Modern::Widgets::Scene), the C64
+    # face as raw PETSCII on a Rubbs::Petscii::Canvas (Rubbs::Petscii::Art).
     #
     # The format (<tt>art/house.yml</tt>):
     #
@@ -61,8 +61,8 @@ module Rubbs
     # the column.
     #
     #   art = Rubbs::Common::Art.load('art/house.yml').with(*Rubbs::Common::Season.now.layers)
-    #   session.write(art.ansi)                     # modern face
-    #   session.write_raw(art.petscii)              # C64 face: a whole frame
+    #   session.write(Rubbs::Modern::Art.text(art))      # modern face
+    #   session.write_raw(Rubbs::Petscii::Art.bytes(art)) # C64 face: a whole frame
     #   art.hotspot(:window_1)                      # => #<struct col=12, row=3 …>
     class Art
       # A mistake in an art file: the message names the file and the cell.
@@ -188,10 +188,11 @@ module Rubbs
         names.reduce(self) { |art, name| art.stack(name) }
       end
 
-      protected
-
-      # The rows of cells.
+      # The rows of cells (an Array of Arrays of Cell), for the faces that
+      # draw the art (Rubbs::Modern::Art, Rubbs::Petscii::Art).
       attr_reader :grid
+
+      protected
 
       # The cell offset of a layer: [col, row].
       attr_reader :at
@@ -239,4 +240,3 @@ end
 
 require_relative 'art/colors'
 require_relative 'art/reader'
-require_relative 'art/drawing'

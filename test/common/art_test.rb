@@ -32,13 +32,13 @@ class ArtTest < Minitest::Test
   end
 
   def test_draws_on_a_canvas_with_rounded_corners
-    canvas = art.canvas
+    canvas = Rubbs::Petscii::Art.canvas(art)
     assert_equal 0xd5, canvas.cell(0, 2).code
     assert_equal Rubbs::Petscii::Canvas::LIGHT_GREY, canvas.cell(0, 2).color
   end
 
   def test_ansi_lines_start_with_their_colours_and_end_with_a_reset
-    lines = art.ansi_lines
+    lines = Rubbs::Modern::Art.lines(art)
     assert_equal 2, lines.size
     assert lines.first.start_with?("\e[0;38;5;")
     assert(lines.all? { |l| l.end_with?(Rubbs::Modern::Ansi::RESET) })
