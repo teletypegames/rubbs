@@ -1121,6 +1121,68 @@ end
 
 ---
 
+### A board's own menus, on either face: `BBS::Kit`
+
+The screens of TTG Gate BBS as a kit, every part a board would change given
+rather than written in. Both faces are pages of a `BBS::Pages` runner.
+
+**On a C64 (`BBS::Kit::Petscii`).** A `Chrome` is the frame: the menu bar
+on row 0 (the board's title, then its tabs, the active one lit), a tab's
+sub-menu or line on row 1, the hint bar on row 24.
+
+```ruby
+chrome = BBS::Kit::Petscii::Chrome.new(
+  title:    'MY BOARD',
+  places:   [[:news, 'NEWS'], [:files, 'FILES'], [:me, 'ME']],   # the tabs, the first letter each one's key
+  menu:     [[:search, '/Find', 0], [:top, 'Top', 0]],           # a sub-menu: the key, the label, the sign's index
+  menu_tab: :files,                                              # the tab it belongs to
+  hotkeys:  { 'h' => :help, 'q' => :quit },                      # the sub-menu's signs are added
+  colors:   { bar: BBS::Petscii::Canvas::BLUE }                  # over Chrome::COLORS
+)
+```
+
+A `Frame` (a `BBS::Pages` runner) holds the frame and the content's views.
+CRSR up from the top of a list goes to the sub-menu of a tab that has one,
+and from there (or at once) to the tabs; CRSR left and right switch the tabs
+as the cursor goes, RETURN opens an action place, CRSR down goes back. A
+hotkey opens its place from anywhere, ← or RUN/STOP goes back, and from the
+home tab's first screen the runner ends. The board says what its places are:
+
+```ruby
+class Board < BBS::Kit::Petscii::Frame
+  def section_view(key) = { news: news, files: files, top: top }[key]   # the view a place opens
+  def action?(key) = key == :me                                          # a place that does something
+  def action(_key) = hand_over { BBS::Auth::Profile.run(session) }
+  def top_line(canvas) = chrome.line(canvas, [['3 new', BBS::Petscii::Canvas::WHITE]])   # a tab without a sub-menu
+end
+Board.new(session, chrome: chrome, home: :news).run
+```
+
+The views: `View` (a page of the content), `Picker` (a list with a lit row,
+a page at a time: CRSR, + and -, a digit), `MenuView` (an entry a row with
+its number, a dotted leader and a count, the lit entry's lines under a rule)
+and `TextView` (a page of text and chips). `Frame#pop_up` shows a `TextView`
+over the view until a key; `read_line` reads on the hint row. `Layout` holds
+the grid (`TOP`, `ROWS`, `EDGE`, `HINT_ROW` …) and the drawing helpers
+(`runs`, `band`, `rule`, `chip`, `address`, `wrap`, `age`).
+
+**On a modern terminal (`BBS::Kit::Modern`).** A `Look` says how the screens
+look; `Tabs` runs one page a tab, each keeping its place, TAB and the arrows
+going round them (`switch`), and a tab of `actions` runs a callable instead
+and comes back:
+
+```ruby
+look = BBS::Kit::Modern::Look.new(logo: LOGO, tabs: { own: 'OWN', discovery: 'DISCOVERY', profile: 'PROFILE' },
+                                  crumb: 'DISCOVERY', accent: BBS::Kit::Modern::Palette::GREEN)
+BBS::Kit::Modern::Tabs.new(session, look: look, sides: { own: Own.new, discovery: Home.new },
+                           actions: { profile: ->(t) { t.hand_over { BBS::Auth::Profile.run(t.session) } } }).run
+```
+
+A page is a `Screen` (its `lines` from the top) with the helpers of `Style`:
+`masthead(tab)` (the logo and the tabs), `crumbs(path, right)` (the top
+line), `menu_row`, `fit`, `plain`, `rule`; `Lines` is a screen of given lines
+for `show`, and the line read is drawn at the bottom (`Prompt`).
+
 ## 9. Widgets
 
 All widgets inherit from `BBS::Widget` (see `bbs/widget.rb`). They have:

@@ -83,6 +83,7 @@ require_relative 'bbs/board'
 require_relative 'bbs/part'
 require_relative 'bbs/snapshot'
 require_relative 'bbs/transfer'
+require_relative 'bbs/kit'
 
 # The +bbs+ gem: a library for telnet BBS servers. Requiring it loads the
 # whole library. Configure it with BBS.configure, then start the server with

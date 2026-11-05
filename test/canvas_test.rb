@@ -64,4 +64,28 @@ class CanvasTest < Minitest::Test
     screen = Canvas.new.feed(before.frame).feed(after.patch(after.changes(before), order: :rows))
     assert_empty after.changes(screen)
   end
+
+  # A terminal that emulates a C64 (bbs-web's xterm.js) waits at the end of a
+  # full row instead of going to the next one: after the last cell of a row
+  # only printing on may follow, any other move starts from HOME.
+  def test_after_the_last_column_the_cursor_goes_from_home
+    before = Canvas.new(charset: :lower)
+    before.text(4, 0, 'x' * Canvas::COLS, :white, rvs: true)
+    after = before.dup
+    after.text(4, 0, 'y' * Canvas::COLS, :white)
+    after.text(9, 1, 'below', :grey)
+    bytes = after.diff(before).bytes
+    last = bytes.rindex(Canvas::HOME)
+    assert_operator last, :>, bytes.index(Canvas::HOME)
+    assert_equal Canvas::DOWN, bytes[last + 1]
+  end
+
+  def test_a_full_row_over_an_empty_one_goes_on_from_home
+    canvas = Canvas.new(charset: :lower)
+    canvas.text(0, 0, '#' * Canvas::COLS, :cyan)
+    canvas.text(2, 1, 'third', :white)
+    bytes = canvas.frame.bytes
+    refute_includes bytes, Canvas::CR
+    assert_equal 'third', Canvas.new.feed(canvas.frame).to_s.lines[2].strip
+  end
 end

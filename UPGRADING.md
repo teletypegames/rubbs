@@ -1,3 +1,14 @@
+# rubbs 2.11
+
+`BBS::Kit`: the screens of TTG Gate BBS as a kit for a board's own menus (README, *A board's own menus*):
+on a C64 `Kit::Petscii` (`Chrome`, `Frame`, `View`, `Picker`, `MenuView`, `TextView`, `Layout`), on a modern
+terminal `Kit::Modern` (`Look`, `Style`, `Screen`, `Lines`, `Prompt`, `Tabs`).
+
+`BBS::Petscii::Canvas` output no longer leans on the wrap after a row's last cell: a C64 goes on to the next
+row there, a terminal that emulates one (bbs-web's xterm.js) waits at the end of the row, so after the last
+column the cursor goes from HOME (a diff), and a full row over an empty one goes on from HOME (a frame).
+Screens whose rows reach column 40 no longer fall apart in bbs-web. Nothing to change in a board.
+
 # rubbs 2.10
 
 `BBS::Auth::Profile.extra(key, label, hotkey:, if:) { |session| … }`: a board adds its own places to the

@@ -10,19 +10,15 @@ module BBS
       module Output
         # The whole screen: the switch to its character set (UPPERCASE or
         # LOWERCASE, see Canvas#charset), a clear screen, then the rows, each
-        # cut after its last visible cell, as a binary String.
+        # cut after its last visible cell, as a binary String. A full row
+        # flows on into the next; one over an empty row goes on from HOME (a
+        # terminal that emulates a C64 waits at the end of a full row).
         def frame
           out  = [@charset == :lower ? LOWERCASE : UPPERCASE, CLEAR]
           pen  = Pen.new
           last = last_visible_row
-          (0..last).each do |row|
-            len = visible_end(row)
-            pen.emit(out, @cells[row].first(len))
-            next if len == COLS || row == last
-
-            out << CR
-            pen.rvs = false
-          end
+          wrapped = false
+          (0..last).each { |row| wrapped = frame_row(out, pen, row, last, wrapped) }
           out.pack('C*')
         end
 
@@ -123,6 +119,21 @@ module BBS
 
         private_constant :Pen
 
+        # Appends +row+ of a #frame to +out+; +wrapped+ when the row before was
+        # full. Whether this one is full.
+        def frame_row(out, pen, row, last, wrapped)
+          len = visible_end(row)
+          return out.concat(moves_to(row + 1, 0)) && false if wrapped && len.zero?
+
+          pen.emit(out, @cells[row].first(len))
+          return true if len == COLS
+          return false if row == last
+
+          out << CR
+          pen.rvs = false
+          false
+        end
+
         def cheaper(changed, order)
           return ''.b if changed.empty?
 
@@ -156,8 +167,14 @@ module BBS
 
         # Moves the cursor from +at+ to +row+, +col+ (from HOME when that
         # is nearer) and returns where it is after printing a cell there.
+        #
+        # After the last cell of a row a C64 is at the start of the next row,
+        # but a terminal that emulates one (bbs-web's xterm.js) waits at the
+        # end of the row until the next character: printing on goes on at the
+        # same place on both, any other move does not, so from there the
+        # cursor goes from HOME.
         def step_to(out, at, row, col)
-          if row + col < distance(at, row, col)
+          if at[2] == :wrapped ? [row, col] != at.first(2) : row + col < distance(at, row, col)
             out << HOME
             at = [0, 0]
           end
@@ -165,7 +182,7 @@ module BBS
           after(row, col)
         end
 
-        def after(row, col) = col == COLS - 1 ? [row + 1, 0] : [row, col + 1]
+        def after(row, col) = col == COLS - 1 ? [row + 1, 0, :wrapped] : [row, col + 1]
 
         def distance(from, row, col) = (row - from[0]).abs + (col - from[1]).abs
 
