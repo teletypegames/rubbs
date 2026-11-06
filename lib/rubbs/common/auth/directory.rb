@@ -47,6 +47,17 @@ module Rubbs
         # also answer +:unavailable+: it cannot say).
         def account_state(name) = known?(name) ? :known : :unknown
 
+        # The Identity of the account +id+ (source +:login+), or why there is
+        # none to act as: +:unknown_account+ (no such account) or +:banned+.
+        # What Rubbs::Common::Central::Server checks a request's actor with.
+        def resolve(id)
+          account = AccountModel.where(id: Integer(id, exception: false)).first
+          return :unknown_account unless account
+          return :banned if account.banned?
+
+          identity(account)
+        end
+
         # Whether +name+ looks like the name of another account.
         def look_alike?(name) = !AccountModel.look_alike(name).nil?
 

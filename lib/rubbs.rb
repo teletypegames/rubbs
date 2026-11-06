@@ -49,6 +49,7 @@ require_relative 'rubbs/common/web/http'
 require_relative 'rubbs/common/storage/cache'
 require_relative 'rubbs/common/line/rate_limit'
 require_relative 'rubbs/common/board/background'
+require_relative 'rubbs/common/central'
 require_relative 'rubbs/common/auth'
 require_relative 'rubbs/common/web/media_wiki'
 require_relative 'rubbs/common/web/media_wiki/extract'
@@ -81,6 +82,7 @@ require_relative 'rubbs/modern/application'
 require_relative 'rubbs/common/line/session'
 require_relative 'rubbs/common/line/server'
 require_relative 'rubbs/common/board/domain'
+require_relative 'rubbs/common/board/central_wiring'
 require_relative 'rubbs/common/board/board'
 require_relative 'rubbs/modern/part'
 require_relative 'rubbs/common/storage/snapshot'
@@ -137,6 +139,17 @@ module Rubbs
   # Blocks; returns +nil+ after Ctrl-C.
   def self.start(port: config.port)
     Common::Line::Server.new(port: port).run
+  end
+
+  # The +service+ of the Central (a Rubbs::Common::Central::Service
+  # subclass) as a Rubbs::Common::Central::Proxy: on the Central it runs here, on
+  # another board it is asked over HTTP; without a Central (no +central+ in
+  # Rubbs.board) every answer is +unavailable+.
+  #
+  #   Rubbs.central(Wall).post(Rubbs::Common::Central::Actor.of(session), text: 'Hello')
+  def self.central(service)
+    link = config.central or return Common::Central::Proxy.away(service)
+    link.proxy(service)
   end
 
   # The calls on this board's line now (Rubbs::Common::Line::Server#live of

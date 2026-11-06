@@ -162,13 +162,13 @@ class AuthRemoteTest < Minitest::Test
     @directory = Rubbs::Test.accounts(roles: ['member'])
     @directory.register('Ada', 'secret1')
     @api = Rubbs::Common::Auth::API.new(@directory, port: 0, host: '127.0.0.1')
-    @thread = Thread.new { @api.instance_variable_get(:@server).start }
+    @thread = @api.start
     @remote = Rubbs::Common::Auth::Remote.new("http://127.0.0.1:#{@api.port}/auth", aud: 'blog-bbs')
   end
 
   def teardown
     @api.stop
-    @thread.join(2)
+    @thread.kill
     Rubbs.config.auth_secrets = []
   end
 
@@ -182,7 +182,7 @@ class AuthRemoteTest < Minitest::Test
   end
 
   def test_a_request_without_the_secret_is_refused
-    assert_equal({ error: 'signature' }, @api.answer('{"op":"known","name":"ada"}', 'forged'))
+    assert_equal({ 'error' => 'signature' }, @api.answer('{"op":"known","name":"ada"}', 'forged'))
     Rubbs.config.auth_secrets = []
     capture_io { assert_equal :unavailable, @remote.log_in('ada', 'secret1', caller_key: 'line:1') }
     capture_io { assert_equal :unavailable, @remote.account_state('ada') }

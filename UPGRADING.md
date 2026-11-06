@@ -1,3 +1,22 @@
+# rubbs 3.2
+
+**The Central** (`Rubbs::Common::Central`, README *The Central*): the data a network shares lives on one
+board and the others ask it, the accounts and any service a network adds, on one port with one signature.
+The accounts move onto it; a board that does nothing keeps working (`Auth::API` and `Auth::Remote` are
+still there), but this is the way now:
+
+| was | is |
+|---|---|
+| on the home of the accounts: `on_start { … Rubbs::Common::Auth::API.new(directory, port: 8090).start }` | `central serve: 8090` (with `auth(…, &:directory)`) |
+| on another board: `auth Rubbs::Common::Auth::Remote.new('http://home:8090/auth'), login: :menu` | `central 'http://home:8090'` and `auth login: :menu` |
+
+**The order matters:** the Central first. A rubbs 3.2 board signs its requests the new way
+(`X-RuBBS-Central`), which a 3.1 home does not know; a 3.2 Central takes both, so update it, then the
+other boards. The old signature on `/auth` goes in a later release.
+
+`Rubbs::Common::Auth::Directory#resolve(id)` is new (the account of an id, or `:unknown_account`,
+`:banned`), and `Auth::API#answer` now returns a Hash with String keys.
+
 # rubbs 3.1
 
 The faces draw their own: a screen of both faces keeps what it says and how it waits in `Rubbs::Common` and

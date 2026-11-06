@@ -1,41 +1,48 @@
 # frozen_string_literal: true
 
-require 'json'
-
 module Rubbs
   module Common
     module Auth
-      # The accounts of another board (the home of the accounts) through its
-      # Rubbs::Common::Auth::API: the same answers as a Rubbs::Common::Auth::Directory, so a board
+      # The accounts of another board (the Central) through its
+      # Rubbs::Common::Auth::Service: the same answers as a Rubbs::Common::Auth::Directory, so a board
       # uses either alike. An account comes back as a token for this board,
-      # checked as any other (Rubbs::Common::Auth::Token). When the home does not answer,
+      # checked as any other (Rubbs::Common::Auth::Token). When the Central does not answer,
       # the answer is +:unavailable+.
       #
-      #   Rubbs::Common::Auth::Remote.new('http://ttg-gate-bbs:8090/auth')
+      #   Rubbs::Common::Auth::Remote.new('http://ttg-gate-bbs:8090')          # the Central's address
+      #   Rubbs::Common::Auth::Remote.new(client: Rubbs.config.central.client)  # its Central::Client
+      #
+      # An address that ends in <tt>/auth</tt> (the form before the Central)
+      # is taken without it.
       class Remote
         # Seconds a request may take.
         TIMEOUT = 10
 
-        # The directory at +url+, asked as the board +aud+ (this board's
-        # technical name).
-        def initialize(url, aud: nil, timeout: TIMEOUT)
-          @url     = url
-          @aud     = aud
+        # The Central::Client it asks.
+        attr_reader :client
+
+        # The accounts of the Central at +url+ (or through +client+, a
+        # Rubbs::Common::Central::Client), asked as the board +aud+ (this
+        # board's technical name), each request at most +timeout+ seconds.
+        def initialize(url = nil, aud: nil, timeout: TIMEOUT, client: nil)
+          raise ArgumentError, 'an address or a client' unless url || client
+
+          @client  = client || Central::Client.new(url.to_s.chomp('/').delete_suffix('/auth'), aud: aud)
           @timeout = timeout
         end
 
-        # See Rubbs::Common::Auth::Directory#known?; +false+ when the home is away.
+        # See Rubbs::Common::Auth::Directory#known?; +false+ when the Central is away.
         def known?(name) = account_state(name) == :known
 
         # Whether +name+ has an account: +:known+, +:unknown+, or +:unavailable+
-        # when the home did not answer, so a board can tell "no such account"
+        # when the Central did not answer, so a board can tell "no such account"
         # from "cannot say" and keep a name it cannot check from coming in as a
         # guest.
         def account_state(name)
-          answer = ask('known', name: name)
-          return :unavailable unless answer.key?('result')
+          answer = ask('known', name: name)['result']
+          return :unavailable unless [true, false].include?(answer)
 
-          answer['result'] == true ? :known : :unknown
+          answer ? :known : :unknown
         end
 
         # See Rubbs::Common::Auth::Directory#look_alike?.
@@ -63,29 +70,13 @@ module Rubbs
           answer = ask(op, **fields)
           return (answer['result'] || 'unavailable').to_sym unless answer['token']
 
-          Token.verify(answer['token'], aud: audience).with(source: :login)
+          Token.verify(answer['token'], aud: @client.audience).with(source: :login)
         rescue Token::Invalid => e
           Rubbs.log('auth', e, level: :warn)
           :unavailable
         end
 
-        def ask(op, **fields)
-          body = JSON.generate({ op: op, aud: audience, ts: Time.now.to_i, **fields })
-          response = Web::HTTP.post(
-            @url,
-            body:         body,
-            headers:      { 'Content-Type' => 'application/json', 'X-RuBBS-Signature' => API.signature(body) },
-            public_only:  false,
-            read_timeout: @timeout,
-            deadline:     @timeout
-          )
-          JSON.parse(response.body.to_s)
-        rescue Web::HTTP::Error, JSON::ParserError, Token::NoSecret => e
-          Rubbs.log('auth', e, level: :warn, url: @url)
-          {}
-        end
-
-        def audience = (@aud || Rubbs.config.log_tag).to_s
+        def ask(op, **fields) = @client.ask('/auth', op, timeout: @timeout, **fields)
       end
     end
   end

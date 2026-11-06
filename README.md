@@ -339,7 +339,7 @@ accounts (with roles), the others ask it, and a call handed on from one board
 to another carries its caller's identity in a signed key.
 
 ```ruby
-# the home of the accounts: a database of its own, an API for the other boards
+# the Central: the accounts in a database of its own, served to the other boards
 class HomeBBS
   include Rubbs::Common::Board::Domain
   path     :accounts_db, 'data/accounts.sqlite3'
@@ -349,20 +349,21 @@ end
 
 Rubbs.board 'Home BBS', HomeBBS do
   auth(login: :menu, &:directory)
-  on_start { |bbs| Rubbs::Common::Auth::API.new(bbs.directory, port: 8090).start }
+  central serve: 8090          # the accounts on /auth, with any other service of the Central
   …
 end
 
 # any other board
 Rubbs.board 'Blog BBS', BlogBBS do
-  auth Rubbs::Common::Auth::Remote.new('http://home-bbs:8090/auth'), login: :menu   # or :call, :both
+  central 'http://home-bbs:8090'
+  auth login: :menu            # or :call, :both; the Central's accounts
   …
 end
 ```
 
 | `auth` option | |
 |---|---|
-| directory | a `Rubbs::Common::Auth::Directory` (the accounts here) or a `Rubbs::Common::Auth::Remote` (another board's, through its `Rubbs::Common::Auth::API`); a block is given the domain object at boot |
+| directory | a `Rubbs::Common::Auth::Directory` (the accounts here, on the Central) or a `Rubbs::Common::Auth::Remote` (the Central's); none: the Central's of `central`; a block is given the domain object at boot |
 | `login:` | `:call` asks a name and password at the start of a call, before the face; `:menu` leaves it to the faces (the built-in `:log_in` / `:log_out` commands, `log_in` on a `Petscii::Face`); `:both` |
 | `guests:` | at a `:call` login, whether an empty name or one without an account comes in as a guest (default `true`) |
 
@@ -390,10 +391,10 @@ board shares, not hidden; it is good for one board, sixty seconds and once.
 every board: at least 32 random bytes (`openssl rand -hex 32`), never in a
 repository. While it changes, give both, the new first: `new,old`.
 
-**The API** (`Rubbs::Common::Auth::API`, WEBrick) answers one POST path, `/auth`, with
-`log_in`, `register`, `change_password`, `known`, `look_alike`. A request is
-signed with the secret too, so only the boards that share it can ask. Run it on
-a network only the boards reach.
+**The service.** The accounts are a service of the Central (`Rubbs::Common::Auth::Service`, see
+*The Central* below) on the POST path `/auth`, with `log_in`, `register`, `change_password`,
+`known`, `look_alike`; `Rubbs::Common::Auth::Remote` asks it and answers as a `Directory` does.
+`Rubbs::Common::Auth::API` is a Central with this service alone, for a board that serves nothing else.
 
 **Passwords** are PBKDF2-SHA256 in one self-describing string
 (`pbkdf2-sha256$200000$salt$hash`); an older digest is checked as it is and
@@ -434,6 +435,63 @@ through the API too, so no board lets it in; its calls go on until a board hangs
 
 **Tests.** `Rubbs::Test.accounts` (a fresh accounts database and a `Directory`),
 `Rubbs::Test.auth_secret`, and `Rubbs::Test::Session.new(identity:, forwarded:)`.
+
+### The Central: `Rubbs::Common::Central`
+
+The data a network of boards shares lives on one of them, the **Central**, and the others ask it.
+The accounts are one such service; a network adds its own (a feedback box, a wall). One mechanism
+serves them all:
+
+```ruby
+class Wall < Rubbs::Common::Central::Service
+  path     '/wall'
+  database :wall, MIGRATIONS                      # data/wall.sqlite3 on the Central
+
+  op(:post) { |actor, text:, **| { id: database[:notes].insert(name: actor.name, text: text) } }
+  op(:recent, actor: false) { |_, **| { notes: database[:notes].reverse(:id).limit(20).all } }
+  op(:hide, role: :sysop) { |_, id:, **| database[:notes].where(id: id).delete && :ok }
+end
+
+# the Central
+Rubbs.board 'Home BBS', HomeBBS do
+  auth(login: :menu, &:directory)
+  central serve: 8090, services: [Wall]           # /auth comes by itself
+end
+
+# any board, the Central too
+Rubbs.central(Wall).post(Rubbs::Common::Central::Actor.of(session), text: 'Hello')
+# => { "result" => "ok", "id" => 7 }
+```
+
+| `central` | |
+|---|---|
+| address | on any other board: the Central's address (`http://home-bbs:8090`) or a `Rubbs::Common::Central::Client` |
+| `serve:` | on the Central: the port (a number or a block given the domain object; `0`: no port, its own calls only) |
+| `services:` | on the Central: `Rubbs::Common::Central::Service` subclasses; `Auth::Service` comes by itself when `auth` has a `Directory` |
+| `data:` | on the Central: the folder of the services' databases (default `data`, against the domain's root) |
+
+- **The same here and there.** `Rubbs.central(Service)` is a `Rubbs::Common::Central::Proxy`: on the
+  Central the request runs in the process, elsewhere a `Client` asks over HTTP; the answer is the same
+  Hash (String keys, a `result`). An op is a method of the proxy (`wall.post(actor, …)`) or
+  `call(:post, actor, …)`.
+- **One way to fail.** No answer, a slow one (2 s), no secret, a refused signature: the answer is
+  `Rubbs::Common::Central::UNAVAILABLE` (`{ "result" => "unavailable" }`) and a `warn` line.
+- **One signature.** base64url(HMAC-SHA256) of `"<path>\n<body>"` with a key of `RUBBS_AUTH_SECRET`,
+  in `X-RuBBS-Central` (`Rubbs::Common::Central::Signature`): a request signed for one service is no
+  good on another. `/auth` also takes the old signature of rubbs 3.1 (`X-RuBBS-Signature`) while the
+  boards move over.
+- **Who asks, checked once.** A request carries its `Rubbs::Common::Central::Actor` (`Actor.of(session)`:
+  the account's id and name, or a guest's name, the `caller_key` and the face). Before any service sees
+  it the Central checks it: an account must exist and not be banned, and its roles are the accounts',
+  not what the board said; a guest's name must be no account's and look like none. Otherwise the answer
+  is `unknown_account`, `banned`, `name_taken` or `invalid_name`, and the op does not run.
+- **An op** is a block given the checked actor and the request's fields as keywords; `role:` limits it
+  (`forbidden`), `actor: false` does not ask who calls. It answers a Symbol (`{ "result": "…" }`), a Hash
+  (`result: "ok"` added unless it has one) or another value (`{ "result": "ok", "value": … }`); a missing
+  keyword is `bad_request`, an exception `error` (logged).
+- **One log line a request** (`central`: service, op, board, actor, result, ms) and `/health` for the
+  services' databases (503 with the problems).
+
 
 ## 4. Server lifecycle
 
@@ -3123,6 +3181,7 @@ either face; a C64 line turns it into PETSCII (`Rubbs::Petscii::Encoder`).
 | `lib/rubbs/common/call/` | `Common::Call` | a call's flow (`Flow`, `FlowRunner`, `Renderer`), the terminal question (`Terminal`), `Splash`, `Goodbye`, `Door` |
 | `lib/rubbs/common/screens/` | `Common::Screens` | the screens of both faces: `Pages`, `Page`, `Selector`, `Field`, `TextBuffer`, `Editor`, `Cursor`, `Paint` |
 | `lib/rubbs/common/auth/` | `Common::Auth` | accounts, tokens, the login, the profile |
+| `lib/rubbs/common/central/` | `Common::Central` | the Central: the shared data of a network, its server, client, services and actors |
 | `lib/rubbs/common/storage/` | `Common::Storage` | `Database`, `Model`, `Store`, `Cache`, `Snapshot` |
 | `lib/rubbs/common/web/` | `Common::Web` | `HTTP`, `Wikipedia`, `MediaWiki`, `Wikidata`, `DiscordWebhook` |
 | `lib/rubbs/common/text/` | `Common::Text` | control-free text, `Markdown`, `QR`, `BlockFont`, `Banner`, `Hotkey`, `Patterns` |

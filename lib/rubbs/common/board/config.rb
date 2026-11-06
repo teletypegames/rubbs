@@ -94,6 +94,10 @@ module Rubbs
         #                +nil+ when callers do not log in
         attr_accessor :auth_secrets, :auth
 
+        # The board's tie to the Central, a Rubbs::Common::Central::Link (Rubbs.board's
+        # +central+), or +nil+ when it has none.
+        attr_accessor :central
+
         # The User-Agent of Rubbs::Common::Web::HTTP without a preset's addition.
         DEFAULT_USER_AGENT = "rubbs/#{Gem.loaded_specs['rubbs']&.version || 'dev'}".freeze
 
@@ -135,6 +139,7 @@ module Rubbs
           @shutdown_notice  = SHUTDOWN_NOTICE
           @auth_secrets     = ENV['RUBBS_AUTH_SECRET'].to_s.split(',').map(&:strip).reject(&:empty?)
           @auth             = nil
+          @central          = nil
         end
       end
     end

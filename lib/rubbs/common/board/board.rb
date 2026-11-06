@@ -22,6 +22,8 @@ module Rubbs
       #
       # and gets the goodbye screen after it (#goodbye).
       class BoardDefinition
+        include CentralWiring
+
         # Idle seconds before a quiet caller is dropped, unless #idle says.
         IDLE = 600
 
@@ -90,8 +92,10 @@ module Rubbs
         # it to the faces' login item; +:both+) and +guests+ (whether a caller
         # without an account comes in at a +:call+ login).
         #
-        #   auth TTG::AUTH, login: :menu
-        #   auth(login: :call) { |board| board.directory }
+        # Without a +directory+ the accounts are the Central's (#central).
+        #
+        #   auth login: :menu                                 # the Central's accounts
+        #   auth(login: :call) { |board| board.directory }   # the Central itself
         def auth(directory = nil, login: :menu, guests: true, &block)
           raise ArgumentError, "login: is one of #{Auth::LOGINS.join(', ')}" unless Auth::LOGINS.include?(login)
 
@@ -123,7 +127,9 @@ module Rubbs
           Rubbs.config.board = @board
           @board.start if @board.respond_to?(:start)
           @on_start.each { |hook| hook.call(@board) }
+          configure_central_client
           configure_auth
+          configure_central_server
           configure_line
           Rubbs.config.flow = flow
           self
@@ -144,6 +150,7 @@ module Rubbs
         # Returns +nil+.
         def stop
           @on_stop.each { |hook| hook.call(@board) }
+          Rubbs.config.central&.server&.stop
           @board.stop if @board.respond_to?(:stop)
           nil
         rescue StandardError => e
@@ -167,14 +174,6 @@ module Rubbs
           config.log_tag    = @slug
           config.env_prefix = "#{@slug.upcase.tr('-', '_')}_"
           config.preset     = @preset
-        end
-
-        def configure_auth
-          return Rubbs.config.auth = nil unless @auth
-
-          directory, login, guests = @auth
-          directory = directory.call(@board) if directory.respond_to?(:call)
-          Rubbs.config.auth = Auth::Setup.new(directory: directory, login: login, guests: guests)
         end
 
         def configure_line

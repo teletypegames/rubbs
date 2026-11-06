@@ -8,6 +8,7 @@ require_relative 'auth/token'
 require_relative 'auth/accounts'
 require_relative 'auth/directory/sysop'
 require_relative 'auth/directory'
+require_relative 'auth/service'
 require_relative 'auth/api'
 require_relative 'auth/remote'
 require_relative 'auth/login'
@@ -17,7 +18,8 @@ require_relative 'auth/profile'
 module Rubbs
   module Common
     # Who is on the line, the same on every board of a network: accounts with
-    # roles kept by one board (Rubbs::Common::Auth::Directory and its Rubbs::Common::Auth::API),
+    # roles kept by one board, the Central (Rubbs::Common::Auth::Directory, served as
+    # Rubbs::Common::Auth::Service by its Rubbs::Common::Central::Server),
     # asked by the others (Rubbs::Common::Auth::Remote), and a call handed on from one
     # board to another with its identity in a signed, single-use token
     # (Rubbs::Common::Auth::Token, sent as RUBBS_AUTH_KEY by a forwarding
@@ -25,8 +27,9 @@ module Rubbs
     #
     # A board declares it in Rubbs.board:
     #
-    #   auth Rubbs::Common::Auth::Remote.new('http://home-bbs:8090/auth'), login: :menu
-    #   auth(login: :call) { |board| board.directory }   # the home of the accounts
+    #   central 'http://home-bbs:8090'                    # the accounts on the Central…
+    #   auth login: :menu                                 # …asked through it
+    #   auth(login: :call) { |board| board.directory }   # the Central itself
     #
     # and reads it with +identity+, +signed_in?+ and <tt>role?(:sysop)</tt> in
     # an Application, a Rubbs::Petscii::Face and a flow.
@@ -46,8 +49,8 @@ module Rubbs
 
       # The modes of Setup#login.
       LOGINS = %i[call menu both].freeze
-      # The thread-local key of the board a request of Rubbs::Common::Auth::API came
-      # from, the +asker+ of the events it causes.
+      # The thread-local key of the board a request to the Central came from
+      # (Rubbs::Common::Central::Server), the +asker+ of the events it causes.
       ASKER = :bbs_auth_asker
 
       # Logs an auth +event+ (a Symbol: +:login+, +:login_failed+, +:locked+,
