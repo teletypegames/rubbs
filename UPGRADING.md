@@ -1,3 +1,7 @@
+# rubbs 4.0.1
+
+The state file of `Rubbs::MultiRunner` also has each board's CPU time (`cpu_seconds`). Nothing to change.
+
 # rubbs 4.0
 
 **`Rubbs.board` declares, `run!` starts.** `Rubbs.board` returns the

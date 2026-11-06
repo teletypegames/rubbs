@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'etc'
+
 module Rubbs
   class MultiRunner
     # One board of a Rubbs::MultiRunner and its process: started (forked),
@@ -136,9 +138,14 @@ module Rubbs
       # its START_GRACE, at +now+.
       def unhealthy?(now) = up? && @stopping.nil? && now - @started > START_GRACE && @failures >= HEALTH_FAILURES
 
-      # Reads the board's resident memory (Linux, <tt>/proc</tt>) and counts
-      # the checks over its limit. Returns the bytes, or +nil+.
+      # The CPU time the board's process has used (user and system, seconds;
+      # Linux), as of the last #measure, or +nil+.
+      attr_reader :cpu_seconds
+
+      # Reads the board's resident memory and CPU time (Linux, <tt>/proc</tt>)
+      # and counts the checks over its memory limit. Returns the bytes, or +nil+.
       def measure
+        @cpu_seconds = up? ? self.class.cpu(@pid) : nil
         @rss_bytes = up? ? self.class.rss(@pid) : nil
         limit      = memory_limit
         @strikes   = limit && @rss_bytes && @rss_bytes > limit ? @strikes + 1 : 0
@@ -156,6 +163,14 @@ module Rubbs
         nil
       end
 
+      # The CPU time (user and system) of process +pid+ in seconds, or +nil+ off Linux.
+      def self.cpu(pid)
+        fields = File.read("/proc/#{pid}/stat").split(') ', 2).last.split
+        (Integer(fields[11]) + Integer(fields[12])).fdiv(Etc.sysconf(Etc::SC_CLK_TCK)).round(2)
+      rescue SystemCallError, ArgumentError, TypeError
+        nil
+      end
+
       # The board's state for the state file (Status).
       def to_h
         {
@@ -170,6 +185,7 @@ module Rubbs
           started_at:         started_at&.utc&.iso8601,
           rss_bytes:          rss_bytes,
           memory_limit_bytes: memory_limit,
+          cpu_seconds:        cpu_seconds,
           revision:           revision,
           restarts:           restarts.transform_keys(&:to_s),
           last_reason:        reason

@@ -59,6 +59,12 @@ class MultiRunnerTest < Minitest::Test
     assert_raises(ArgumentError) { Rubbs::MultiRunner::Child.new(ref('a'), { 'memory' => 'lots' }, output: nil).memory_limit }
   end
 
+  def test_cpu_and_memory_of_a_process
+    skip 'Linux /proc only' unless File.exist?("/proc/#{Process.pid}/stat")
+    assert_kind_of Float, Rubbs::MultiRunner::Child.cpu(Process.pid)
+    assert_operator Rubbs::MultiRunner::Child.rss(Process.pid), :>, 0
+  end
+
   def test_the_fingerprint_is_of_the_code_only
     Dir.mktmpdir do |dir|
       write_board(dir, 'a', 'A BBS')
