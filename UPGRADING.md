@@ -1,3 +1,26 @@
+# rubbs 4.0
+
+**`Rubbs.board` declares, `run!` starts.** `Rubbs.board` returns the
+`Rubbs::Common::Board::BoardDefinition` and no longer starts the server; a board's `bbs.rb`
+starts it itself when it is the program:
+
+```ruby
+board = Rubbs.board 'Feedia BBS', FeediaBBS do
+  # … as before
+end
+
+board.run! if Rubbs.main?(__FILE__)
+```
+
+| was | is |
+|---|---|
+| `Rubbs.board '…' do … end` (started the board) | `board = Rubbs.board '…' do … end` + `board.run! if Rubbs.main?(__FILE__)` |
+| `BoardDefinition#start` | `BoardDefinition#run!` |
+
+`rake bbs:check` (rule `bbs_rb`) asks for this form. A board's `Gemfile` may now be in a folder
+above it. New: `Rubbs::MultiRunner` (many boards in one container, a process each, README §3) and
+`Rubbs::Rake.multi`.
+
 # rubbs 3.4
 
 The splash of a board with a login says *Press space to guest mode* under `Login | Register | Guest`

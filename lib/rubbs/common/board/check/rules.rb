@@ -30,21 +30,24 @@ module Rubbs
         REQUIRED_LAYERS = %w[model service].freeze
 
         rule(:layout, 'the files and folders of a rubbs board') do |board|
-          %w[bbs.rb Rakefile Gemfile Gemfile.lock README.md lib/domain.rb].each do |path|
+          %w[bbs.rb Rakefile README.md lib/domain.rb].each do |path|
             board.fail(path, 'missing') unless board.file?(path)
           end
+          %w[Gemfile Gemfile.lock].each { |path| board.fail(path, 'missing here and above') unless board.file_above?(path) }
           board.fail('test/test_helper.rb', 'missing') if board.glob('test/**/test_helper.rb').empty?
           REQUIRED_LAYERS.each { |layer| board.fail("lib/domain/#{layer}/", 'missing') unless board.dir?("lib/domain/#{layer}") }
         end
 
-        rule(:bbs_rb, 'bbs.rb is requires and one Rubbs.board declaration') do |board|
-          lines = board.read('bbs.rb').to_s.lines.map(&:strip).reject { |l| l.empty? || l.start_with?('#') }
-          start = lines.index { |l| l.start_with?('Rubbs.board ') }
+        rule(:bbs_rb, 'bbs.rb is requires, one Rubbs.board declaration and its run! line') do |board|
+          lines = board.code_lines('bbs.rb')
+          start = lines.index { |l| l.match?(Board::DECLARATION_START) }
           next board.fail('bbs.rb', 'no Rubbs.board declaration') unless start
 
           extra = lines[0...start].grep_v(/\Arequire(?:_relative)?\s/)
           board.fail('bbs.rb', "only requires before Rubbs.board, not: #{extra.first}") if extra.any?
-          board.fail('bbs.rb', 'nothing after the Rubbs.board declaration') unless lines.last == 'end' || lines.size == start + 1
+          next if lines[start].start_with?('board') && board.after_declaration == [Board::RUN_LINE]
+
+          board.fail('bbs.rb', "say board = Rubbs.board … end, then only: #{Board::RUN_LINE}")
         end
 
         rule(:domain, 'the domain object is a Rubbs::Common::Board::Domain, the only place that reads ENV') do |board|

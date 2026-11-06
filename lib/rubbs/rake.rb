@@ -38,6 +38,47 @@ module Rubbs
       task default: [:test, 'bbs:check']
     end
 
+    # Defines the tasks of a repository of many boards (Rubbs::MultiRunner),
+    # in its root Rakefile: each folder of +root+ with a Rakefile runs its
+    # own <tt>rake test</tt>, and each board (a folder with a +bbs.rb+) its
+    # <tt>rake bbs:check</tt>, in a process of its own (two boards may name
+    # their classes alike). +only+ (default: BOARDS, names comma separated)
+    # chooses the folders. Every folder runs; the task fails at the end,
+    # naming the folders that failed.
+    #
+    #   require 'rubbs/rake'
+    #   Rubbs::Rake.multi
+    def self.multi(root: 'boards', only: ENV.fetch('BOARDS', ''))
+      folders = -> { Rake.folders(root, only) }
+      desc 'Runs the tests of every folder of the boards'
+      task(:test) { Rake.each_folder(folders.call, 'test') }
+      namespace :bbs do
+        desc 'Checks every board (Rubbs::Common::Board::Check)'
+        task(:check) { Rake.each_folder(folders.call.select { |dir| File.file?(File.join(dir, 'bbs.rb')) }, 'bbs:check') }
+      end
+      task default: [:test, 'bbs:check']
+    end
+
+    # The folders of +root+ with a Rakefile, by name; only those named in
+    # +only+ (a comma separated String) when it names any.
+    def self.folders(root, only)
+      names = only.to_s.split(',').map(&:strip).reject(&:empty?)
+      Dir.glob(File.join(root, '*', 'Rakefile')).map { |file| File.dirname(file) }.sort.select do |dir|
+        names.empty? || names.include?(File.basename(dir))
+      end
+    end
+
+    # Runs <tt>rake task</tt> in each of +dirs+ (with Bundler, in a process
+    # of its own). Raises (and so fails the task) naming the folders where it
+    # failed.
+    def self.each_folder(dirs, task)
+      failed = dirs.reject do |dir|
+        puts "==> #{File.basename(dir)}: rake #{task}"
+        system('bundle', 'exec', 'rake', task, chdir: dir)
+      end
+      abort "rake #{task} failed in: #{failed.map { |dir| File.basename(dir) }.join(', ')}" if failed.any?
+    end
+
     # Runs Rubbs::Common::Board::Check on the board at +root+ and prints what is out of
     # shape. Raises (and so fails the task) when anything is.
     def self.check(root, **)

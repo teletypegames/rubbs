@@ -137,10 +137,14 @@ module Rubbs
 
         # #configure, then Rubbs.start; when the server has stopped (SIGTERM,
         # Ctrl-C, see Rubbs::Common::Line::Server#stop), #stop. Does not return while the
-        # server runs.
-        def start
+        # server runs; returns +self+ after.
+        #
+        #   board = Rubbs.board('Feedia BBS', FeediaBBS) { … }
+        #   board.run! if Rubbs.main?(__FILE__)
+        def run!
           configure
           Rubbs.start
+          self
         ensure
           stop
         end

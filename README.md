@@ -22,10 +22,12 @@ APP = Rubbs::Modern::Application.define do
   menu 'Board', :bulletin, :separator, :log_off
 end
 
-Rubbs.board 'My BBS', MyBBS do
+board = Rubbs.board 'My BBS', MyBBS do
   modern APP
   goodbye 'Come back soon.'
 end
+
+board.run! if Rubbs.main?(__FILE__)
 ```
 
 Connect with `telnet localhost 2323`.
@@ -167,14 +169,16 @@ class C64 < Rubbs::Petscii::Face
   def read(story) = page(story.title.upcase, markdown(story.body))
 end
 
-Rubbs.board 'News BBS', NewsBBS do
+board = Rubbs.board 'News BBS', NewsBBS do
   modern  MODERN
   petscii C64
   goodbye 'Stories from our newsroom.'
 end
+
+board.run! if Rubbs.main?(__FILE__)
 ```
 
-`Rubbs.board` reads the settings from the environment (`NEWS_BBS_…`), makes
+`board.run!` reads the settings from the environment (`NEWS_BBS_…`), makes
 the domain object, asks the caller's terminal, runs the face, says goodbye
 and serves callers until the process ends.
 
@@ -197,7 +201,7 @@ end
 ### `Rubbs.board`
 
 ```ruby
-Rubbs.board 'Feedia BBS', FeediaBBS do
+board = Rubbs.board 'Feedia BBS', FeediaBBS do
   preset  TTG::PRESET                    # splash, goodbye address + QR, User-Agent
   modern  UI::Modern::APP                # an Application definition …
   petscii UI::Petscii                    # … or a Rubbs::Petscii::Face subclass, a Flow, or a block
@@ -208,11 +212,16 @@ Rubbs.board 'Feedia BBS', FeediaBBS do
   on_session_end { |session, bbs| bbs.end_call(session.session_id) }
   on_stop { |bbs| bbs.irc.quit }                                   # once, after the last caller
 end
+
+board.run! if Rubbs.main?(__FILE__)
 ```
 
 `Rubbs.board(title, domain = nil, slug: nil) { … }` evaluates the block in a
-`Rubbs::Common::Board::BoardDefinition`, applies it and starts the server; it does not
-return while the server runs.
+`Rubbs::Common::Board::BoardDefinition` and returns it; it starts nothing.
+`board.run!` applies it and starts the server; it does not return while the
+server runs. `Rubbs.main?(__FILE__)` is true when the file is the program
+(`ruby bbs.rb`), not when a `Rubbs::MultiRunner` or a test loads it, so the same
+`bbs.rb` serves a board on its own and a board among many (below).
 
 | Declaration | Effect |
 |---|---|
@@ -243,7 +252,7 @@ still reaches the goodbye.
 others still get `Rubbs::Common::Call::Goodbye.show` after them. With one face only
 (`modern` without `petscii`) there is no terminal question.
 
-What `Rubbs.board` does with the declaration:
+What `board.run!` does with the declaration:
 
 - From the title come the log tag and the environment prefix:
   `Feedia BBS` → `feedia-bbs` (`Rubbs.config.log_tag`) and `FEEDIA_BBS_`
@@ -261,6 +270,50 @@ What `Rubbs.board` does with the declaration:
 `Rubbs.config` and `Rubbs.configure` stay the low-level settings underneath (see
 [§4](#4-server-lifecycle)); a board declared with `Rubbs.board` does not need
 them.
+
+### Many boards in one container: `Rubbs::MultiRunner`
+
+A repository of many boards (`boards/<name>/bbs.rb` each) runs them under one
+supervisor, each board in a process of its own:
+
+```ruby
+# bbs.rb at the root
+require 'rubbs'
+
+runner = Rubbs::MultiRunner.new(root: 'boards', settings: 'boards.yml', state: 'state', name: 'my-bbs')
+runner.boards = Rubbs::MultiRunner.discover('boards')   # the default
+runner.run!
+```
+
+```yaml
+# boards.yml: per folder name
+feedia: { port: 2327, max_sessions: 50, memory: 160m }
+wiki:   { port: 2325, enabled: false, env: { WIKI_BBS_URL: https://wiki.example.org } }
+```
+
+The supervisor never loads a board's code: each board's process changes into
+its folder, takes its `port` and `max_sessions` (as `BBS_PORT`,
+`BBS_MAX_SESSIONS`) and `env`, loads `bbs.rb` and runs it. So two boards may
+name their classes alike, and a board restarted reads its code anew. Then:
+
+- every line of a board goes out on the supervisor's stderr; a line that is not
+  a JSON log record is wrapped in one with the board's name (`tag: output`);
+- a board that ends is started again after 1, 2, 4 … 60 seconds; one that fails
+  its health probe 3 times (after 120 s), or is over its `memory` twice, is
+  restarted in order (its callers are told);
+- when `boards/.revision` changes, only the boards whose code changed
+  (`Rubbs::MultiRunner::Fingerprint`: the contents, not `data/`, `test/`, `*.md`)
+  are restarted, one at a time; nothing starts while `boards/.deploying` exists
+  (a deploy copying), unless it is older than 10 minutes;
+- every 10 s the state goes to `state/multi_runner.json`
+  (`Rubbs::MultiRunner::Status`): per board its pid, health, callers, memory,
+  restarts by reason and revision;
+- SIGTERM stops every board in order.
+
+`BBS_BOARDS=feedia,wiki` starts only those. In the root Rakefile,
+`Rubbs::Rake.multi` runs every folder's `rake test` and every board's
+`rake bbs:check` (`BOARDS=` to choose). A board's `Gemfile` may be the
+repository's (`rake bbs:check` looks for it in the folders above).
 
 ### `Rubbs::Common::Board::Domain`
 

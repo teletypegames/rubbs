@@ -7,7 +7,8 @@ require 'fileutils'
 class CheckTest < Minitest::Test
   BOARD = {
     'bbs.rb'                                   => "require 'rubbs'\nrequire_relative 'lib/domain'\n\n" \
-                                                  "Rubbs.board 'Shop BBS', ShopBBS do\n  modern APP\nend\n",
+                                                  "board = Rubbs.board 'Shop BBS', ShopBBS do\n  modern APP\nend\n\n" \
+                                                  "board.run! if Rubbs.main?(__FILE__)\n",
     'Rakefile'                                 => '',
     'Gemfile'                                  => '',
     'Gemfile.lock'                             => '',
@@ -63,6 +64,22 @@ class CheckTest < Minitest::Test
     end
   end
 
+  def test_bbs_rb_ends_with_its_run_line_and_the_gemfile_may_be_above
+    old = "Rubbs.board 'Shop BBS', ShopBBS do\n  modern APP\nend\n"
+    with_board('bbs.rb' => old) { |dir| assert_equal [:bbs_rb], Rubbs::Common::Board::Check.run(dir).map(&:rule) }
+    Dir.mktmpdir do |repo|
+      File.write(File.join(repo, 'Gemfile'), '')
+      File.write(File.join(repo, 'Gemfile.lock'), '')
+      with_board('Gemfile' => nil, 'Gemfile.lock' => nil) do |dir|
+        assert_equal %i[layout], Rubbs::Common::Board::Check.run(dir).map(&:rule).uniq
+        board = File.join(repo, 'boards', 'shop')
+        FileUtils.mkdir_p(File.dirname(board))
+        FileUtils.cp_r(dir, board)
+        assert_empty Rubbs::Common::Board::Check.run(board)
+      end
+    end
+  end
+
   def test_the_declaration_and_the_names
     with_board('bbs.rb' => "Rubbs.board 'WarpEngine BBS', WarpEngineBBS, slug: 'warp-engine-bbs' do\nend\n") do |dir|
       board = Rubbs::Common::Board::Check::Board.new(dir)
@@ -90,7 +107,7 @@ class CheckTest < Minitest::Test
   end
 
   def test_a_domain_named_unlike_its_board_says_its_prefix
-    bbs = "Rubbs.board 'HackerCave BBS', HackerCaveBBS do\nend\n"
+    bbs = "board = Rubbs.board 'HackerCave BBS', HackerCaveBBS do\nend\n\nboard.run! if Rubbs.main?(__FILE__)\n"
     with_board('bbs.rb' => bbs) do |dir|
       assert_equal [:env_prefix], Rubbs::Common::Board::Check.run(dir).map(&:rule).uniq
     end

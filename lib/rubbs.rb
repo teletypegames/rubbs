@@ -89,6 +89,7 @@ require_relative 'rubbs/common/storage/snapshot'
 require_relative 'rubbs/common/files/transfer'
 require_relative 'rubbs/petscii/kit'
 require_relative 'rubbs/modern/kit'
+require_relative 'rubbs/multi_runner'
 
 # The +bbs+ gem: a library for telnet BBS servers. Requiring it loads the
 # whole library. Configure it with Rubbs.configure, then start the server with
@@ -104,14 +105,18 @@ require_relative 'rubbs/modern/kit'
 #
 # See README.md for the guide.
 module Rubbs
-  # Declares the board and starts it: the one call of a board's +bbs.rb+.
+  # Declares the board: the one call of a board's +bbs.rb+. Returns the
+  # Rubbs::Common::Board::BoardDefinition; Rubbs::Common::Board::BoardDefinition#run!
+  # starts it, when the file is the program:
   #
-  #   Rubbs.board 'Alexandria BBS', AlexandriaBBS do
+  #   board = Rubbs.board 'Alexandria BBS', AlexandriaBBS do
   #     preset  TTG::PRESET
   #     modern  UI::Modern
   #     petscii UI::Petscii
   #     goodbye 'Articles from wikipedia.org, under CC BY-SA.'
   #   end
+  #
+  #   board.run! if Rubbs.main?(__FILE__)
   #
   # [title]  the board's name as callers read it
   # [domain] the class of the board's domain object (usually a
@@ -119,10 +124,24 @@ module Rubbs
   # [slug]   the technical name, when it is not the title's
   #          (<tt>'WarpEngine BBS'</tt> → <tt>warp-engine-bbs</tt>)
   #
-  # The block is evaluated in a Rubbs::Common::Board::BoardDefinition. Does not return
-  # while the server runs.
+  # The block is evaluated in a Rubbs::Common::Board::BoardDefinition. While
+  # a Rubbs::MultiRunner loads the file (Rubbs::MultiRunner.capture), the
+  # definition is handed to it too.
   def self.board(title, domain = nil, slug: nil, &)
-    Common::Board::BoardDefinition.new(title, domain, slug: slug, &).start
+    definition = Common::Board::BoardDefinition.new(title, domain, slug: slug, &)
+    MultiRunner.declare(definition) if MultiRunner.loading?
+    definition
+  end
+
+  # Whether +file+ is the program Ruby runs (<tt>ruby bbs.rb</tt>), not a
+  # file loaded by another: the +bbs.rb+ of a board started on its own, not
+  # by a Rubbs::MultiRunner or a test.
+  #
+  #   board.run! if Rubbs.main?(__FILE__)
+  def self.main?(file)
+    return false if MultiRunner.loading?
+
+    File.expand_path(file) == File.expand_path($PROGRAM_NAME)
   end
 
   # Yields the global Rubbs::Common::Board::Config (created on first use) so the block can set
@@ -132,6 +151,14 @@ module Rubbs
   # The global Rubbs::Common::Board::Config, created with its defaults on first use.
   def self.config
     @config ||= Common::Board::Config.new
+  end
+
+  # Forgets the global Rubbs::Common::Board::Config, so that the next
+  # Rubbs.config makes a new one from the environment: what a
+  # Rubbs::MultiRunner does in a board's process before it loads the board.
+  # Returns +nil+.
+  def self.reset_config
+    @config = nil
   end
 
   # Starts a Rubbs::Common::Line::Server listening on +port+ (default: Rubbs.config.port) on

@@ -85,6 +85,41 @@ module Rubbs
           # Whether +path+ is a file of the board.
           def file?(path) = File.file?(File.join(@root, path))
 
+          # The start of a Rubbs.board declaration line.
+          DECLARATION_START = /\A(?:board\s*=\s*)?Rubbs\.board /
+
+          # The last line of a +bbs.rb+, after the declaration of +board+:
+          # it starts the board when the file is the program.
+          RUN_LINE = 'board.run! if Rubbs.main?(__FILE__)'
+
+          # The code lines of the file +path+: no blank lines, no comments.
+          def code_lines(path) = read(path).to_s.lines.map(&:rstrip).reject { |l| l.strip.empty? || l.strip.start_with?('#') }
+
+          # The code lines of +bbs.rb+ after the Rubbs.board declaration and
+          # its block, or +nil+ without one.
+          def after_declaration
+            lines = code_lines('bbs.rb')
+            start = lines.index { |l| l.match?(DECLARATION_START) } or return nil
+            return lines[(start + 1)..] unless lines[start].match?(/\bdo\s*(\|.*\|)?\z/)
+
+            finish = ((start + 1)...lines.size).find { |i| lines[i] == 'end' }
+            finish ? lines[(finish + 1)..] : []
+          end
+
+          # Whether +path+ is a file of the board or of a folder above it (the
+          # Gemfile of a repository of many boards).
+          def file_above?(path)
+            dir = @root
+            loop do
+              return true if File.file?(File.join(dir, path))
+
+              parent = File.dirname(dir)
+              return false if parent == dir
+
+              dir = parent
+            end
+          end
+
           # Whether +path+ is a folder of the board.
           def dir?(path) = File.directory?(File.join(@root, path))
 
@@ -97,12 +132,15 @@ module Rubbs
           # The board's Ruby code: +bbs.rb+ and everything under +lib+.
           def ruby_files = [*('bbs.rb' if file?('bbs.rb')), *glob('lib/**/*.rb')]
 
+          # The Rubbs.board line of a +bbs.rb+: the title, the domain, the slug.
+          DECLARATION = /^(?:board\s*=\s*)?Rubbs\.board\s+(['"])(.+?)\1(?:\s*,\s*([A-Z]\w*))?(?:\s*,\s*slug:\s*(['"])(.+?)\4)?/
+
           # The title, the domain class name and the slug of the Rubbs.board
           # declaration in +bbs.rb+ (each +nil+ when it says none).
           def declaration
             @declaration ||= begin
               text = read('bbs.rb').to_s
-              match = text.match(/^Rubbs\.board\s+(['"])(.+?)\1(?:\s*,\s*([A-Z]\w*))?(?:\s*,\s*slug:\s*(['"])(.+?)\4)?/)
+              match = text.match(DECLARATION)
               match ? { title: match[2], domain: match[3], slug: match[5] } : {}
             end
           end
