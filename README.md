@@ -478,8 +478,7 @@ Rubbs.central(Wall).post(Rubbs::Common::Central::Actor.of(session), text: 'Hello
   `Rubbs::Common::Central::UNAVAILABLE` (`{ "result" => "unavailable" }`) and a `warn` line.
 - **One signature.** base64url(HMAC-SHA256) of `"<path>\n<body>"` with a key of `RUBBS_AUTH_SECRET`,
   in `X-RuBBS-Central` (`Rubbs::Common::Central::Signature`): a request signed for one service is no
-  good on another. `/auth` also takes the old signature of rubbs 3.1 (`X-RuBBS-Signature`) while the
-  boards move over.
+  good on another.
 - **Who asks, checked once.** A request carries its `Rubbs::Common::Central::Actor` (`Actor.of(session)`:
   the account's id and name, or a guest's name, the `caller_key` and the face). Before any service sees
   it the Central checks it: an account must exist and not be banned, and its roles are the accounts',

@@ -1,3 +1,10 @@
+# rubbs 3.3
+
+The Central takes only its own signature (`X-RuBBS-Central`): the old one of rubbs 3.1 on `/auth`
+(`X-RuBBS-Signature`) is gone, and with it `Central::Signature::LEGACY_*`, `legacy_sign`,
+`legacy_valid?` and the `legacy:` of `Central::Server#answer`. Every board of a network must be on 3.2
+or later before its Central moves to 3.3.
+
 # rubbs 3.2
 
 **The Central** (`Rubbs::Common::Central`, README *The Central*): the data a network shares lives on one

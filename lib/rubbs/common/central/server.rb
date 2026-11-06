@@ -66,9 +66,9 @@ module Rubbs
         end
 
         # The answer to +body+ (the request's JSON) for +path+, signed
-        # +signature+ (or, on <tt>/auth</tt>, the old +legacy+ one): a Hash.
-        def answer(path, body, signature, legacy: nil)
-          return { 'error' => 'signature' } unless signed?(path, body, signature, legacy)
+        # +signature+: a Hash.
+        def answer(path, body, signature)
+          return { 'error' => 'signature' } unless Signature.valid?(path, body, signature)
 
           request = JSON.parse(body)
           return { 'error' => 'request' } unless request.is_a?(Hash)
@@ -174,12 +174,6 @@ module Rubbs
           )
         end
 
-        def signed?(path, body, signature, legacy)
-          return true if Signature.valid?(path, body, signature)
-
-          path == '/auth' && !legacy.to_s.empty? && Signature.legacy_valid?(body, legacy)
-        end
-
         def open_databases(services, data)
           databases = services.filter_map(&:database).to_h do |name, migrations|
             FileUtils.mkdir_p(data)
@@ -203,7 +197,7 @@ module Rubbs
             return response.body = '{"error":"request"}'
           end
 
-          result = answer(path, request.body.to_s, request[Signature::HEADER], legacy: request[Signature::LEGACY_HEADER])
+          result = answer(path, request.body.to_s, request[Signature::HEADER])
           response.status = result['error'] ? 403 : 200
           response.body = JSON.generate(result)
         end

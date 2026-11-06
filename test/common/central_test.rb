@@ -30,12 +30,13 @@ class CentralSignatureTest < Minitest::Test
     refute Rubbs::Common::Central::Signature.valid?('/wall', '{ }', signature)
   end
 
-  def test_the_old_auth_signature_is_taken_on_auth_only
+  def test_the_old_auth_signature_is_refused
     server = Rubbs::Common::Central::Server.new(services: [Rubbs::Common::Auth::Service], accounts: Rubbs::Test.accounts)
     body   = JSON.generate(op: 'known', name: 'ada', ts: Time.now.to_i)
-    old    = Rubbs::Common::Central::Signature.legacy_sign(body)
-    assert_equal({ 'result' => false }, server.answer('/auth', body, nil, legacy: old))
-    assert_equal({ 'error' => 'signature' }, server.answer('/auth', body, 'forged'))
+    key    = Rubbs::Common::Auth::Token.keys('rubbs-auth v1 api').first[:key]
+    old    = Rubbs::Common::Auth::Token.encode(Rubbs::Common::Auth::Token.sign(key, body))
+    assert_equal({ 'error' => 'signature' }, server.answer('/auth', body, old))
+    assert_equal({ 'result' => false }, server.answer('/auth', body, Rubbs::Common::Central::Signature.sign('/auth', body)))
   end
 end
 
