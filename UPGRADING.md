@@ -1,3 +1,10 @@
+# rubbs 3.4
+
+The splash of a board with a login says *Press space to guest mode* under `Login | Register | Guest`
+(SPACE goes on as a guest), and the profile it opens says *Press space to main screen* under its menu
+(SPACE goes back). Nothing to change on a board; the splash's drawings are now at most 23 rows high
+when it asks (24 with `hint: nil`).
+
 # rubbs 3.3
 
 The Central takes only its own signature (`X-RuBBS-Central`): the old one of rubbs 3.1 on `/auth`

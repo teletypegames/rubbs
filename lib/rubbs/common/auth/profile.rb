@@ -49,6 +49,7 @@ module Rubbs
           password:   'Change password',
           log_out:    'Log out',
           back:       'Back',
+          main:       'Press space to main screen',
           guest:      'Not logged in',
           signed_in:  'Logged in as %<name>s',
           roles:      '%<roles>s',
@@ -121,7 +122,8 @@ module Rubbs
 
         # Runs the profile for the caller on +session+ until they go back;
         # with +start+ (+:log_in+ or +:register+) that is done first, as if
-        # taken from the menu. Returns +nil+; raises Rubbs::Common::Line::Hangup when the line
+        # taken from the menu, and under the menu stands <tt>Press space to
+        # main screen</tt> (SPACE goes back too). Returns +nil+; raises Rubbs::Common::Line::Hangup when the line
         # drops.
         def self.run(session, setup: Rubbs.config.auth, look: Rubbs.config.preset.profile || DEFAULT, start: nil)
           new(session, setup, look).run(start: start)
@@ -141,7 +143,8 @@ module Rubbs
 
         # Shows the profile and its menu, does what is taken, and shows it
         # again, until the caller goes back; +start+ (+:log_in+,
-        # +:register+) is done first.
+        # +:register+) is done first, and then SPACE goes back as well, as
+        # the hint under the menu says.
         def run(start: nil)
           return say_once(@words[:no_login]) unless @setup
 
@@ -151,7 +154,7 @@ module Rubbs
           end
           loop do
             header
-            choice = menu.run
+            choice = menu(main: !start.nil?).run
             return nil if choice.nil? || choice == :back
 
             header unless extras.any? { |e| e.key == choice }
@@ -184,12 +187,19 @@ module Rubbs
 
         def extras = Profile.extras.select { |e| e.visible_to?(@session) }
 
-        def menu
-          labels = @words.values_at(:log_in, :register, :password, :log_out, :back) + extras.map(&:label)
-          width  = [MENU_WIDTH, labels.map(&:length).max + 6].max
+        # The menu; with +main+ the hint under it, and SPACE goes back.
+        def menu(main: false)
+          width  = [MENU_WIDTH, label_width + 6, main ? @words[:main].length + 2 : 0].max
           cols   = petscii? ? Petscii::COLS - 1 : @session.term_cols.to_i
-          Screens::Selector.new(@session, items, width: width, indent: [(cols - width) / 2, 0].max, back: :back)
+          indent = [(cols - width) / 2, 0].max
+          Screens::Selector.new(@session, items, width: width, indent: indent, back: :back, **main_exit(main))
         end
+
+        # The hint and SPACE back to the board, when +main+.
+        def main_exit(main) = main ? { hint: @words[:main], exits: { ' ' => :back } } : {}
+
+        # The widest label of the menu.
+        def label_width = [*@words.values_at(*%i[log_in register password log_out back]), *extras.map(&:label)].map(&:length).max
 
         def act(choice)
           extra = extras.find { |e| e.key == choice }

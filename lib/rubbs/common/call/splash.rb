@@ -11,9 +11,10 @@ module Rubbs
       #
       # On a board with a login (Rubbs::Common::Auth) a caller who is not logged in is
       # asked instead of the prompt: <tt>Login | Register | Guest</tt>, each
-      # word's first letter its key, in their own colour. L and R open the
-      # caller's profile (Rubbs::Common::Auth::Profile) at a login or a new account; G
-      # (and the wait running out) goes on as a guest.
+      # word's first letter its key, in their own colour, and under them the
+      # hint <tt>Press space to guest mode</tt>. L and R open the caller's
+      # profile (Rubbs::Common::Auth::Profile) at a login or a new account; G,
+      # SPACE (with the hint) and the wait running out go on as a guest.
       #
       #   SPLASH = Rubbs::Common::Call::Splash.new(modern: Rubbs::Common::Art.load('art/logo-modern.yml'),
       #                            petscii: Rubbs::Common::Art.load('art/logo-c64.yml'))
@@ -28,6 +29,10 @@ module Rubbs
         CHOICES = [['Login', :log_in], ['Register', :register], ['Guest', nil]].freeze
         # What stands between two choices.
         BETWEEN = ' | '
+        # The line under the choices: SPACE goes on as a guest.
+        HINT = 'Press space to guest mode'
+        # The key the hint names.
+        GUEST_KEY = ' '
         # The colours of the choices' words and keys: ANSI on a modern terminal,
         # Rubbs::Petscii::Canvas colours on a C64.
         COLORS = { text: Modern::Ansi::WHITE, key: Modern::Ansi::BRIGHT_GREEN, c64_text: :white, c64_key: :light_green }.freeze
@@ -44,21 +49,28 @@ module Rubbs
         attr_reader :choices
         # The colours of the choices (COLORS with the board's own).
         attr_reader :colors
+        # The line under the choices (see HINT), or +nil+ for none (and SPACE
+        # takes nothing).
+        attr_reader :hint
 
         # A splash of the drawings +modern+ and +petscii+ (Rubbs::Common::Art), with
         # +prompt+ under them; +choices+ (CHOICES by default, +nil+ for none)
-        # replace it on a board with a login, in +colors+ (over COLORS). Raises
+        # replace it on a board with a login, in +colors+ (over COLORS), with
+        # +hint+ (HINT by default, +nil+ for none) under them. Raises
         # ArgumentError when +petscii+ is not a +petscii-upper+ art, or a
-        # drawing with the prompt is higher than the C64's 25 rows.
-        def initialize(modern:, petscii:, prompt: PROMPT, choices: CHOICES, colors: {})
+        # drawing with the lines under it is higher than the C64's 25 rows.
+        def initialize(modern:, petscii:, prompt: PROMPT, choices: CHOICES, colors: {}, hint: HINT)
           raise ArgumentError, 'the C64 drawing of a splash must be petscii-upper' unless petscii.petscii?
-          raise ArgumentError, 'a splash drawing is at most 24 rows high' if [modern.rows, petscii.rows].max >= Petscii::ROWS
+
+          high = Petscii::ROWS - (choices && hint ? 2 : 1)
+          raise ArgumentError, "a splash drawing is at most #{high} rows high" if [modern.rows, petscii.rows].max > high
 
           @modern  = modern
           @petscii = petscii
           @prompt  = prompt
           @choices = choices
           @colors  = COLORS.merge(colors)
+          @hint    = choices && hint
         end
 
         # Shows the drawing of +face+ (+:modern+ or +:petscii+) on +session+ and
@@ -109,6 +121,7 @@ module Rubbs
         # the line dropped. Other keys are not taken.
         def choose(session)
           keys = @choices.to_h { |word, start| [word[0].downcase, start || :guest] }
+          keys[GUEST_KEY] = :guest if @hint
           loop do
             key = session.readkey(timeout: WAIT)
             return key if key.nil?

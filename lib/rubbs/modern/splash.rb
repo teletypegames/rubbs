@@ -3,8 +3,9 @@
 module Rubbs
   module Modern
     # The splash (Rubbs::Common::Call::Splash) on a modern terminal: its
-    # drawing and the prompt (or the choices) in the middle of the window, the
-    # cursor hidden; a clear screen when the caller goes on.
+    # drawing and the prompt (or the choices and the hint under them) in the
+    # middle of the window, the cursor hidden; a clear screen when the caller
+    # goes on.
     class Splash
       # The painter of +splash+, a Rubbs::Common::Call::Splash.
       def initialize(splash)
@@ -18,9 +19,9 @@ module Rubbs
       # Shows the splash on +session+, the choices when +asks+.
       def show(session, asks)
         art   = @splash.modern
-        top   = [(session.term_rows.to_i - art.rows - 1) / 2, 0].max
-        lines = Art.lines(art).map { |line| centred(session, art.cols, line) }
-        lines << (asks ? choices(session) : prompt(session))
+        under = under(session, asks)
+        top   = [(session.term_rows.to_i - art.rows - under.size) / 2, 0].max
+        lines = Art.lines(art).map { |line| centred(session, art.cols, line) } + under
         session.write("#{Ansi::HIDE_CURSOR}#{Ansi::CLEAR}#{Ansi::CRLF * top}#{lines.join(Ansi::CRLF)}")
       end
 
@@ -32,7 +33,14 @@ module Rubbs
 
       private
 
-      def prompt(session) = centred(session, @splash.prompt.size, "#{Ansi::GREY}#{@splash.prompt}#{Ansi::RESET}")
+      # The lines under the drawing: the choices and the hint, or the prompt.
+      def under(session, asks) = asks ? [choices(session), *hint(session)] : [prompt(session)]
+
+      def prompt(session) = grey(session, @splash.prompt)
+
+      def hint(session) = @splash.hint && grey(session, @splash.hint)
+
+      def grey(session, text) = centred(session, text.size, "#{Ansi::GREY}#{text}#{Ansi::RESET}")
 
       def choices(session)
         text = @splash.choice_runs.map { |part, role| "#{@splash.colors[role]}#{part}" }.join

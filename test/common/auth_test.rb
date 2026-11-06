@@ -342,6 +342,18 @@ class AuthProfileTest < Minitest::Test
     assert_includes session.raw, Rubbs::Petscii::LOWERCASE.b
   end
 
+  def test_from_the_splash_space_goes_to_the_main_screen
+    session = Rubbs::Test::Session.new(keys: keys(['Ada'], ['secret1'], ['secret1'], 'x', ' '))
+    capture_io { Rubbs::Common::Auth::Profile.new(session, @setup, @look).run(start: :register) }
+    assert_equal 'Ada', session.identity.name
+    assert_includes session.output, 'Press space to main screen'
+  end
+
+  def test_from_a_menu_no_hint_and_space_takes_nothing
+    session = profile(' ', 'b')
+    refute_includes session.output, 'Press space to main screen'
+  end
+
   def test_the_menu_follows_who_is_on_the_line
     ada = @directory.register('Ada', 'secret1')
     signed = profile('b', identity: ada).output

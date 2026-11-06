@@ -422,9 +422,12 @@ Rubbs::Common::Auth::Profile.extra(:sysop, 'SysOp', if: ->(s) { s.identity.role?
 ```
 
 **At the splash.** On a board with a login the splash (`Rubbs::Common::Call::Splash`, the preset's) asks a caller who
-is not logged in `Login | Register | Guest` instead of PRESS ANY KEY: L and R open the profile at a
-login or a new account (`Profile.run(session, start:)`), G goes on as a guest. A call handed on from
-another board has no splash, so nobody is asked twice.
+is not logged in `Login | Register | Guest` instead of PRESS ANY KEY, and under it *Press space to guest
+mode* (`hint:`, `nil` for none): L and R open the profile at a login or a new account
+(`Profile.run(session, start:)`), G or SPACE goes on as a guest. A profile opened this way has *Press
+space to main screen* under its menu, and SPACE goes back to the board like Back. With the hint the
+drawings are at most 23 rows high. A call handed on from another board has no splash, so nobody is asked
+twice.
 
 **The sysop's side.** The home of the accounts lists them and bans them (`Directory::Sysop`):
 `accounts(query)` (every account, or those whose name or role has `query`, as `Directory::Entry`

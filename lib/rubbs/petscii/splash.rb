@@ -4,7 +4,8 @@ module Rubbs
   module Petscii
     # The splash (Rubbs::Common::Call::Splash) on a Commodore 64: its
     # +petscii-upper+ drawing at the top in the middle of a Canvas, the prompt
-    # (or the choices) on the last row; the lowercase set and a clear screen
+    # (or the choices, and the hint under them) on the last rows; the
+    # lowercase set and a clear screen
     # when the caller goes on, as Rubbs::Common::Line::Telnet#petscii! left
     # them.
     class Splash
@@ -21,9 +22,10 @@ module Rubbs
         art    = @splash.petscii
         canvas = Art.draw(art, Canvas.new, col: (COLS - art.cols) / 2)
         if asks
-          choices(canvas)
+          choices(canvas, @splash.hint ? ROWS - 2 : ROWS - 1)
+          bottom(canvas, @splash.hint.upcase) if @splash.hint
         else
-          canvas.text(ROWS - 1, (COLS - @splash.prompt.size) / 2, @splash.prompt, :light_grey)
+          bottom(canvas, @splash.prompt)
         end
         session.write_raw(canvas.frame)
       end
@@ -36,13 +38,16 @@ module Rubbs
 
       private
 
-      # The choices in capitals (the drawing's character set has no small
-      # letters, and no |: a line glyph stands for it), each key in its
+      # +text+ in the middle of the last row, light grey.
+      def bottom(canvas, text) = canvas.text(ROWS - 1, (COLS - text.size) / 2, text, :light_grey)
+
+      # The choices on +row+ in capitals (the drawing's character set has no
+      # small letters, and no |: a line glyph stands for it), each key in its
       # colour.
-      def choices(canvas)
+      def choices(canvas, row)
         col = (COLS - @splash.choice_width) / 2
         @splash.choice_runs.each do |text, role|
-          canvas.text(ROWS - 1, col, text.upcase.tr('|', '│'), @splash.colors[:"c64_#{role}"])
+          canvas.text(row, col, text.upcase.tr('|', '│'), @splash.colors[:"c64_#{role}"])
           col += text.length
         end
       end
