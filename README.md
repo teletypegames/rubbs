@@ -593,7 +593,8 @@ Central, so a filter can name them.
   a `Rubbs::Common::Badges::Reporter` sends its signed-in callers' events in a thread of its own,
   only the ones some badge counts. `call` (a signed-in caller reached the board), `use` (a section
   opened, `Rubbs::Common::Log.use`) and `hangup` (`minutes`) come by themselves; the board's own
-  with `session.achieve :read, kind: 'rfc', ref: '1149'`.
+  with `session.achieve :read, kind: 'rfc', ref: '1149'`, or from the domain, where the thread's call is
+  known, with `Rubbs.achieve :read, kind: 'rfc', ref: '1149'`.
 - **The caller is told** what they earned with `Session#announce`: a full-screen page runner
   (`Rubbs::Common::Screens::Pages`) shows it as a `Rubbs::Common::Screens::Notice` after the next key,
   on either face.

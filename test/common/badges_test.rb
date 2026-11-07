@@ -188,6 +188,18 @@ class BadgesTest < Minitest::Test
     assert_empty Badges.catalog.badges
   end
 
+  def test_the_caller_of_the_thread_achieves
+    define_network
+    Rubbs.badges(:wiki) { event :read; badge(:reader) { hint 'Read.'; emblem 'R'; on(:read).once } }
+    proxy = FakeProxy.new([])
+    Rubbs.config.badges = Badges::Reporter.new(proxy, board: 'wiki')
+    assert_nil Rubbs.achieve(:read)
+    ada = Rubbs::Test::Session.new(identity: Rubbs::Common::Auth::Identity.new(id: 7, name: 'Ada', source: :login))
+    Rubbs::Common::Log.with_session('s1', caller: ada) { assert Rubbs.achieve(:read) }
+    Rubbs.config.badges.flush
+    assert_equal(['read'], proxy.requests.map { |r| r[2][:event] })
+  end
+
   # A page with nothing on it.
   class Blank < Rubbs::Common::Screens::Page
     key('q') { quit }

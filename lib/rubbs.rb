@@ -191,6 +191,22 @@ module Rubbs
   #   end
   def self.badges(board, &) = Common::Badges.define(board, &)
 
+  # Tells the badges that the caller of this thread did +name+, with
+  # +fields+ (Rubbs::Common::Line::Session#achieve for the call the thread
+  # serves, Rubbs::Common::Log.caller_session): a board's domain says it
+  # where the thing happens, for both faces at once. Nothing happens outside
+  # a call, for a guest, or when no badge counts it. Returns the queued
+  # entry, +nil+ when nothing went.
+  #
+  #   def chapter(book, number)
+  #     Rubbs.achieve :chapter, book: book.id
+  #     …
+  #   end
+  def self.achieve(name, **fields)
+    session = Common::Log.caller_session
+    session && Common::Badges.report(session, name, fields)
+  end
+
   # The calls on this board's line now (Rubbs::Common::Line::Server#live of
   # Rubbs::Common::Line::Server.current): Rubbs::Common::Line::Session objects, the earliest first; empty
   # when no server runs in this process.

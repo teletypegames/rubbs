@@ -84,6 +84,10 @@ module Rubbs
         # The id of the session whose thread this is, or +nil+.
         def session_id = Thread.current[SESSION_KEY]
 
+        # The caller whose thread this is (the Rubbs::Common::Line::Session of
+        # #with_session), or +nil+ outside a call.
+        def caller_session = Thread.current[CALLER_KEY]
+
         # Writes the +use+ line of a section the caller opened: +name+ (a
         # command's name, or a menu item's label, see ::use_name), its +kind+
         # (+:command+ for a Rubbs::Modern::Application command, +:menu+ for an item of a

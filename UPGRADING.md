@@ -1,3 +1,9 @@
+# rubbs 4.2
+
+New: `Rubbs.achieve(name, **fields)` tells the badges what the caller of this thread did (the call's
+session, `Rubbs::Common::Log.caller_session`), so a board's domain reports an event once for both
+faces. Nothing to change.
+
 # rubbs 4.1.1
 
 A subclass of a `Rubbs::Common::Central::Service` keeps its parent's path, database and ops
