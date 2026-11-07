@@ -98,6 +98,10 @@ module Rubbs
         # +central+), or +nil+ when it has none.
         attr_accessor :central
 
+        # The board's Rubbs::Common::Badges::Reporter (Rubbs.board's +badges+),
+        # or +nil+ when it reports no events for badges.
+        attr_accessor :badges
+
         # The User-Agent of Rubbs::Common::Web::HTTP without a preset's addition.
         DEFAULT_USER_AGENT = "rubbs/#{Gem.loaded_specs['rubbs']&.version || 'dev'}".freeze
 

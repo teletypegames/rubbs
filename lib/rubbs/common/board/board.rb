@@ -130,6 +130,7 @@ module Rubbs
           configure_central_client
           configure_auth
           configure_central_server
+          configure_badges
           configure_line
           Rubbs.config.flow = flow
           self

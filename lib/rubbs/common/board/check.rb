@@ -129,6 +129,9 @@ module Rubbs
           # The board's files matching +pattern+, relative to the board.
           def glob(pattern) = Dir.glob(pattern, base: @root).sort
 
+          # The full path of +path+ (relative to the board).
+          def full_path(path) = File.join(@root, path)
+
           # The board's Ruby code: +bbs.rb+ and everything under +lib+.
           def ruby_files = [*('bbs.rb' if file?('bbs.rb')), *glob('lib/**/*.rb')]
 
@@ -166,3 +169,4 @@ module Rubbs
 end
 
 require_relative 'check/rules'
+require_relative 'check/badges_rule'

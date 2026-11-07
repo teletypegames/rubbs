@@ -547,6 +547,59 @@ Rubbs.central(Wall).post(Rubbs::Common::Central::Actor.of(session), text: 'Hello
 - **One log line a request** (`central`: service, op, board, actor, result, ms) and `/health` for the
   services' databases (503 with the problems).
 
+### Badges: `Rubbs::Common::Badges`
+
+Badges for the accounts of a network: earned on any board, kept on the Central. A board declares
+its badges in a file of its own (`badges.rb` beside `bbs.rb`) with `Rubbs.badges`, one sentence a
+rule:
+
+```ruby
+Rubbs.badges :hackercave do
+  event :read, kind: String, ref: String          # what this board reports, and its fields
+
+  badge :rfc_reader do
+    title  'RFC Reader'
+    hint   'Read RFCs in HackerCave BBS.'
+    emblem '§', :lightgreen
+    on(:read, kind: 'rfc').distinct(:ref).tiers bronze: 10, silver: 50, gold: 250
+  end
+
+  badge :wizard, secret: true do
+    hint   'Read twenty Jargon File entries in one call at night.'
+    emblem '*', :purple
+    on(:read, kind: 'jargon', time_of_day: :night).count.within(:call).reaches 20
+  end
+end
+```
+
+A rule is `on(event, **filter)`, a measure, an optional window and a goal:
+
+| Part | | |
+|---|---|---|
+| `on` | `on(:call)`, `on(:read, kind: %w[rfc ien])`, `on(:call, hour: 0...4)` | the events that count; a value, an Array (any), a Range or a Regexp; a board's badge counts its own board's events unless the filter names one (`board: :any`) |
+| measure | `.once`, `.count`, `.distinct(:field)`, `.sum(:field)`, `.streak(:days)` / `.streak(:weeks)` | |
+| window | `.within(:call)`, `.within(:day)`, `.within(:week)` | the measure in each window apart; the best one counts |
+| goal | `.reaches 5`, `.reaches :all_boards`, `.tiers bronze: 10, silver: 50` | `:all_boards` is the catalog's `boards` |
+
+`all_of :a, :b` and `any_of 2, :a, :b, :c` make a badge of others; `manual: true` is one a sysop
+gives (the `grant` op). Every event gets the fields `board`, `call`, `face`, `via`, `hour`, `weekday`,
+`date`, `week`, `time_of_day` and `season` (the season and its layers, `Rubbs::Common::Season`) on the
+Central, so a filter can name them.
+
+- **The Central** serves `Rubbs::Common::Badges::Service` (`/badges`: `record`, `mine`, `hall`,
+  `grant`) and loads every board's file; its `Rubbs::Common::Badges::Engine` keeps the facts and the
+  awards (`badges.sqlite3`) and gives a tier once.
+- **A board** says `badges :hackercave` in `Rubbs.board` and loads its own file (and the network's):
+  a `Rubbs::Common::Badges::Reporter` sends its signed-in callers' events in a thread of its own,
+  only the ones some badge counts. `call` (a signed-in caller reached the board), `use` (a section
+  opened, `Rubbs::Common::Log.use`) and `hangup` (`minutes`) come by themselves; the board's own
+  with `session.achieve :read, kind: 'rfc', ref: '1149'`.
+- **The caller is told** what they earned with `Session#announce`: a full-screen page runner
+  (`Rubbs::Common::Screens::Pages`) shows it as a `Rubbs::Common::Screens::Notice` after the next key,
+  on either face.
+- **`rake bbs:check`** (rule `badges`) loads the board's `badges.rb` and reports what is wrong:
+  an event no board declares, a field the event has not, tiers out of order, a missing hint or emblem.
+
 
 ## 4. Server lifecycle
 

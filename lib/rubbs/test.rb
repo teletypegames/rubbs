@@ -143,6 +143,20 @@ module Rubbs
       # The handler of #announce (see Rubbs::Common::Line::Session#on_announce).
       def on_announce(handler) = (@announcer = handler)
 
+      # The handler #announce tells through now, or +nil+.
+      attr_reader :announcer
+
+      # The events #achieve was told, [name, fields] pairs.
+      def achieved = @achieved ||= []
+
+      # Notes the event +name+ with +fields+ (#achieved) and sends it as
+      # Rubbs::Common::Line::Session#achieve does. Returns the queued entry,
+      # +nil+ when nothing went.
+      def achieve(name, **fields)
+        achieved << [name, fields]
+        Common::Badges.report(self, name, fields)
+      end
+
       # Everything written so far as text, one UTF-8 String (for
       # <tt>assert_includes</tt>); #raw has the bytes.
       def output = raw.force_encoding(Encoding::UTF_8)

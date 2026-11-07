@@ -51,6 +51,7 @@ require_relative 'rubbs/common/line/rate_limit'
 require_relative 'rubbs/common/board/background'
 require_relative 'rubbs/common/central'
 require_relative 'rubbs/common/auth'
+require_relative 'rubbs/common/badges'
 require_relative 'rubbs/common/web/media_wiki'
 require_relative 'rubbs/common/web/media_wiki/extract'
 require_relative 'rubbs/common/web/wikipedia'
@@ -61,6 +62,7 @@ require_relative 'rubbs/modern/style'
 require_relative 'rubbs/common/line/nodes'
 require_relative 'rubbs/common/screens/pages'
 require_relative 'rubbs/common/screens/page'
+require_relative 'rubbs/common/screens/notice'
 require_relative 'rubbs/modern/widgets/event'
 require_relative 'rubbs/modern/theme'
 require_relative 'rubbs/modern/widgets/widget'
@@ -178,6 +180,16 @@ module Rubbs
     link = config.central or return Common::Central::Proxy.away(service)
     link.proxy(service)
   end
+
+  # Declares the badges of +board+ (a Rubbs::Common::Badges::Set made by the
+  # block) into the process's Rubbs::Common::Badges.catalog: a board's file of
+  # badges calls it. Returns the Set.
+  #
+  #   Rubbs.badges :hackercave do
+  #     event :read, kind: String, ref: String
+  #     badge(:rfc_reader) { title 'RFC Reader'; hint 'Read RFCs.'; emblem '§'; on(:read, kind: 'rfc').distinct(:ref).reaches 10 }
+  #   end
+  def self.badges(board, &) = Common::Badges.define(board, &)
 
   # The calls on this board's line now (Rubbs::Common::Line::Server#live of
   # Rubbs::Common::Line::Server.current): Rubbs::Common::Line::Session objects, the earliest first; empty

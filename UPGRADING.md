@@ -1,3 +1,11 @@
+# rubbs 4.1
+
+New: **badges** (`Rubbs::Common::Badges`, README §3): `Rubbs.badges` declares a board's badges
+(a rule DSL), `Rubbs::Common::Badges::Service` counts them on the Central, `badges` in `Rubbs.board`
+sends a board's events, `Session#achieve` reports one. `Rubbs::Common::Screens::Pages` now shows what
+`Session#announce` says as a `Rubbs::Common::Screens::Notice` after the next key (it was a bare line
+over the page). `rake bbs:check` has a `badges` rule. Nothing to change.
+
 # rubbs 4.0.1
 
 The state file of `Rubbs::MultiRunner` also has each board's CPU time (`cpu_seconds`). Nothing to change.

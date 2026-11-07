@@ -80,13 +80,35 @@ module Rubbs
         # a logout sets another; a guest otherwise.
         def identity = @identity ||= Auth.from_line(self)
 
-        # Sets who the caller is (a Rubbs::Common::Auth::Identity).
-        attr_writer :identity
+        # Sets who the caller is (a Rubbs::Common::Auth::Identity); a signed-in
+        # one starts the +call+ event of the badges (Rubbs::Common::Badges.called).
+        def identity=(identity)
+          @identity = identity
+          Badges.called(self) if @face
+        end
 
         # The face the call got, +:modern+ or +:petscii+ (set by
         # Rubbs::Common::Call::Terminal.pick, or by the board for its only face); +nil+ while
         # the caller has not got past the terminal question.
-        attr_accessor :face
+        attr_reader :face
+
+        # Sets the face of the call; a caller signed in already (a call handed
+        # on by another board) starts the +call+ event of the badges here.
+        def face=(face)
+          @face = face
+          Badges.called(self)
+        end
+
+        # Tells the badges (Rubbs::Common::Badges.report) that the caller did
+        # +name+, with +fields+ (the ones the board's Rubbs.badges declares):
+        # nothing happens for a guest, or when no badge counts it. Returns
+        # the queued entry, +nil+ when nothing went.
+        #
+        #   session.achieve :read, kind: 'rfc', ref: '1149'
+        def achieve(name, **fields) = Badges.report(self, name, fields)
+
+        # The handler #announce tells through now, or +nil+ (#on_announce).
+        attr_reader :announcer
 
         # The name of the signed-in caller, or +nil+ for a guest. Unlike
         # #identity it does not look at the line: a call whose identity was never
@@ -134,6 +156,7 @@ module Rubbs
           flow = Rubbs.config.flow or raise 'Rubbs.config.flow is not set'
           Call::FlowRunner.new(self, @session_id, flow, context: { started_at: Time.now }).run
         ensure
+          Badges.hung_up(self) rescue nil
           disable_mouse rescue nil
           @client.close rescue nil
         end

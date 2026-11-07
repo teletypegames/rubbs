@@ -96,15 +96,30 @@ module Rubbs
 
         # Runs the pages from +page+ (or from the stack as it is when +nil+)
         # until #quit or the caller is silent past the session's
-        # +idle_seconds+ (only counted while a timer of #every polls). Returns
-        # the value given to #quit, +nil+ for an idle end. Raises Rubbs::Common::Line::Hangup
-        # when the caller hangs up.
+        # +idle_seconds+ (only counted while a timer of #every polls). What
+        # Rubbs::Common::Line::Session#announce tells the caller meanwhile is
+        # shown after the next key, a Rubbs::Common::Screens::Notice each.
+        # Returns the value given to #quit, +nil+ for an idle end. Raises
+        # Rubbs::Common::Line::Hangup when the caller hangs up.
         def run(page = nil)
+          outer = listen_announcements
           catch(QUIT) do
             start(page) if page
-            loop { press!(wait_key) }
+            loop do
+              press!(wait_key)
+              show_announcements
+            end
           end
           @result
+        ensure
+          @session.on_announce(outer) if @announcements
+        end
+
+        # Shows each notice waiting (#run), a Rubbs::Common::Screens::Notice
+        # until a key. Returns +nil+.
+        def show_announcements
+          show(Notice.new(@announcements.pop)) while @announcements && !@announcements.empty? && !@done
+          nil
         end
 
         # Puts +page+ alone on the stack and paints the whole screen; the first
@@ -172,6 +187,15 @@ module Rubbs
         end
 
         private
+
+        def listen_announcements
+          return unless @session.respond_to?(:on_announce)
+
+          outer = @session.respond_to?(:announcer) ? @session.announcer : nil
+          @announcements = Thread::Queue.new
+          @session.on_announce(->(text) { @announcements << text })
+          outer
+        end
 
         def press!(key)
           handle(key)

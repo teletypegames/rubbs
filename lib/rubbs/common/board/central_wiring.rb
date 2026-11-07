@@ -32,7 +32,20 @@ module Rubbs
           @central = { address: address, serve: serve, services: services, data: data, host: host }
         end
 
+        # Sends the events of the board's signed-in callers to the badges of
+        # the Central (a Rubbs::Common::Badges::Reporter in Rubbs.config.badges):
+        # the board's name in the badges is +board+ (its technical name
+        # without +-bbs+ by default), the one its file of badges
+        # (Rubbs.badges) declares.
+        #
+        #   badges :hackercave
+        def badges(board = nil) = (@badges = (board || @slug.delete_suffix('-bbs')).to_s)
+
         private
+
+        def configure_badges
+          Rubbs.config.badges = @badges ? Badges::Reporter.new(Rubbs.central(Badges::Service), board: @badges) : nil
+        end
 
         def configure_auth
           return Rubbs.config.auth = nil unless @auth
