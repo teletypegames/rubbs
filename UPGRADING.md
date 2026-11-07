@@ -1,3 +1,9 @@
+# rubbs 4.3
+
+New: `Rubbs::Common::Badges::Engine#statistics` (the badges in numbers, for a board's metrics), and
+the Service writes a log line for each badge earned (`badges` `earned`: badge, tier, board,
+account). Nothing to change.
+
 # rubbs 4.2
 
 New: `Rubbs.achieve(name, **fields)` tells the badges what the caller of this thread did (the call's

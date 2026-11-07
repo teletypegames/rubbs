@@ -132,6 +132,11 @@ class BadgesTest < Minitest::Test
     assert_equal [['bronze', 2], ['silver', 3]], progress['regular']['goals']
     assert_equal 0, progress['night_owl']['value']
     assert_equal 1, e.hall.find { |h| h['key'] == 'tourist' }['count']
+    stats = e.statistics
+    assert_equal 1, stats[:awards][%w[regular silver]]
+    assert_equal 1, stats[:accounts]
+    assert_equal 4, stats[:events].select { |(name, _), _| name == 'call' }.values.sum
+    assert_equal 5, stats[:defined]['network']
   end
 
   def test_the_service_on_the_central

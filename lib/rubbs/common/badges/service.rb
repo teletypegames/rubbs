@@ -13,7 +13,8 @@ module Rubbs
       # [record] +event+, +fields+, +call+, +via+, +board+ (default the
       #          asker): keeps the fact of an account (a guest gets +guest+)
       #          and answers +earned+, the badges it earned (Badge#to_h with
-      #          +tier+ and its +color+)
+      #          +tier+ and its +color+); each earned one is a log line
+      #          (+badges+ +earned+: badge, tier, board, account)
       # [mine]   the account's +badges+: Engine#progress
       # [hall]   (anyone) the +badges+ earned, how often, who first: Engine#hall
       # [grant]  (sysop) +account_id+, +name+, +badge+, +tier+: gives a badge
@@ -36,7 +37,9 @@ module Rubbs
           next :guest if actor.guest?
 
           fact = Fact.make(name: event, board: board || asker, fields: fields.to_h, call: call, face: actor.face, via: via)
-          { earned: engine.record(actor.id, actor.name, fact).map { |award| Service.earned(award) } }
+          awards = engine.record(actor.id, actor.name, fact)
+          awards.each { |a| Service.log_earned(a, fact.board, actor.name) }
+          { earned: awards.map { |award| Service.earned(award) } }
         end
 
         op(:mine) do |actor, **|
@@ -51,6 +54,13 @@ module Rubbs
           found = @catalog[badge] or next :unknown_badge
 
           engine.grant(account_id.to_i, name, found, tier: tier, board: asker) ? :ok : :had_it
+        end
+
+        # Writes the log line of +award+ (an Engine::Award) earned on +board+
+        # by the account +name+: +badges+ +earned+ with the badge, tier,
+        # board and account. Returns +nil+.
+        def self.log_earned(award, board, name)
+          Rubbs.log('badges', 'earned', badge: award.badge.key, tier: award.tier.to_s, board: board, account: name)
         end
 
         # An Engine::Award as an answer: the badge, its +tier+ and the

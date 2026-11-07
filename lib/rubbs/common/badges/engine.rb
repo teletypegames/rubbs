@@ -67,6 +67,18 @@ module Rubbs
           end
         end
 
+        # The badges in numbers, for a board's metrics: +awards+ ([badge,
+        # tier] => accounts), +accounts+ (accounts with any badge), +events+
+        # ([name, board] => facts kept) and +defined+ (board => badges).
+        def statistics
+          {
+            awards:   counts(:badge_awards, :badge, :tier),
+            accounts: @db[:badge_awards].select(:account_id).distinct.count,
+            events:   counts(:badge_events, :name, :board),
+            defined:  @catalog.badges.values.group_by(&:board).transform_values(&:size)
+          }
+        end
+
         # How many accounts have each badge, and who was first: Hashes of
         # the badge, +count+, +first+ (a name) and +first_at+.
         def hall
@@ -82,6 +94,10 @@ module Rubbs
         end
 
         private
+
+        def counts(table, first, second)
+          @db[table].group_and_count(first, second).to_h { |r| [[r[first], r[second]], r[:count]] }
+        end
 
         def boards = @catalog.boards.size
 
