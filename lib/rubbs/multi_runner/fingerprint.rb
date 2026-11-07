@@ -10,8 +10,9 @@ module Rubbs
     # a file did change.
     module Fingerprint
       # Top-level folders and files of a board that are not its code: its
-      # data, its tests, its notes.
-      IGNORED = %w[data test tmp log].freeze
+      # data, its tests, its notes, and its +content+ (files the board reads
+      # again by itself while it runs, so a deploy of them needs no restart).
+      IGNORED = %w[data test tmp log content].freeze
       # File names that are not code either.
       IGNORED_FILES = /\.(md|txt)\z/i
 

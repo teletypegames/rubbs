@@ -42,8 +42,38 @@ module Rubbs
         # The Catalog of this process.
         def catalog = @catalog ||= Catalog.new
 
-        # Forgets every badge (for a test).
-        def reset = @catalog = Catalog.new
+        # Forgets every badge, observer and the recording service (for a
+        # test).
+        def reset
+          @observers = {}
+          @recorder  = nil
+          @catalog   = Catalog.new
+        end
+
+        # What else watches the facts the Central keeps, by key: objects
+        # whose <tt>observe(actor, fact)</tt> answers notices (Strings) for
+        # the caller, such as Rubbs::Common::Hunt::Service. Service#record
+        # asks each and sends the notices back with the badges earned.
+        def observers = @observers ||= {}
+
+        # Adds +observer+ under +key+ (a newer one of the same key takes its
+        # place). Returns +observer+.
+        def observe(key, observer) = observers[key.to_sym] = observer
+
+        # The notices of every observer for +fact+ (a Fact) of +actor+; an
+        # observer that fails is logged and left out.
+        def notices(actor, fact)
+          observers.values.flat_map do |observer|
+            Array(observer.observe(actor, fact))
+          rescue StandardError => e
+            Rubbs.log('badges', e, level: :warn)
+            []
+          end
+        end
+
+        # The Service of this process's Central, which keeps facts for
+        # others too (Service#keep); +nil+ off the Central.
+        attr_accessor :recorder
 
         # Runs the block with an empty catalog of its own and gives that
         # catalog back; the process's stays as it was (for a check that

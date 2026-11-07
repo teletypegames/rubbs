@@ -591,7 +591,7 @@ Central, so a filter can name them.
   awards (`badges.sqlite3`) and gives a tier once.
 - **A board** says `badges :hackercave` in `Rubbs.board` and loads its own file (and the network's):
   a `Rubbs::Common::Badges::Reporter` sends its signed-in callers' events in a thread of its own,
-  only the ones some badge counts. `call` (a signed-in caller reached the board), `use` (a section
+  the ones the board declares (`event`) or some badge counts. `call` (a signed-in caller reached the board), `use` (a section
   opened, `Rubbs::Common::Log.use`) and `hangup` (`minutes`) come by themselves; the board's own
   with `session.achieve :read, kind: 'rfc', ref: '1149'`, or from the domain, where the thread's call is
   known, with `Rubbs.achieve :read, kind: 'rfc', ref: '1149'`.
@@ -602,6 +602,45 @@ Central, so a filter can name them.
   on either face.
 - **`rake bbs:check`** (rule `badges`) loads the board's `badges.rb` and reports what is wrong:
   an event no board declares, a field the event has not, tiers out of order, a missing hint or emblem.
+- **Others watch the facts too:** `Rubbs::Common::Badges.observe(key, object)` adds an object whose
+  `observe(actor, fact)` answers notices; `record` sends them back with the badges, and the
+  Reporter announces them (the hunts below use it).
+
+### Hunts: `Rubbs::Common::Hunt`
+
+A treasure hunt across the boards, on the Central beside the badges: a chain of steps, each a clue
+and what solves it, one YAML file a hunt. The file's place gives its slug and season: a year folder
+and the ISO week in the name (`content/hunts/2026/w46-avian-route.yml` is open from the Monday of week
+46 to the next Monday, in `Badges.time_zone`); `opens` and `closes` say otherwise.
+
+```yaml
+title: The Avian Route
+intro: Follow a message across the network.
+authors: [Zed]                                # they play, but are not on the list
+steps:
+  - clue: Find the April document that flies datagrams on wings.
+    find: { board: hackercave, event: read, kind: rfc, ref: '1149' }
+    fragment: PIGEON                          # told when the step is solved
+    hints: [It is an April RFC., Number 1149.]   # at most two: 12 h and 36 h after the step opened
+  - clue: How heavy is a typical MTU, by that standard?
+    answer: ['256 mg', '256 milligrams']      # compared without case, accents, spaces and signs
+```
+
+- **Parts:** a step's parts are solved one after the other, in the order of `Hunt.parts`. `find` is
+  solved by an event the boards already send for the badges (any event a board declares, with its
+  fields as the filter); `answer` by typed words. A new kind is a `Rubbs::Common::Hunt::Part` subclass
+  (`problems`, `match?`, `accept?`, `asks?`) registered with `Rubbs::Common::Hunt.part :key, Klass`.
+- **Only after it opened:** an event counts for a part from the moment the caller reached it, so the
+  steps keep their order, and the last step cannot be reached without going everywhere before it.
+- **The Central** serves `Rubbs::Common::Hunt::Service` (`/hunt`: `trails`, `state`, `answer`, `hint`,
+  `board`, `reset`) with `Rubbs::Common::Hunt.directory` set to the folder; the
+  `Rubbs::Common::Hunt::Book` reads the files again when they change (it looks at most every minute).
+  A finish is a `hunt_finished` fact for the badges (`ref`, `in_season` yes/no, `hints`, `rank`). The
+  list orders the finishes in season by hints, then by the time from the first clue.
+- **`Rubbs::Common::Hunt::Book#problems`** tells what is wrong with the files (unknown keys, a part
+  that names an event no board declares, a clue too long for a C64, seasons that meet): run it in a
+  test so a broken hunt never ships. The supervisor (`Rubbs::MultiRunner`) does not restart a board for
+  its `content/` folder.
 
 
 ## 4. Server lifecycle

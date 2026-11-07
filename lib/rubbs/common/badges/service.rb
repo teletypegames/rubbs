@@ -13,8 +13,9 @@ module Rubbs
       # [record] +event+, +fields+, +call+, +via+, +board+ (default the
       #          asker): keeps the fact of an account (a guest gets +guest+)
       #          and answers +earned+, the badges it earned (Badge#to_h with
-      #          +tier+ and its +color+); each earned one is a log line
-      #          (+badges+ +earned+: badge, tier, board, account)
+      #          +tier+ and its +color+) and +notices+, what the observers
+      #          (Badges.observers) tell the caller; each earned badge is a
+      #          log line (+badges+ +earned+: badge, tier, board, account)
       # [mine]   the account's +badges+: Engine#progress
       # [hall]   (anyone) the +badges+ earned, how often, who first: Engine#hall
       # [grant]  (sysop) +account_id+, +name+, +badge+, +tier+: gives a badge
@@ -31,15 +32,14 @@ module Rubbs
           super(context)
           @catalog = catalog
           @engine  = Engine.new(database, catalog)
+          Badges.recorder = self
         end
 
         op(:record) do |actor, event:, fields: {}, call: nil, via: nil, board: nil, **|
           next :guest if actor.guest?
 
           fact = Fact.make(name: event, board: board || asker, fields: fields.to_h, call: call, face: actor.face, via: via)
-          awards = engine.record(actor.id, actor.name, fact)
-          awards.each { |a| Service.log_earned(a, fact.board, actor.name) }
-          { earned: awards.map { |award| Service.earned(award) } }
+          { earned: keep(actor, fact), notices: Badges.notices(actor, fact) }
         end
 
         op(:mine) do |actor, **|
@@ -54,6 +54,15 @@ module Rubbs
           found = @catalog[badge] or next :unknown_badge
 
           engine.grant(account_id.to_i, name, found, tier: tier, board: asker) ? :ok : :had_it
+        end
+
+        # Keeps +fact+ (a Fact) of +actor+ (an account's
+        # Rubbs::Common::Central::Actor) and logs what it earned. Returns the
+        # badges earned, as #record answers them (Service.earned).
+        def keep(actor, fact)
+          awards = engine.record(actor.id, actor.name, fact)
+          awards.each { |a| Service.log_earned(a, fact.board, actor.name) }
+          awards.map { |award| Service.earned(award) }
         end
 
         # Writes the log line of +award+ (an Engine::Award) earned on +board+

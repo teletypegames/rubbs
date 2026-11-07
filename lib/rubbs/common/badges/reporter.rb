@@ -92,6 +92,7 @@ module Rubbs
         def send_one((session, actor, name, fields, call, via))
           answer = @proxy.call(:record, actor, event: name, fields: fields, call: call, via: via, board: @board)
           Array(answer['earned']).each { |badge| session.announce(Badges.announcement(badge)) }
+          Array(answer['notices']).each { |text| session.announce(text) }
         rescue StandardError => e
           Rubbs.log('badges', e, level: :warn)
         end

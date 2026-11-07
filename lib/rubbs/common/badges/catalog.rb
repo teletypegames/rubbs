@@ -23,6 +23,7 @@ module Rubbs
         def initialize
           @badges = {}
           @events = BUILT_IN.transform_values(&:dup)
+          @declared = []
           @boards = nil
         end
 
@@ -37,6 +38,7 @@ module Rubbs
         # ArgumentError for a key already taken.
         def add(set)
           set.events.each { |name, fields| (@events[name] ||= []).concat(fields).uniq! }
+          @declared |= set.events.keys.map { |name| [set.board.to_s, name] }
           set.badges.each do |badge|
             raise ArgumentError, "the badge #{badge.key} is declared twice" if @badges.key?(badge.key)
 
@@ -54,11 +56,14 @@ module Rubbs
         # The composite badges (Badge#composite?).
         def composites = @badges.values.select(&:composite?)
 
-        # Whether any badge counts an event +name+ on +board+ with +fields+:
-        # what a board asks before it sends one. The fields of
-        # Rubbs::Common::Badges::DERIVED are not known yet, so a filter on one
-        # of them is taken as met.
+        # Whether an event +name+ on +board+ with +fields+ is worth sending:
+        # the board's Set declared it (Badges.observers, such as Rubbs::Common::Hunt,
+        # may watch it), or a badge counts it. What a board asks before it
+        # sends one. The fields of Rubbs::Common::Badges::DERIVED are not
+        # known yet, so a filter on one of them is taken as met.
         def counts?(name, board, fields = {})
+          return true if @declared.include?([board.to_s, name.to_s])
+
           probe = Fact.new(name: name.to_s, board: board.to_s, fields: fields.to_h { |k, v| [k.to_s, v] }, at: 0, call: nil)
           @badges.each_value.any? { |b| b.rule && b.rule.event == probe.name && known_fields_match?(b.rule, probe) }
         end
