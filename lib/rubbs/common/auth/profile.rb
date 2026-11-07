@@ -178,12 +178,15 @@ module Rubbs
 
         def petscii? = @session.respond_to?(:petscii?) && @session.petscii?
 
+        # The menu's items: the profile's own, the boards' places (one whose
+        # letter is taken keeps none, logged), Back.
         def items
-          own = identity.signed_in? ? %i[password log_out] : %i[log_in register]
-          own = own.map { |key| Screens::Selector.item(@words.fetch(key), key: @words.fetch(key)[0].downcase, value: key) }
-          [*own, *extras.map { |e| Screens::Selector.item(e.label, key: e.hotkey, value: e.key) },
-           Screens::Selector.item(@words[:back], key: @words[:back][0].downcase, value: :back)]
+          own    = [*(identity.signed_in? ? %i[password log_out] : %i[log_in register]), :back].map { |key| own_item(key) }
+          places = extras.map { |e| Screens::Selector.item(e.label, key: e.hotkey, value: e.key) }
+          [*own[0..-2], *Screens::Selector.distinct(places, taken: own.map(&:key), log: 'profile'), own.last]
         end
+
+        def own_item(key) = Screens::Selector.item(@words.fetch(key), key: @words.fetch(key)[0].downcase, value: key)
 
         def extras = Profile.extras.select { |e| e.visible_to?(@session) }
 

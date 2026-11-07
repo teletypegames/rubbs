@@ -384,6 +384,18 @@ class AuthProfileTest < Minitest::Test
     Rubbs::Common::Auth::Profile.clear_extras
   end
 
+  def test_a_place_whose_letter_is_taken_gets_none
+    opened = []
+    Rubbs::Common::Auth::Profile.extra(:badges, 'Badges') { |s| opened << s }
+    ada = Rubbs::Common::Auth::Identity.new(id: 1, name: 'Ada', roles: %w[member], source: :login)
+    session = nil
+    capture_io { session = profile('b', identity: ada) }
+    assert_empty opened
+    assert_includes session.output, 'Badges'
+  ensure
+    Rubbs::Common::Auth::Profile.clear_extras
+  end
+
   def test_a_board_without_a_login_says_so
     session = Rubbs::Test::Session.new(keys: [' '])
     Rubbs::Common::Auth::Profile.new(session, nil, @look).run

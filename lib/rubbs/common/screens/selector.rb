@@ -86,6 +86,23 @@ module Rubbs
           Item.new(label: label, key: key, value: value, about: about, color: color)
         end
 
+        # +items+ with every key used once: an item whose key +taken+ (keys
+        # kept for others) or an item before it has keeps no key; with +log+
+        # (a log tag) each such clash is a warning. Returns the items (the
+        # same objects).
+        def self.distinct(items, taken: [], log: nil)
+          taken = taken.dup
+          items.each do |item|
+            next unless item.key
+
+            if taken.include?(item.key)
+              Rubbs.log(log, "the key #{item.key} of #{item.value} is taken", level: :warn) if log
+              item.key = nil
+            end
+            taken << item.key
+          end
+        end
+
         # A heading Item: +label+ (ANSI colours allowed) shown in the heading
         # colour, never lit. An empty label keeps a place empty.
         def self.heading(label = '') = Item.new(label: label, heading: true)
