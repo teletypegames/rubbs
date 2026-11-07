@@ -20,7 +20,7 @@ module Rubbs
         # The notice of +trail+ finished (+finish+ as
         # Engine#finish_of answers it), with the place on the list.
         def home(trail, finish)
-          place = finish['rank'] ? " You are number #{finish['rank']} this week." : ''
+          place = finish['rank'] ? " You are number #{finish['rank']} on the list." : ''
           "The Hunt, #{trail.title}: you made it home!#{place}"
         end
 

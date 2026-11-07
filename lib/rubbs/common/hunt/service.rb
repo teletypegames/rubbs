@@ -108,10 +108,10 @@ module Rubbs
         # before an answer, and the +finish+ (Engine#finish_of) when it is
         # over. A guest gets the hunt, the first clue and +guest+.
         def state(actor, trail)
+          engine.start(actor.id, trail, Time.now.to_i) unless actor.guest?
           base = { trail: summary(trail), steps: trail.steps.size }
           return base.merge(guest: true, step: 1, clue: trail.steps.first.clue) if actor.guest?
 
-          engine.start(actor.id, trail, Time.now.to_i)
           base.merge(progress(actor, trail))
         end
 

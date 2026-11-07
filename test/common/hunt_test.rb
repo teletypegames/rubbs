@@ -130,6 +130,7 @@ class HuntTest < Minitest::Test
     assert_empty badges.record(actor, event: 'read', fields: { kind: 'rfc', ref: '1149' }, board: 'hackercave')['notices']
     state = hunt.state(actor)
     assert_equal 1, state['step']
+    assert_equal 1, state['trail']['players']
     assert_equal 'not_yet', hunt.hint(actor, hunt: state['trail']['slug'])['result']
     slug = state['trail']['slug']
 
@@ -152,7 +153,7 @@ class HuntTest < Minitest::Test
     badges.record(actor, event: 'read', fields: { kind: 'rfc', ref: '2549' }, board: 'hackercave')
     home = hunt.answer(actor, hunt: slug, text: 'pigeon')
     assert_equal 'right', home['result']
-    assert_includes home['notices'].first, 'you made it home! You are number 1 this week.'
+    assert_includes home['notices'].first, 'you made it home! You are number 1 on the list.'
     assert_includes home['notices'].last, 'Badge earned'
     finish = hunt.state(actor, hunt: slug)['finish']
     assert_equal 1, finish['rank']
