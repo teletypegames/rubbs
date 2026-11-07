@@ -1,3 +1,8 @@
+# rubbs 4.1.1
+
+A subclass of a `Rubbs::Common::Central::Service` keeps its parent's path, database and ops
+(it adds to them), so a network can extend `Rubbs::Common::Badges::Service`. Nothing to change.
+
 # rubbs 4.1
 
 New: **badges** (`Rubbs::Common::Badges`, README §3): `Rubbs.badges` declares a board's badges

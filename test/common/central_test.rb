@@ -206,3 +206,23 @@ class CentralBoardTest < Minitest::Test
     assert_raises(ArgumentError) { Rubbs::Common::Board::BoardDefinition.new('X BBS') { auth login: :menu }.configure }
   end
 end
+
+# A wall of a network that adds to TestWall.
+class TestBigWall < TestWall
+  op(:count, actor: false) { |_, **| { count: database[:notes].count } }
+end
+
+class CentralServiceInheritanceTest < Minitest::Test
+  def test_a_subclass_keeps_the_parents_path_database_and_ops
+    assert_equal ['/wall', :test_wall], [TestBigWall.path, TestBigWall.database.first]
+    assert_equal %w[post recent who wipe count], TestBigWall.ops.keys
+    refute TestWall.ops.key?('count')
+    data = Dir.mktmpdir('central')
+    server = Rubbs::Common::Central::Server.new(services: [TestBigWall], data: data)
+    proxy = Rubbs::Common::Central::Proxy.local(TestWall, server, aud: 'x-bbs')
+    assert_equal 0, proxy.call(:count)['count']
+  ensure
+    server&.stop
+    FileUtils.rm_rf(data) if data
+  end
+end

@@ -41,12 +41,14 @@ module Rubbs
 
         class << self
           # Sets the service's path (<tt>'/wall'</tt>) or, without +value+,
-          # returns it: the one set, else <tt>/</tt> and the last part of the
-          # class name in lower case.
+          # returns it: the one set, else a parent service's, else <tt>/</tt>
+          # and the last part of the class name in lower case.
           def path(value = nil)
             return @path = value.to_s if value
+            return @path if @path
+            return superclass.path if inherits?
 
-            @path || "/#{name.to_s.split('::').last.gsub(/([a-z\d])([A-Z])/, '\\1_\\2').downcase}"
+            "/#{name.to_s.split('::').last.gsub(/([a-z\d])([A-Z])/, '\\1_\\2').downcase}"
           end
 
           # The service's key: its path without the slash, a Symbol.
@@ -57,7 +59,7 @@ module Rubbs
           # in its data folder as <tt><name>.sqlite3</tt> and binds the
           # Rubbs::Common::Storage::Model classes whose table lives in it.
           def database(name = nil, migrations = [])
-            return @database unless name
+            return @database || (superclass.database if inherits?) unless name
 
             @database = [name.to_sym, migrations]
           end
@@ -69,8 +71,14 @@ module Rubbs
             ops[name.to_s] = Op.new(name: name.to_s, role: role&.to_s, actor: actor, block: block)
           end
 
-          # The ops by name, a Hash of String => Op.
-          def ops = @ops ||= {}
+          # The ops by name, a Hash of String => Op: a parent service's too, so
+          # a subclass adds to them (or replaces one of the same name).
+          def ops = @ops ||= inherits? ? superclass.ops.dup : {}
+
+          # Whether the service is a subclass of another service (not of
+          # Service itself): its path, database and ops are the parent's
+          # unless it says otherwise.
+          def inherits? = (superclass < Service) == true
 
           # The answer of an op's +value+ as it goes on the line: a Hash with
           # String keys and a +result+.
