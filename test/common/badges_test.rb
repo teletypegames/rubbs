@@ -205,6 +205,25 @@ class BadgesTest < Minitest::Test
     assert_equal(['read'], proxy.requests.map { |r| r[2][:event] })
   end
 
+  def test_a_guest_hears_once_what_an_account_would_collect
+    define_network
+    Rubbs.badges(:wiki) { event :read; badge(:reader) { hint 'Read.'; emblem 'R'; on(:read).once } }
+    proxy = FakeProxy.new([])
+    Rubbs.config.badges = Badges::Reporter.new(proxy, board: 'wiki')
+    guest = Rubbs::Test::Session.new
+    refute guest.achieve(:read)
+    assert_empty guest.output
+    Badges.guest_hint = 'Log in to collect badges.'
+    guest.achieve(:read)
+    guest.achieve(:read)
+    guest.achieve(:dance)
+    assert_equal 1, guest.output.scan('Log in to collect badges.').size
+    Rubbs.config.badges.flush
+    assert_empty proxy.requests
+  ensure
+    Badges.guest_hint = nil
+  end
+
   # A page with nothing on it.
   class Blank < Rubbs::Common::Screens::Page
     key('q') { quit }

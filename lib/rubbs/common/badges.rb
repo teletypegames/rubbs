@@ -64,6 +64,11 @@ module Rubbs
         # Sets the time zone of the derived fields (see #time_zone).
         attr_writer :time_zone
 
+        # What a guest is told, once a call, the first time they do something
+        # a badge counts (Reporter): the words of the network, +nil+ (the
+        # default) for nothing.
+        attr_accessor :guest_hint
+
         # Declares the badges of +board+ (a Set made by the block) into the
         # catalog. Returns the Set.
         def define(board, &)

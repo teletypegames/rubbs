@@ -8,7 +8,9 @@ module Rubbs
       # never waits for it) and tells the caller what they earned
       # (Rubbs::Common::Line::Session#announce, Badges.announcement). Only
       # the events some badge of the catalog counts go out
-      # (Catalog#counts?); a guest's go nowhere. Rubbs.board's +badges+
+      # (Catalog#counts?); a guest's go nowhere, but the first one a badge
+      # would count tells the guest, once a call, Badges.guest_hint (when the
+      # network set one). Rubbs.board's +badges+
       # makes one; Rubbs::Common::Line::Session#achieve and the events of
       # Catalog::BUILT_IN come here.
       class Reporter
@@ -26,6 +28,7 @@ module Rubbs
           @catalog = catalog
           @queue   = Thread::Queue.new
           @called  = ObjectSpace::WeakMap.new
+          @hinted  = ObjectSpace::WeakMap.new
           @mutex   = Mutex.new
         end
 
@@ -34,7 +37,8 @@ module Rubbs
         # entry, +nil+ when nothing went.
         def report(session, name, fields = {})
           identity = session.respond_to?(:identity) ? session.identity : nil
-          return nil unless identity&.signed_in? && @catalog.counts?(name, @board, fields)
+          return nil unless @catalog.counts?(name, @board, fields)
+          return hint(session) unless identity&.signed_in?
           return nil if @queue.size >= QUEUE
 
           start
@@ -67,6 +71,16 @@ module Rubbs
         end
 
         private
+
+        # Tells a guest once a call what an account would have collected.
+        def hint(session)
+          text = Badges.guest_hint
+          return nil if text.nil? || @hinted[session]
+
+          @hinted[session] = true
+          session.announce(text) if session.respond_to?(:announce)
+          nil
+        end
 
         def start
           @mutex.synchronize do

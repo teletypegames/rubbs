@@ -1,3 +1,8 @@
+# rubbs 4.4
+
+New: `Rubbs::Common::Badges.guest_hint`, the words a guest is told once a call the first time they do
+something a badge counts (nothing unless a network sets them). Nothing to change.
+
 # rubbs 4.3
 
 New: `Rubbs::Common::Badges::Engine#statistics` (the badges in numbers, for a board's metrics), and
