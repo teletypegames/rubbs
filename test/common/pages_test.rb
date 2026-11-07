@@ -142,6 +142,15 @@ class PagesTest < Minitest::Test
     assert_nil app.read_line
   end
 
+  def test_a_masked_line_shows_the_mask
+    line = Rubbs::Common::Screens::Pages::Line.new(label: 'Password:', mask: '*')
+    %w[s e c].each { |k| line.key(k) }
+    assert_equal 'sec', line.text
+    assert_equal '***', line.shown
+    assert_equal '**', line.tail(2)
+    assert_equal 'ec', Rubbs::Common::Screens::Pages::Line.new(text: 'sec').tail(2)
+  end
+
   def test_hand_over_clears_restores_and_repaints_whole
     s = session
     pages = Rubbs::Common::Screens::Pages.new(s)

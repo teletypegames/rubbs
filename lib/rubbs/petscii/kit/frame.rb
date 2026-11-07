@@ -185,7 +185,7 @@ module Rubbs
         # cursor.
         def input_line(canvas)
           label = line.label.to_s.empty? ? @input_label : line.label.to_s
-          text  = line.text
+          text  = line.shown
           canvas.text(Layout::HINT_ROW, 0, label, Canvas::LIGHT_GREEN)
           canvas.text(Layout::HINT_ROW, label.length + 1, text, Canvas::WHITE)
           canvas.text(Layout::HINT_ROW, label.length + 1 + text.length, ' ', Canvas::WHITE, rvs: true)

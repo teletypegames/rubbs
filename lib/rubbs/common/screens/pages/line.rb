@@ -19,15 +19,18 @@ module Rubbs
           # [label] the words before the line (+nil+ for none)
           # [hint]  a line of help to show with it (+nil+ for none)
           # [max]   the most characters it takes, +nil+ for no limit
-          attr_reader :label, :hint, :max
+          # [mask]  shown in place of every character (a password: <tt>*</tt>),
+          #         +nil+ to show the text
+          attr_reader :label, :hint, :max, :mask
           # The text typed so far.
           attr_reader :text
 
           # A line starting from +text+; see the attributes.
-          def initialize(label: nil, hint: nil, text: '', max: nil)
+          def initialize(label: nil, hint: nil, text: '', max: nil, mask: nil)
             @label = label
             @hint  = hint
             @max   = max
+            @mask  = mask
             @text  = +text.to_s
             @text  = @text[0, max] if max
           end
@@ -44,8 +47,16 @@ module Rubbs
           end
 
           # The last +width+ characters of the text: the part a field of that
-          # width shows, the end in sight.
-          def tail(width) = @text[-[width, 1].max..] || @text
+          # width shows, the end in sight; the mask in their place when there
+          # is one.
+          def tail(width)
+            part = @text[-[width, 1].max..] || @text
+            @mask ? @mask * part.length : part
+          end
+
+          # The whole text as a screen shows it: the mask in place of each
+          # character when there is one.
+          def shown = @mask ? @mask * @text.length : @text
 
           private
 

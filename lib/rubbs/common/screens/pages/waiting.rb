@@ -55,8 +55,10 @@ module Rubbs
           # [text]  the text to start from
           # [max]   the most characters, +nil+ for no limit
           # [hint]  a line of help
-          def read_line(label = nil, text: '', max: nil, hint: nil)
-            @line = Line.new(label: label, hint: hint, text: text, max: max)
+          # [mask]  shown in place of every character (a password), +nil+
+          #         to show the text
+          def read_line(label = nil, text: '', max: nil, hint: nil, mask: nil)
+            @line = Line.new(label: label, hint: hint, text: text, max: max, mask: mask)
             redraw
             loop do
               case @line.key(wait_key)
