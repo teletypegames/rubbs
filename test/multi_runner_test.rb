@@ -75,6 +75,8 @@ class MultiRunnerTest < Minitest::Test
       File.write(File.join(board, 'README.md'), 'words')
       FileUtils.mkdir_p(File.join(board, 'content', 'hunts'))
       File.write(File.join(board, 'content', 'hunts', 'w1-x.yml'), 'title: X')
+      FileUtils.mkdir_p(File.join(board, 'scenarios'))
+      File.write(File.join(board, 'scenarios', 'tour.yaml'), 'title: Tour')
       FileUtils.touch(File.join(board, 'bbs.rb'), mtime: Time.now - 3600)
       assert_equal before, Rubbs::MultiRunner::Fingerprint.of(board)
       File.write(File.join(board, 'bbs.rb'), "# changed\n", mode: 'a')
