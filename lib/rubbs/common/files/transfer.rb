@@ -6,7 +6,8 @@ module Rubbs
       # A file sent down the line by the protocol the caller's terminal
       # receives with (Rubbs::Common::Files::Zmodem, Rubbs::Common::Files::Xmodem), and what to tell the caller
       # before and after. XMODEM carries no file name, so the terminal asks for
-      # one: #start says which.
+      # one: #start says which. A file comes up the line by XMODEM (::receive,
+      # with ::upload_start and ::upload_result to tell the caller).
       #
       #   protocol = :zmodem
       #   screen.say(Rubbs::Common::Files::Transfer.start(protocol, 'GAME.PRG', data.bytesize))
@@ -72,6 +73,61 @@ module Rubbs
           when :ok then ok(protocol, name)
           when :cancelled then 'The download was cancelled.'
           when :timeout then "Your terminal did not take the file by #{label(protocol)} in time."
+          else 'The line dropped.'
+          end
+        end
+
+        # The message of the +transfer+ line of an upload (::receive) by its
+        # result; the bytes are +received+, any other (the line hung up) is
+        # +dropped+.
+        UPLOAD_OUTCOMES = {
+          cancelled: 'upload cancelled',
+          timeout:   'upload timeout',
+          too_large: 'upload too large',
+          failed:    'upload failed'
+        }.freeze
+
+        # Receives a file the caller uploads by XMODEM (checksum, CRC-16 or
+        # 1K blocks, as the terminal sends) on +session+, at most +max_bytes+
+        # bytes, waiting +wait+ seconds for the terminal to start (see
+        # Rubbs::Common::Files::Xmodem.receive_file). Returns the bytes (the
+        # padding of the last block included), or +:cancelled+, +:timeout+,
+        # +:too_large+ or +:failed+; raises Rubbs::Common::Line::Hangup when
+        # the line drops. Writes a +transfer+ line of how it went.
+        def self.receive(session, max_bytes:, wait: Xmodem::WAIT)
+          result = Xmodem.receive_file(session, max_bytes: max_bytes, wait: wait)
+          received(result)
+          raise Line::Hangup if result == :hangup
+
+          result
+        end
+
+        # The +transfer+ line of an upload: +received+ with its +bytes+, or
+        # how it failed.
+        def self.received(result)
+          return Rubbs.log('transfer', 'received', bytes: result.bytesize, protocol: 'xmodem') if result.is_a?(String)
+
+          Rubbs.log('transfer', UPLOAD_OUTCOMES.fetch(result, 'upload dropped'), level: :warn, protocol: 'xmodem')
+        end
+        private_class_method :received
+
+        # What to tell the caller before an XMODEM upload of +what+ (the kind
+        # of file the board wants, e.g. <tt>'your .tcv picture'</tt>).
+        def self.upload_start(what)
+          "Start an XMODEM upload of #{what} in your terminal now (XMODEM, XMODEM-CRC or XMODEM-1K). " \
+            'The board waits a minute for it; Esc or RUN/STOP gives up.'
+        end
+
+        # What to tell the caller after an upload that ended with +result+ (a
+        # Symbol of ::receive); +nil+ for the bytes of a finished upload, which
+        # the board judges itself.
+        def self.upload_result(result)
+          case result
+          when String then nil
+          when :cancelled then 'The upload was cancelled.'
+          when :timeout then 'Your terminal did not send the file by XMODEM in time.'
+          when :too_large then 'The file is too large for the board.'
+          when :failed then 'The upload kept failing: the blocks came broken or out of order.'
           else 'The line dropped.'
           end
         end

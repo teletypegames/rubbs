@@ -3,18 +3,23 @@
 module Rubbs
   module Common
     module Files
-      # XMODEM downloads: the sending side of Ward Christensen's protocol and
-      # its CRC and 1K variants, the transfer the terminals of a Commodore 64
-      # (CCGMS, Novaterm, UltimateTerm and the like) know besides SyncTERM,
-      # Qodem and lrzsz's +rx+.
+      # XMODEM both ways: Ward Christensen's protocol and its CRC and 1K
+      # variants, the transfer the terminals of a Commodore 64 (CCGMS,
+      # Novaterm, UltimateTerm and the like) know besides SyncTERM, Qodem and
+      # lrzsz's +sx+ and +rx+. Downloads go out by Sender, uploads come in by
+      # Receiver.
       #
       #   Rubbs::Common::Files::Xmodem.send_file(session, bytes)
       #   Rubbs::Common::Files::Xmodem.send_file(session, bytes, one_k: true)
       #   # => :ok, :cancelled, :timeout or :hangup
       #
+      #   Rubbs::Common::Files::Xmodem.receive_file(session, max_bytes: 8192)
+      #   # => the bytes, or :cancelled, :timeout, :too_large, :failed or :hangup
+      #
       # XMODEM carries no file name: the caller names the file in the terminal
-      # before the transfer starts. The last block is padded with SUB (0x1a)
-      # up to its size, so the received file may be longer than the original.
+      # before the transfer starts. The last block is padded (with SUB, 0x1a,
+      # by most senders) up to its size, so the received file may be longer
+      # than the original: a receiver gets the padding too.
       #
       # The bytes go out as they are, past the PETSCII encoder, with 0xFF as a
       # doubled telnet IAC (<tt>telnet: false</tt> for a plain byte pipe), and
@@ -59,9 +64,11 @@ module Rubbs
 
         # Seconds to wait for the receiver to start, by default.
         WAIT        = 60
-        # Seconds to wait for the answer to one block.
+        # Seconds to wait for the answer to one block (sending), or for the
+        # next block (receiving).
         BLOCK_WAIT  = 20
-        # Times a block (or the EOT) is sent before the transfer is given up.
+        # Times a block (or the EOT) is sent, or asked for again, before the
+        # transfer is given up.
         TRIES       = 10
         # Seconds of silence that end the transfer: what the terminal still
         # sends before it (a late +C+, NAK or CAN) is dropped, so the board does
@@ -77,12 +84,23 @@ module Rubbs
         # Leaves telnet BINARY mode both ways.
         BINARY_OFF = [Line::Telnet::IAC, Line::Telnet::WONT, Line::Telnet::BINARY_OPT, Line::Telnet::IAC, Line::Telnet::DONT, Line::Telnet::BINARY_OPT].pack('C*').freeze
 
-        # Raised inside the sender when the caller or the terminal cancels.
+        # The most bytes a receive takes by default.
+        MAX_RECEIVE = 1024 * 1024
+        # Seconds a receive may take from its first block to its end, by
+        # default.
+        LIMIT = 300
+
+        # Raised inside a transfer when the caller or the terminal cancels.
         class Cancelled < StandardError; end
-        # Raised inside the sender when the terminal does not answer in time.
+        # Raised inside a transfer when the terminal does not answer in time.
         class Timeout < StandardError; end
-        # Raised inside the sender when the line drops.
+        # Raised inside a transfer when the line drops.
         class Hangup < StandardError; end
+        # Raised inside a receive when the file grows past its +max_bytes+.
+        class TooLarge < StandardError; end
+        # Raised inside a receive when the blocks keep coming wrong or out of
+        # order.
+        class Failed < StandardError; end
 
         module_function
 
@@ -109,6 +127,32 @@ module Rubbs
           Sender.new(session, telnet: telnet).run(data.to_s.b, one_k: one_k, wait: wait)
         end
 
+        # Receives a file the caller's terminal uploads over +session+.
+        #
+        # [session]   the Rubbs::Common::Line::Session to receive on
+        # [max_bytes] the most bytes taken: a longer file is cancelled
+        # [wait]      seconds to wait for the terminal to start sending
+        # [limit]     seconds the transfer may take from its first block on
+        # [telnet]    take a doubled 0xFF as one byte and ask for BINARY mode;
+        #             +false+ for a plain byte pipe
+        #
+        # The board asks for a CRC-16 (+C+) first and for the arithmetic
+        # checksum (NAK) after a while, for the senders that know only that;
+        # the first block tells which one the sender uses. 128-byte and
+        # 1024-byte (XMODEM-1K) blocks are both taken. Esc or Ctrl-C (RUN/STOP)
+        # from the caller gives up while the board waits for the start.
+        #
+        # Returns the received bytes (a binary String, the padding of the last
+        # block included) when the terminal ended the file, +:cancelled+ when
+        # the caller or the terminal gave up, +:timeout+ when the terminal did
+        # not start within +wait+ seconds, stopped sending or went past
+        # +limit+, +:too_large+ when the file grew past +max_bytes+, +:failed+
+        # when the blocks kept coming broken or out of order, +:hangup+ when
+        # the line dropped.
+        def receive_file(session, max_bytes: MAX_RECEIVE, wait: WAIT, limit: LIMIT, telnet: true)
+          Receiver.new(session, telnet: telnet).run(max_bytes: max_bytes, wait: wait, limit: limit)
+        end
+
         # Returns the arithmetic checksum of the String +bytes+: the sum of the
         # bytes modulo 256.
         def checksum(bytes) = bytes.sum & BYTE_MASK
@@ -131,126 +175,12 @@ module Rubbs
           tail = crc ? [Zmodem.crc16(chunk)].pack('n') : [checksum(chunk)].pack('C')
           head + chunk + tail
         end
-
-        # One XMODEM send over a session. Xmodem.send_file is the usual way in.
-        class Sender
-          # Creates a sender writing to and reading raw bytes from +session+;
-          # +telnet+ doubles 0xFF bytes as telnet IAC and asks for BINARY mode.
-          def initialize(session, telnet: true)
-            @session = session
-            @telnet  = telnet
-          end
-
-          # Sends +data+ (as for Xmodem.send_file): waits up to +wait+ seconds
-          # for the receiver's +C+ or NAK (other bytes are skipped), sends the
-          # blocks one by one, each again on a NAK or silence, then the EOT.
-          # Writes the cancel sequence when the transfer is given up. Before it
-          # returns, drops what the terminal still sends until the line is quiet
-          # (QUIET, at most QUIET_MAX seconds).
-          #
-          # Returns +:ok+, +:cancelled+, +:timeout+ or +:hangup+.
-          def run(data, one_k:, wait:)
-            @session.write_raw(BINARY_ON) if @telnet
-            send_blocks(data, one_k, wait)
-            settled(:ok)
-          rescue Cancelled
-            abort_with(:cancelled)
-          rescue Timeout
-            abort_with(:timeout)
-          rescue Hangup, IOError, SystemCallError
-            :hangup
-          ensure
-            @session.write_raw(BINARY_OFF) if @telnet
-          end
-
-          private
-
-          # The blocks of +data+ (1 KiB ones when +one_k+ and the receiver asks
-          # for a CRC), then EOT.
-          def send_blocks(data, one_k, wait)
-            crc  = handshake(wait)
-            size = crc && one_k ? BLOCK_1K : BLOCK
-            Xmodem.blocks(data, size).each.with_index(1) do |chunk, number|
-              deliver(Xmodem.frame(number % BLOCK_NUMBERS, chunk, crc: crc))
-            end
-            deliver(EOT.chr)
-          end
-
-          def abort_with(outcome)
-            emit(ABORT)
-            settled(outcome)
-          end
-
-          # +outcome+, or +:hangup+ when the line dropped while it went quiet.
-          def settled(outcome) = quiet ? outcome : :hangup
-
-          def handshake(wait)
-            deadline = monotonic + wait
-            loop do
-              left = deadline - monotonic
-              raise Timeout if left <= 0
-
-              case read(left)
-              when :timeout then raise Timeout
-              when CRC_START then return true
-              when NAK then return false
-              when *CANCEL_KEYS then raise Cancelled
-              end
-            end
-          end
-
-          def deliver(bytes)
-            TRIES.times do
-              emit(bytes)
-              case answer
-              when ACK then return
-              when :timeout, NAK then next
-              end
-            end
-            raise Timeout
-          end
-
-          def answer
-            deadline = monotonic + BLOCK_WAIT
-            loop do
-              left = deadline - monotonic
-              return :timeout if left <= 0
-
-              byte = read(left)
-              return byte if [ACK, NAK, :timeout].include?(byte)
-            end
-          end
-
-          def read(timeout)
-            byte = @session.read_raw_byte(timeout)
-            raise Hangup if byte.nil?
-
-            @cans = byte == CAN ? @cans.to_i + 1 : 0
-            raise Cancelled if @cans >= CANCEL_COUNT
-
-            byte
-          end
-
-          # Drops bytes until QUIET seconds pass without one; false on hangup.
-          def quiet
-            deadline = monotonic + QUIET_MAX
-            while monotonic < deadline
-              byte = @session.read_raw_byte(QUIET)
-              return false if byte.nil?
-              return true if byte == :timeout
-            end
-            true
-          rescue IOError, SystemCallError
-            false
-          end
-
-          def emit(bytes)
-            @session.write_raw(@telnet ? bytes.b.gsub(TELNET_IAC, TELNET_IAC * 2) : bytes)
-          end
-
-          def monotonic = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-        end
       end
     end
   end
 end
+
+require_relative 'xmodem/wire'
+require_relative 'xmodem/sender'
+require_relative 'xmodem/block_reader'
+require_relative 'xmodem/receiver'

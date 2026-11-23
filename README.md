@@ -58,7 +58,7 @@ Upgrading from 1.x: see [UPGRADING.md](UPGRADING.md). A complete small board to 
 17. [Banner & ERB screens](#17-banner--erb-screens)
 18. [Persistence and shared blocks (`Model`, `Database`, `Store`, `Snapshot`, `HTTP`, `Cache`, `RateLimit`, `Text`, `Nodes`)](#18-persistence-and-shared-blocks-model-database-store-snapshot-http-cache-ratelimit-text-nodes) — and QR codes (`Rubbs::Common::Text::QR`)
 19. [AI characters (`Rubbs::Common::AI`)](#19-ai-characters-bbsai)
-20. [Doors (`Rubbs::Common::Call::Door`)](#20-doors-bbsdoor) — telnet gateways (`Rubbs::Common::Line::Gateway`) and file downloads (`Rubbs::Common::Files::Zmodem`, `Rubbs::Common::Files::Xmodem`, `Rubbs::Common::Files::Transfer`)
+20. [Doors (`Rubbs::Common::Call::Door`)](#20-doors-bbsdoor) — telnet gateways (`Rubbs::Common::Line::Gateway`), file downloads and XMODEM uploads (`Rubbs::Common::Files::Zmodem`, `Rubbs::Common::Files::Xmodem`, `Rubbs::Common::Files::Transfer`)
 21. [Telnet, sessions & input model](#21-telnet-sessions--input-model) — and testing a board (`rubbs/test`)
 22. [Source layout](#22-source-layout)
 
@@ -2626,6 +2626,37 @@ end
 - It waits `wait:` seconds (60) for the receiver; Esc or Ctrl-C (RUN/STOP)
   gives up meanwhile, and two CANs from the terminal cancel at any time. A
   block goes again on a NAK or 20 s of silence, at most 10 times.
+
+### File uploads by XMODEM (`Rubbs::Common::Files::Xmodem.receive_file`)
+
+The receiving side of XMODEM, XMODEM-CRC and XMODEM-1K: a caller sends a
+file from the terminal (CCGMS, UltimateTerm, SyncTERM, lrzsz's `sx`).
+
+```ruby
+data = app.with_line do |session|
+  session.write("  #{Rubbs::Common::Files::Transfer.upload_start('your picture')}\r\n")
+  Rubbs::Common::Files::Transfer.receive(session, max_bytes: 8192)
+end
+# => the bytes, or :cancelled, :timeout, :too_large or :failed
+#    (Transfer.receive raises Rubbs::Common::Line::Hangup on a dropped line)
+```
+
+- The board asks for a CRC (`C`) every 3 s, after four tries for the checksum
+  (NAK); the first block tells which one the sender uses, so either works.
+  128-byte and 1024-byte blocks are both taken.
+- The bytes come back as received: the last block's padding (SUB, 0x1a, or
+  zeros) is still on them, so the caller's format must tell where the file
+  ends.
+- Never more than `max_bytes:` (the transfer is cancelled, `:too_large`),
+  `wait:` seconds (60) for the start, `limit:` seconds (300) from the first
+  block on, 20 s of silence ten times in a row. A broken block is asked for
+  again (ten times in a row at most), a block sent twice is dropped, a block
+  out of order ends it (`:failed`).
+- Esc or Ctrl-C (RUN/STOP) gives up before the start; two CANs where a block
+  should start cancel at any time. A doubled 0xFF is one byte on a telnet
+  line, which is asked into BINARY mode for the transfer (`telnet: false`
+  for a plain pipe).
+- `Transfer.upload_result(result)` words a failed upload (`nil` for the bytes).
 
 ### One call for either protocol (`Rubbs::Common::Files::Transfer`)
 
