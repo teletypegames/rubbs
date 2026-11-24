@@ -37,6 +37,16 @@ module Rubbs
             telnet_env.slice(*Environ::FORWARDED)
           end
 
+          # The name and the password the caller's terminal sent to log in with
+          # (Environ::LOGIN), an Array of the two; +nil+ unless it sent both.
+          # Unlike #forwarded, from any address.
+          def login_offer
+            name, password = telnet_env.values_at(*Environ::LOGIN)
+            return nil if name.to_s.strip.empty? || password.to_s.empty?
+
+            [name.strip, password]
+          end
+
           # The face the caller picked on the board the call came through,
           # +:modern+ or +:petscii+; +nil+ when it was not forwarded.
           def forwarded_face

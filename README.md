@@ -419,6 +419,7 @@ end
 | directory | a `Rubbs::Common::Auth::Directory` (the accounts here, on the Central) or a `Rubbs::Common::Auth::Remote` (the Central's); none: the Central's of `central`; a block is given the domain object at boot |
 | `login:` | `:call` asks a name and password at the start of a call, before the face; `:menu` leaves it to the faces (the built-in `:log_in` / `:log_out` commands, `log_in` on a `Petscii::Face`); `:both` |
 | `guests:` | at a `:call` login, whether an empty name or one without an account comes in as a guest (default `true`) |
+| `line_login:` | whether a terminal may log in with the call: a name and password sent with telnet NEW-ENVIRON (see below; default `false`) |
 
 In an Application, a `Petscii::Face` and a flow: `identity` (a
 `Rubbs::Common::Auth::Identity`: `id`, `name`, `roles`, `source`), `signed_in?`,
@@ -439,6 +440,15 @@ other forwarded variables), checks it, and the caller is signed in without a
 question. A token is `v1.<kid>.<payload>.<HMAC-SHA256>`: the payload (name,
 id, roles, issuer, audience, times, a nonce) is signed with the secret every
 board shares, not hidden; it is good for one board, sixty seconds and once.
+
+**A terminal logging in with the call.** On a board with `line_login: true` a terminal
+that keeps its caller's account (TTG Gate 64 on a C64) sends the name and the password with
+the call, unasked, as telnet NEW-ENVIRON `INFO`: `VAR USER` and `USERVAR RUBBS_PASSWORD`.
+They are taken from any address, as the password proves them, and `Rubbs::Common::Auth.from_line`
+logs the caller in with them when the identity is first asked (a forwarded `RUBBS_AUTH_KEY`
+goes first). A login that does not go leaves a guest, the wrong passwords counted as at any
+login, and the reason (`Login::WORDS`) in `session.login_notice` for the board to show once.
+Telnet is not encrypted: the password travels as it would typed in.
 
 **The secret.** `RUBBS_AUTH_SECRET` (`Rubbs.config.auth_secrets`), the same on
 every board: at least 32 random bytes (`openssl rand -hex 32`), never in a

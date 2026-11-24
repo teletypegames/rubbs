@@ -76,6 +76,11 @@ module Rubbs
       # The variables a neighbouring board forwarded (see
       # Rubbs::Common::Line::Telnet::Forwarded#forwarded), a Hash; empty unless given.
       attr_reader :forwarded
+      # The name and password the caller's terminal sent to log in with (see
+      # Rubbs::Common::Line::Telnet::Forwarded#login_offer), an Array of two, or +nil+.
+      attr_reader :login_offer
+      # Why the login the terminal sent did not go (Rubbs::Common::Line::Session#login_notice), or +nil+.
+      attr_accessor :login_notice
 
       # A line with +keys+ to press.
       #
@@ -84,7 +89,17 @@ module Rubbs
       # [rows]    the terminal height (ignored on a PETSCII line)
       # [identity]  who the caller is (a Rubbs::Common::Auth::Identity)
       # [forwarded] the forwarded variables (BBS_VIA, RUBBS_AUTH_KEY …)
-      def initialize(keys: [], petscii: false, cols: 80, rows: 24, session_id: 'test', identity: nil, forwarded: {})
+      # [login_offer] the name and password the terminal logs in with, <tt>[name, password]</tt>
+      def initialize(
+        keys: [],
+        petscii: false,
+        cols: 80,
+        rows: 24,
+        session_id: 'test',
+        identity: nil,
+        forwarded: {},
+        login_offer: nil
+      )
         @keys       = keys.dup
         @petscii    = petscii
         @term_cols  = petscii ? Petscii::COLS : cols
@@ -94,6 +109,7 @@ module Rubbs
         @taken      = 0
         @idle_seconds = nil
         @forwarded    = forwarded
+        @login_offer  = login_offer
         @identity     = identity || Common::Auth::Identity.guest
       end
 

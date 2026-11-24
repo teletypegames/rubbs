@@ -39,6 +39,11 @@ module Rubbs
           # IP address, the name of the board the call came through, and a
           # signed-in caller's identity (a Rubbs::Common::Auth::Token).
           FORWARDED = %w[BBS_FACE BBS_CLIENT_IP BBS_VIA RUBBS_AUTH_KEY].freeze
+          # The variables a caller's own terminal logs in with: the account's
+          # name (RFC 1572's well-known +USER+) and its password. Taken from any
+          # address, as the password proves them, by a board that allows it
+          # (Rubbs::Common::Auth::Setup#line_login).
+          LOGIN = %w[USER RUBBS_PASSWORD].freeze
 
           # The variables of a NEW-ENVIRON subnegotiation, +bytes+ an Array of
           # Integer as Rubbs::Common::Line::Telnet::Parser gives it (the option first): a Hash of

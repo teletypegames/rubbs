@@ -27,6 +27,10 @@ module Rubbs
         # (Rubbs.calls): the section they opened last (Rubbs::Common::Log.use), the board a
         # gateway carries them to (Rubbs::Common::Line::Gateway#call), or +nil+.
         attr_accessor :place
+        # What went wrong with the login the caller's terminal sent
+        # (Rubbs::Common::Auth.from_line), the words of Rubbs::Common::Auth::Login::WORDS;
+        # +nil+ when it went well or none came. A board shows it once.
+        attr_accessor :login_notice
 
         # Wraps +client+, the accepted socket (any IO with +read+, +write+ and
         # +close+), and notes its address (Telnet::Forwarded#peer_ip) while the

@@ -1,3 +1,10 @@
+# rubbs 4.8
+
+New: `auth … line_login: true` lets a terminal log in with the call: a name and password sent as
+telnet NEW-ENVIRON (`USER`, `RUBBS_PASSWORD`), `Session#login_offer`, `Session#login_notice`
+(README §auth). `Rubbs::Common::Auth::Setup` has a fourth member, `line_login` (default `false`):
+a `Setup.new` with keywords goes on as it was. Nothing to change.
+
 # rubbs 4.4
 
 New: `Rubbs::Common::Badges.guest_hint`, the words a guest is told once a call the first time they do

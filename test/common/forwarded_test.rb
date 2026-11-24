@@ -48,6 +48,21 @@ class ForwardedTest < Minitest::Test
     assert_equal({ 'BBS_FACE' => 'petscii', 'BBS_CLIENT_IP' => '203.0.113.7' }, @session.telnet_env)
   end
 
+  def test_a_terminal_offers_a_login_from_anywhere
+    from('198.51.100.9')
+    bytes = [255, 250, 39, E::INFO, E::VAR, *'USER'.bytes, E::VALUE, *' Ada '.bytes,
+             E::USERVAR, *'RUBBS_PASSWORD'.bytes, E::VALUE, *'se'.bytes, E::ESC, 1, *'cret'.bytes, 255, 240]
+    @session.fake_line.caller.write(bytes.pack('C*') + [255, 250, 31, 0, 40, 0, 25, 255, 240].pack('C*'))
+    @session.settle(timeout: 0.3)
+    assert_equal ['Ada', "se\u0001cret"], @session.login_offer
+    assert_empty @session.forwarded
+  end
+
+  def test_no_login_without_a_password
+    forward({ 'USER' => 'Ada' })
+    assert_nil @session.login_offer
+  end
+
   def test_a_bad_address_or_face_falls_back
     from('10.0.0.5')
     forward({ 'BBS_FACE' => 'vt52', 'BBS_CLIENT_IP' => 'nope' })
