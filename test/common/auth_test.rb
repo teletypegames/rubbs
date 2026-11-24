@@ -214,7 +214,9 @@ class AuthLineTest < Minitest::Test
   def test_a_terminal_logs_in_with_the_call
     Rubbs.config.auth = line_setup
     session = Rubbs::Test::Session.new(login_offer: %w[ada secret1])
-    out, err = capture_io { assert_equal 'Ada', Rubbs::Common::Auth.from_line(session).name }
+    identity = nil
+    out, err = capture_io { identity = Rubbs::Common::Auth.from_line(session) }
+    assert_equal ['Ada', :line], [identity.name, identity.source]
     assert_nil session.login_notice
     assert_includes out + err, 'line_login'
   end

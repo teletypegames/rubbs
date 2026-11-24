@@ -447,7 +447,7 @@ the call, unasked, as telnet NEW-ENVIRON `INFO`: `VAR USER` and `USERVAR RUBBS_P
 They are taken from any address, as the password proves them, and `Rubbs::Common::Auth.from_line`
 logs the caller in with them when the identity is first asked (a forwarded `RUBBS_AUTH_KEY`
 goes first). A login that does not go leaves a guest, the wrong passwords counted as at any
-login, and the reason (`Login::WORDS`) in `session.login_notice` for the board to show once.
+login, and the reason (`Login::WORDS`) in `session.login_notice` for the board to show once. A caller logged in so (an identity of source `:line`) gets no splash: the terminal has shown its own logo.
 Telnet is not encrypted: the password travels as it would typed in.
 
 **The secret.** `RUBBS_AUTH_SECRET` (`Rubbs.config.auth_secrets`), the same on

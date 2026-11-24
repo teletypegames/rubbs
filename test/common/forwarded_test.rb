@@ -84,6 +84,49 @@ class ForwardedTest < Minitest::Test
     refute_includes @session.received, 'YOUR TERMINAL'
   end
 
+  def test_a_call_its_terminal_logged_in_skips_the_splash
+    saved = Rubbs.config.auth
+    accounts = Rubbs::Test.accounts
+    capture_io { accounts.register('Ada', 'secret1') }
+    Rubbs.config.auth = Rubbs::Common::Auth::Setup.new(directory: accounts, login: :menu, guests: true, line_login: true)
+    from('198.51.100.9')
+    @session.fake_line.caller.write(E.info('USER' => 'Ada', 'RUBBS_PASSWORD' => 'secret1'))
+    @session.settle(timeout: 0.3)
+    @session.define_singleton_method(:settle) { |**| true }
+    @session.fake_line.caller.write("2\r")
+    splash = Object.new
+    def splash.continue?(*) = raise('no splash for a call its terminal logged in')
+    reached = nil
+    petscii = Rubbs::Common::Call::Flow.define { call { reached = :petscii } }
+    flow    = Rubbs::Common::Call::Terminal.flow(title: 'X', modern: petscii, petscii: petscii, splash: splash)
+    capture_io { Timeout.timeout(10) { Rubbs::Common::Call::FlowRunner.new(@session, 'id', flow).run } }
+    assert_equal [:petscii, 'Ada', :line], [reached, @session.identity.name, @session.identity.source]
+  ensure
+    Rubbs.config.auth = saved
+  end
+
+  def test_a_wrong_password_from_the_terminal_still_gets_the_splash
+    saved = Rubbs.config.auth
+    accounts = Rubbs::Test.accounts
+    capture_io { accounts.register('Ada', 'secret1') }
+    Rubbs.config.auth = Rubbs::Common::Auth::Setup.new(directory: accounts, login: :menu, guests: true, line_login: true)
+    from('198.51.100.9')
+    @session.fake_line.caller.write(E.info('USER' => 'Ada', 'RUBBS_PASSWORD' => 'nope'))
+    @session.settle(timeout: 0.3)
+    @session.define_singleton_method(:settle) { |**| true }
+    @session.fake_line.caller.write("2\r")
+    shown = []
+    splash = Object.new
+    splash.define_singleton_method(:continue?) { |*| shown << true }
+    face = Rubbs::Common::Call::Flow.define { call { nil } }
+    flow = Rubbs::Common::Call::Terminal.flow(title: 'X', modern: face, petscii: face, splash: splash)
+    capture_io { Timeout.timeout(10) { Rubbs::Common::Call::FlowRunner.new(@session, 'id', flow).run } }
+    assert_equal [true], shown
+    assert @session.identity.guest?
+  ensure
+    Rubbs.config.auth = saved
+  end
+
   def test_a_forwarding_gateway_sends_who_is_calling_first
     from('203.0.113.7')
     server = TCPServer.new('127.0.0.1', 0)

@@ -6,8 +6,9 @@ module Rubbs
       # Who is on the line: a signed-in account (+id+, +name+, +roles+) or a
       # guest (no +id+; a guest may still have the name they gave). +source+
       # says how the board knows: +:token+ (a RUBBS_AUTH_KEY from the board
-      # the call came through), +:login+ (a name and password here) or
-      # +:guest+.
+      # the call came through), +:login+ (a name and password here), +:line+
+      # (a name and password the caller's terminal sent with the call, see
+      # Rubbs::Common::Auth.from_line) or +:guest+.
       #
       #   identity.signed_in?        # => true
       #   identity.role?(:blogger)   # => true when it has that role

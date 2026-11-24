@@ -97,14 +97,14 @@ module Rubbs
 
       # The Identity of the account +name+ with +password+ in the directory of
       # +setup+, for the caller on +session+ (its +caller_key+ counts the wrong
-      # passwords); a guest when it is not one, the words of Login::WORDS for
+      # passwords), its +source+ +:line+; a guest when it is not one, the words of Login::WORDS for
       # why then set as the session's +login_notice+ (when it keeps one).
       # Logs a +line_login+ event either way.
       def self.on_line(setup, session, name, password)
         result = setup.directory.log_in(name, password, caller_key: session.caller_key)
         if result.is_a?(Identity)
           event(:line_login, name: result.name)
-          return result
+          return result.with(source: :line)
         end
         event(:line_login, level: :warn, name: name.to_s[0, 40], result: result.to_s)
         session.login_notice = Login::WORDS.fetch(result, Login::WORDS[:wrong]) if session.respond_to?(:login_notice=)

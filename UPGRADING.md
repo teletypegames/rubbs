@@ -1,3 +1,8 @@
+# rubbs 4.8.1
+
+A caller whose terminal logged them in with the call (`line_login`) gets no splash; their identity's
+`source` is `:line` (it was `:login`). Nothing to change.
+
 # rubbs 4.8
 
 New: `auth … line_login: true` lets a terminal log in with the call: a name and password sent as

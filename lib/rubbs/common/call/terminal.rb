@@ -19,7 +19,10 @@ module Rubbs
       #
       # A call forwarded by another board's gateway (Telnet::Forwarded, a
       # Rubbs::Common::Line::Gateway with <tt>forward: true</tt>) had its question there: the
-      # face picked there is taken without asking, and without the splash.
+      # face picked there is taken without asking, and without the splash. A
+      # caller whose terminal logged them in with the call (an identity of
+      # source +:line+, Rubbs::Common::Auth.from_line: TTG Gate 64, which shows its own
+      # logo) is asked the question but gets no splash either.
       module Terminal
         # Seconds to wait for the telnet negotiation before guessing.
         SETTLE = 1.5
@@ -52,7 +55,8 @@ module Rubbs
         #           +nil+ for none
         #
         # A forwarded call (Telnet::Forwarded#forwarded_face) gets neither the
-        # question nor the splash.
+        # question nor the splash; a call its terminal logged in (#terminal_login?)
+        # no splash.
         #
         # Returns a Rubbs::Common::Call::Flow that halts when the line drops at the question.
         #
@@ -72,8 +76,8 @@ module Rubbs
 
         # The face of the call on +session+: the forwarded one, or the answer to
         # the question titled +title+; the line switched to it and +splash+
-        # shown (not on a forwarded call). Returns +nil+ when the line drops at
-        # the question or the splash.
+        # shown (not on a forwarded call, nor on one #terminal_login?). Returns
+        # +nil+ when the line drops at the question or the splash.
         def self.pick(session, title, splash)
           guess     = guess(session)
           forwarded = session.respond_to?(:forwarded_face) && session.forwarded_face
@@ -81,10 +85,20 @@ module Rubbs
           return nil if face.nil?
 
           switch(session, face)
-          return nil if splash && !forwarded && !splash.continue?(session, face)
+          return nil if splash && !forwarded && !past_splash?(session, splash, face)
 
           face
         end
+
+        # Whether the call on +session+ goes on past +splash+ for +face+:
+        # without showing it when #terminal_login?, else as Splash#continue?
+        # answers.
+        def self.past_splash?(session, splash, face) = terminal_login?(session) || splash.continue?(session, face)
+
+        # Whether the caller on +session+ was logged in by their terminal with
+        # the call (an identity of source +:line+). Asks the identity, so a
+        # login the terminal sent is tried here at the latest.
+        def self.terminal_login?(session) = session.respond_to?(:identity) && session.identity.source == :line
 
         # The flow of a board with one face, +name+ (+:modern+ or +:petscii+):
         # +steps+ (a Rubbs::Common::Call::Flow), with the call's Rubbs::Common::Line::Session#face set to +name+
