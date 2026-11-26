@@ -58,6 +58,17 @@ class KitPetsciiTest < Minitest::Test
     assert_equal Kit::Chrome::COLORS[:lit], Kit::Chrome.new(title: '', places: []).colors[:lit]
   end
 
+  def test_a_narrower_bar_and_a_place_lit_by_another_letter
+    c = Kit::Chrome.new(title: 'TTG', places: [[:own, 'OWN'], [:global, 'GLOBAL'], [:trophy, 'TROPHY', 3]], gap: 2)
+    assert_equal [6, 11, 19], c.places.map(&:col)
+    assert_equal 'p', c.place(:trophy).letter
+    canvas = Canvas.new(charset: :lower)
+    c.bar(canvas, active: :own)
+    assert_equal ' TTG  OWN  GLOBAL  TROPHY', canvas.to_s.lines.first.rstrip
+    assert_equal Kit::Chrome::COLORS[:key], canvas.cell(0, 22).color
+    assert_equal Kit::Chrome::COLORS[:bar], canvas.cell(0, 19).color
+  end
+
   def test_the_tabs_switch_with_the_cursor
     b = board
     b.start

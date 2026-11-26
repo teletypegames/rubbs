@@ -1352,12 +1352,17 @@ sub-menu or line on row 1, the hint bar on row 24.
 chrome = Rubbs::Petscii::Kit::Chrome.new(
   title:    'MY BOARD',
   places:   [[:news, 'NEWS'], [:files, 'FILES'], [:me, 'ME']],   # the tabs, the first letter each one's key
+                                                                 # ([:cups, 'TROPHY', 3]: the P lit instead)
   menu:     [[:search, '/Find', 0], [:top, 'Top', 0]],           # a sub-menu: the key, the label, the sign's index
   menu_tab: :files,                                              # the tab it belongs to
   hotkeys:  { 'h' => :help, 'q' => :quit },                      # the sub-menu's signs are added
-  colors:   { bar: Rubbs::Petscii::Canvas::BLUE }                  # over Chrome::COLORS
+  colors:   { bar: Rubbs::Petscii::Canvas::BLUE },                 # over Chrome::COLORS
+  gap:      2                                                    # blank cells between two tabs (3 by default)
 )
 ```
+
+The C64 cannot print the last cell of a row, so the bar has 39 cells: a
+shorter title and `gap: 2` make room for one more tab.
 
 A `Frame` (a `Rubbs::Common::Screens::Pages` runner) holds the frame and the content's views.
 CRSR up from the top of a list goes to the sub-menu of a tab that has one,

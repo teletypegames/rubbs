@@ -66,14 +66,21 @@ module Rubbs
         # [hotkeys]  the letters that open a place from anywhere (a letter =>
         #            a key), the sub-menu's signs among them
         # [colors]   COLORS with the board's own
-        attr_reader :title, :places, :menu, :menu_tab, :under, :hotkeys, :colors
+        # [gap]      the blank cells between two places of the bar
+        attr_reader :title, :places, :menu, :menu_tab, :under, :hotkeys, :colors, :gap
+
+        # The blank cells between two places of the bar by default.
+        GAP = 3
 
         # A frame of +title+ and +places+ ([key, label] each, the first letter
-        # the key's), the sub-menu +menu+ of the tab +menu_tab+ ([key, label,
-        # index of the sign] each), +under+, +hotkeys+ (the sub-menu's signs
-        # are added) and +colors+ over COLORS.
-        def initialize(title:, places:, menu: [], menu_tab: nil, under: {}, hotkeys: {}, colors: {})
+        # the key's, or [key, label, index of the key's letter]), the
+        # sub-menu +menu+ of the tab +menu_tab+ ([key, label, index of the
+        # sign] each), +under+, +hotkeys+ (the sub-menu's signs are added),
+        # +colors+ over COLORS and +gap+ blank cells between two places (a
+        # narrower bar fits more of them in the 39 cells a C64 prints).
+        def initialize(title:, places:, menu: [], menu_tab: nil, under: {}, hotkeys: {}, colors: {}, gap: GAP)
           @title    = title.to_s
+          @gap      = gap
           @places   = lay_out_places(places).freeze
           @menu     = lay_out_menu(menu).freeze
           @menu_tab = menu_tab
@@ -138,9 +145,9 @@ module Rubbs
         end
 
         def lay_out_places(places)
-          places.each_with_object([]) do |(key, label), laid|
-            col = laid.empty? ? @title.length + 4 : laid.last.col + laid.last.label.length + 3
-            laid << Place.new(key, label, 0, col)
+          places.each_with_object([]) do |(key, label, hotkey), laid|
+            col = laid.empty? ? @title.length + 1 + @gap : laid.last.col + laid.last.label.length + @gap
+            laid << Place.new(key, label, hotkey || 0, col)
           end
         end
 
