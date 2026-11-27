@@ -23,6 +23,7 @@ module Rubbs
       # and gets the goodbye screen after it (#goodbye).
       class BoardDefinition
         include CentralWiring
+        include DrainWiring
 
         # Idle seconds before a quiet caller is dropped, unless #idle says.
         IDLE = 600
@@ -135,6 +136,7 @@ module Rubbs
           configure_central_server
           configure_badges
           configure_line
+          configure_drain
           Rubbs.config.flow = flow
           self
         end
@@ -151,18 +153,6 @@ module Rubbs
           self
         ensure
           stop
-        end
-
-        # Ends the board after the server: the #on_stop blocks, then the domain
-        # object's +stop+ (Rubbs::Common::Board::Domain#stop). An error is logged, not raised.
-        # Returns +nil+.
-        def stop
-          @on_stop.each { |hook| hook.call(@board) }
-          Rubbs.config.central&.server&.stop
-          @board.stop if @board.respond_to?(:stop)
-          nil
-        rescue StandardError => e
-          Rubbs.log('stop', e)
         end
 
         # The root flow: the terminal question with two faces, the one face's

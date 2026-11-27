@@ -1,3 +1,18 @@
+# rubbs 5.1
+
+New: deploys without a dropped call. A `Rubbs::MultiRunner` hands a board's changed code over: the
+new process listens beside the old one (`Rubbs::Common::Line::Listener`, `SO_REUSEPORT`), and once
+it does the old one drains (SIGUSR2, `Rubbs::Common::Line::Server#drain`): no new calls, its callers
+go on until they leave or `BBS_DRAIN_SECONDS` (default 1800) are over. SIGUSR2 to the supervisor
+drains every board, for a supervisor of the next image beside it. `on_drain { … }` in
+`Rubbs.board`, `Domain#drain`, `Central::Server#drain`; `drain: false` in the settings of a board
+that must never run twice at once (it holds `data/.rubbs-board.lock`). The state file has
+`ready`, `waiting`, `handing_over` and `draining` per board, and `draining` for the supervisor.
+
+To do: a board's own HTTP server opens its port with `Rubbs::Common::Line::Listener.tcp` (a plain
+`TCPServer` or WEBrick `Port:` fails while the old process holds the port) and shuts it in
+`on_drain`. A board whose processes must not overlap gets `drain: false`.
+
 # rubbs 5.0
 
 Breaking:

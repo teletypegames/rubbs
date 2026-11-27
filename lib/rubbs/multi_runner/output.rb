@@ -15,6 +15,12 @@ module Rubbs
       # The start of the line a board's process writes first, before its
       # name (Child): read here, never written out.
       NAME_LINE = "\x1Erubbs-board "
+      # The line a board's process writes once its port is open (Handover):
+      # read here, never written out.
+      READY_LINE = "\x1Erubbs-ready"
+      # The line a board's process writes when it waits for the lock of an
+      # old one (Launch): read here, never written out.
+      WAITING_LINE = "\x1Erubbs-waiting"
 
       # [io] where the lines go (default: <tt>$stderr</tt>)
       def initialize(io = $stderr)
@@ -40,10 +46,7 @@ module Rubbs
         line = line.chomp
         return if line.empty?
 
-        if line.start_with?(NAME_LINE)
-          child.slug = line.delete_prefix(NAME_LINE)
-          return nil
-        end
+        return signal(line, child) if line.start_with?("\x1E")
 
         record = parse(line)
         child.slug ||= record['board'] if record&.dig('board')
@@ -57,6 +60,14 @@ module Rubbs
       end
 
       private
+
+      def signal(line, child)
+        if line.start_with?(NAME_LINE) then child.slug = line.delete_prefix(NAME_LINE)
+        elsif line == READY_LINE then child.ready!
+        elsif line == WAITING_LINE then child.waiting!
+        end
+        nil
+      end
 
       def parse(line)
         return nil unless line.start_with?('{')

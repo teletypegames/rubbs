@@ -5,9 +5,11 @@ require_relative 'multi_runner/board_ref'
 require_relative 'multi_runner/fingerprint'
 require_relative 'multi_runner/output'
 require_relative 'multi_runner/launch'
+require_relative 'multi_runner/handover'
 require_relative 'multi_runner/child'
 require_relative 'multi_runner/status'
 require_relative 'multi_runner/restarts'
+require_relative 'multi_runner/draining'
 require_relative 'multi_runner/supervision'
 
 module Rubbs
@@ -36,12 +38,17 @@ module Rubbs
   # - a board that fails its health probe (Rubbs::Common::Line::Health) three
   #   times, or grows over its +memory+, is restarted in order
   # - when <tt><root>/.revision</tt> changes, only the boards whose files
-  #   changed (Fingerprint) are restarted, one at a time; nothing is
-  #   (re)started while <tt><root>/.deploying</tt> exists
+  #   changed (Fingerprint) are restarted, one at a time, without dropping a
+  #   call: the new process starts beside the old one, which drains once the
+  #   new one listens (Handover); nothing is (re)started while
+  #   <tt><root>/.deploying</tt> exists
   # - the state of every board goes to <tt><state>/multi_runner.json</tt>
   #   (Status)
   # - SIGTERM stops every board in order (Rubbs::Common::Line::Server#stop),
   #   the stragglers are killed after BBS_SHUTDOWN_SECONDS and 5 more
+  # - SIGUSR2 drains every board (Rubbs::Common::Line::Server#drain): a
+  #   supervisor of the next image listens beside this one; #run! returns
+  #   when the last caller has left (or BBS_DRAIN_SECONDS are over)
   #
   # BBS_BOARDS (names, comma separated) starts only those boards.
   class MultiRunner
@@ -89,8 +96,9 @@ module Rubbs
 
     # [root]     the folder of the boards
     # [settings] a YAML file or a Hash: per board name its +port+,
-    #            +max_sessions+, +memory+ (<tt>160m</tt>), +enabled+ and
-    #            +env+ (more environment variables)
+    #            +max_sessions+, +memory+ (<tt>160m</tt>), +enabled+, +drain+
+    #            (+false+: never two processes of the board at once, Handover)
+    #            and +env+ (more environment variables)
     # [state]    the folder of the state file
     # [name]     the supervisor's own name in the log
     # [only]     the names to start (default: BBS_BOARDS, else all)
@@ -117,8 +125,9 @@ module Rubbs
       end
     end
 
-    # Starts every board and supervises them until SIGTERM (or SIGINT).
-    # Returns +nil+ when the last board has stopped.
+    # Starts every board and supervises them until SIGTERM (or SIGINT), or
+    # until they have drained after SIGUSR2. Returns +nil+ when the last
+    # board has stopped.
     def run!
       Rubbs.config.log_tag = @name
       @children = boards.map { |ref| Child.new(ref, @settings.fetch(ref.name, {}), output: output) }

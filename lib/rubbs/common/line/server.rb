@@ -2,6 +2,7 @@
 
 require 'socket'
 require_relative 'server/stopping'
+require_relative 'server/draining'
 require_relative 'server/calls'
 
 module Rubbs
@@ -15,6 +16,7 @@ module Rubbs
       #   Rubbs::Common::Line::Server.new(port: 2323).run
       class Server
         include Stopping
+        include Draining
         include Calls
 
         # Seconds a silent line may stay connected when
@@ -39,9 +41,12 @@ module Rubbs
           @stopping = false
         end
 
-        # Opens the port and serves callers until the process is interrupted
-        # (Ctrl-C) or stopped (SIGTERM, as <tt>docker stop</tt> sends), then
-        # stops in order (#stop). Blocks the calling thread.
+        # Opens the port (Listener) and serves callers until the process is
+        # interrupted (Ctrl-C) or stopped (SIGTERM, as <tt>docker stop</tt>
+        # sends), then stops in order (#stop); or until it is drained
+        # (SIGUSR2, #drain). Once the port is open,
+        # <tt>Rubbs.config.on_listen</tt> is called with the server. Blocks
+        # the calling thread.
         #
         # Each accepted connection gets an idle timeout and a Rubbs::Common::Line::Session in a
         # new thread. A caller #admit refuses hears why and is disconnected;
@@ -52,14 +57,12 @@ module Rubbs
         # loop itself is logged as +:fatal+ and raised, so the process ends and
         # its supervisor (Docker's restart policy) starts it again.
         def run
-          @listener = TCPServer.new('0.0.0.0', @port)
-          @port     = @listener.addr[1]
-          Rubbs.log('server', "listening on port #{@port}", port: @port, rubbs: Rubbs.version)
-          Server.current = self
-          stop_on_term
+          open_port
           loop { serve(accept(@listener)) }
         rescue Interrupt
           stop
+        rescue Drain
+          drain
         rescue StandardError => e
           Rubbs.log('server', e, level: :fatal)
           raise
@@ -123,9 +126,19 @@ module Rubbs
           @calls[address] >= Rubbs.config.max_sessions_per_ip
         end
 
+        def open_port
+          @listener = Listener.tcp('0.0.0.0', @port)
+          @port     = @listener.addr[1]
+          Rubbs.log('server', "listening on port #{@port}", port: @port, rubbs: Rubbs.version)
+          Server.current = self
+          stop_on_term
+          Rubbs.config.on_listen&.call(self)
+        end
+
         def stop_on_term
           runner = Thread.current
           Signal.trap('TERM') { runner.raise(Interrupt) }
+          Signal.trap(DRAIN_SIGNAL) { runner.raise(Drain) unless draining? || stopping? }
         end
 
         def accept(server)

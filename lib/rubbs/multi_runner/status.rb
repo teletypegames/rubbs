@@ -14,8 +14,9 @@ module Rubbs
     # health check its age.
     module Status
       # Writes the state of +children+ into the folder +dir+, with the deploy
-      # +revision+ and whether a deploy is +deploying+. Returns the path.
-      def self.write(dir, children, revision:, deploying:)
+      # +revision+, whether a deploy is +deploying+ and whether the
+      # supervisor is +draining+ (SIGUSR2). Returns the path.
+      def self.write(dir, children, revision:, deploying:, draining: false)
         FileUtils.mkdir_p(dir)
         path = File.join(dir, STATUS_FILE)
         data = {
@@ -23,6 +24,7 @@ module Rubbs
           pid:       Process.pid,
           revision:  revision,
           deploying: deploying,
+          draining:  draining,
           boards:    children.map(&:to_h)
         }
         File.write("#{path}.tmp", "#{JSON.pretty_generate(data)}\n")

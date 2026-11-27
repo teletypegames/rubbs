@@ -8,6 +8,7 @@ module Rubbs
     # probed, measured, stopped, and started again after it ended.
     class Child
       include Launch
+      include Handover
 
       # Seconds after a start before failed health probes count.
       START_GRACE = 120
@@ -79,6 +80,8 @@ module Rubbs
       # Starts the board's process, its code of +revision+. Returns the pid.
       def start(revision, now)
         @fingerprint = ref.definition ? nil : Fingerprint.of(ref.dir)
+        @ready = @waiting = false
+        @healthy = nil
         reader, writer = IO.pipe
         @pid = fork do
           reader.close
@@ -174,25 +177,24 @@ module Rubbs
       # The board's state for the state file (Status).
       def to_h
         {
-          name:               name,
-          slug:               slug || name,
-          pid:                pid,
-          up:                 up?,
-          healthy:            healthy,
-          callers:            callers,
-          max_sessions:       max_sessions,
-          port:               port,
-          started_at:         started_at&.utc&.iso8601,
-          rss_bytes:          rss_bytes,
-          memory_limit_bytes: memory_limit,
-          cpu_seconds:        cpu_seconds,
-          revision:           revision,
-          restarts:           restarts.transform_keys(&:to_s),
-          last_reason:        reason
-        }
+          name:         name,
+          slug:         slug || name,
+          pid:          pid,
+          up:           up?,
+          healthy:      healthy,
+          callers:      callers,
+          max_sessions: max_sessions,
+          port:         port,
+          started_at:   started_at&.utc&.iso8601,
+          revision:     revision,
+          restarts:     restarts.transform_keys(&:to_s),
+          last_reason:  reason
+        }.merge(handover_facts, measures)
       end
 
       private
+
+      def measures = { rss_bytes: rss_bytes, memory_limit_bytes: memory_limit, cpu_seconds: cpu_seconds }
 
       def started(revision, now)
         @revision   = revision

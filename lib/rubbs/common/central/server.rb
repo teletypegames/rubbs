@@ -54,15 +54,21 @@ module Rubbs
         end
 
         # The port it listens on (the one the system chose for port 0).
-        def port = @http&.config&.[](:Port)
+        attr_reader :port
 
         # Serves in a Rubbs::Common::Board::Background thread. Returns the Thread.
         def start = Rubbs.background('central') { @http.start }
 
         # Stops serving and closes the services' databases.
-        def stop
+        def stop = drain || @databases.each_value(&:disconnect)
+
+        # Stops serving HTTP, and nothing else: the board drains, its next
+        # process (listening on the same port, Rubbs::Common::Line::Listener)
+        # answers the network now, while the callers still on this one use
+        # the services here (#dispatch). Returns +nil+.
+        def drain
           @http&.shutdown
-          @databases.each_value(&:disconnect)
+          nil
         end
 
         # The answer to +body+ (the request's JSON) for +path+, signed
@@ -184,7 +190,10 @@ module Rubbs
         end
 
         def listen(port, host)
-          server = WEBrick::HTTPServer.new(Port: port, BindAddress: host, Logger: WEBrick::Log.new(File::NULL), AccessLog: [])
+          quiet  = WEBrick::Log.new(File::NULL)
+          server = WEBrick::HTTPServer.new(BindAddress: host, DoNotListen: true, Logger: quiet, AccessLog: [])
+          server.listeners << Line::Listener.tcp(host, port)
+          @port = server.listeners.first.addr[1]
           @services.each_key { |path| server.mount_proc(path) { |request, response| respond(path, request, response) } }
           server.mount_proc('/health') { |_, response| healthy(response) }
           server

@@ -86,6 +86,22 @@ module Rubbs
         #                    domain's +health+, default +nil+ (always well)
         attr_accessor :log_format, :shutdown_seconds, :shutdown_notice, :health
 
+        # [drain_seconds] how long a drained server (SIGUSR2, a deploy: see
+        #                 Rubbs::Common::Line::Server#drain) keeps serving the callers on
+        #                 the line while the board's next process takes the
+        #                 new calls; 0 stops it at once, as SIGTERM does.
+        #                 Default the +BBS_DRAIN_SECONDS+ environment variable
+        #                 or 1800
+        # [drain_notice]  what the callers of a drained server are told
+        # [on_drain]      callable a drained server calls once it has closed
+        #                 its port: the board ends its background work there
+        #                 (Rubbs::Common::Board::BoardDefinition#drain!); set by Rubbs.board,
+        #                 default +nil+
+        # [on_listen]     callable a server calls with itself once its port is
+        #                 open: a Rubbs::MultiRunner learns so that the board's
+        #                 process is ready; default +nil+
+        attr_accessor :drain_seconds, :drain_notice, :on_drain, :on_listen
+
         # [auth_secrets] the secrets the boards of a network share for
         #                Rubbs::Common::Auth::Token, the first one signing: the
         #                +RUBBS_AUTH_SECRET+ environment variable split at commas
@@ -118,9 +134,13 @@ module Rubbs
         # The default #shutdown_notice.
         SHUTDOWN_NOTICE = 'The board is restarting in %<seconds>d seconds. Please call back in a minute.'
 
+        # The default #drain_notice.
+        DRAIN_NOTICE = 'The board has been updated. Your call goes on; call again later for the new version.'
+
         # Creates a Config with the defaults, reading +BBS_PORT+,
         # +BBS_MAX_SESSIONS+, +BBS_MAX_SESSIONS_PER_IP+, +BBS_LOG_TAG+,
-        # +BBS_LOG_FORMAT+ and +BBS_SHUTDOWN_SECONDS+ from the environment.
+        # +BBS_LOG_FORMAT+, +BBS_SHUTDOWN_SECONDS+ and +BBS_DRAIN_SECONDS+ from the
+        # environment.
         def initialize
           @port         = (ENV['BBS_PORT'] || 2323).to_i
           @mouse        = false
@@ -141,6 +161,8 @@ module Rubbs
           @log_format       = (ENV['BBS_LOG_FORMAT'] || 'text').to_sym
           @shutdown_seconds = (ENV['BBS_SHUTDOWN_SECONDS'] || 8).to_f
           @shutdown_notice  = SHUTDOWN_NOTICE
+          @drain_seconds    = (ENV['BBS_DRAIN_SECONDS'] || 1800).to_f
+          @drain_notice     = DRAIN_NOTICE
           @auth_secrets     = ENV['RUBBS_AUTH_SECRET'].to_s.split(',').map(&:strip).reject(&:empty?)
           @auth             = nil
           @central          = nil

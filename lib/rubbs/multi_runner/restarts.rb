@@ -3,9 +3,11 @@
 module Rubbs
   class MultiRunner
     # The restarts a Rubbs::MultiRunner asks for (Supervision runs them): the
-    # boards a new deploy revision changed, one at a time; a board that fails
-    # its health probes; a board over its memory. All in order
-    # (Child#stop): the callers are told and get BBS_SHUTDOWN_SECONDS.
+    # boards a new deploy revision changed, one at a time, each handed over
+    # without dropping a call (Handover; a board with <tt>drain: false</tt> is
+    # stopped and started again); a board that fails its health probes; a
+    # board over its memory. Those in order (Child#stop): the callers are told
+    # and get BBS_SHUTDOWN_SECONDS.
     module Restarts
       # The file whose change means a deploy brought new code.
       REVISION = '.revision'
@@ -28,17 +30,19 @@ module Rubbs
       end
 
       def restart_next(now)
-        if @current
-          return if @current.stopping || !@current.up?
+        return if @current && busy?(@current)
 
-          @current = nil
-        end
         @current = @queue.shift or return
-        @current.up? ? @current.stop(:deploy, now) : (@current = nil)
+        return @current = nil unless @current.up?
+
+        @current.drains? ? hand_over(@current, now) : @current.stop(:deploy, now)
       end
 
+      # Whether +child+ is still being restarted: stopping, down, or handing over.
+      def busy?(child) = child.stopping || !child.up? || child.handing_over?
+
       def probe_all(now)
-        @children.select(&:up?).map { |child| Thread.new { child.probe } }.each(&:join)
+        @children.select { |child| child.up? && !child.handing_over? }.map { |child| Thread.new { child.probe } }.each(&:join)
         @children.select { |child| child.unhealthy?(now) }.each do |child|
           Rubbs.log('multi_runner', "#{child.name} fails its health probe: restarting", level: :warn, bbs: child.name)
           child.stop(:health, now)

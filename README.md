@@ -289,6 +289,7 @@ runner.run!
 # boards.yml: per folder name
 feedia: { port: 2327, max_sessions: 50, memory: 160m }
 wiki:   { port: 2325, enabled: false, env: { WIKI_BBS_URL: https://wiki.example.org } }
+pixel:  { port: 2332, drain: false }   # never two processes at once (a shared canvas in memory)
 ```
 
 The supervisor never loads a board's code: each board's process changes into
@@ -303,12 +304,22 @@ name their classes alike, and a board restarted reads its code anew. Then:
   restarted in order (its callers are told);
 - when `boards/.revision` changes, only the boards whose code changed
   (`Rubbs::MultiRunner::Fingerprint`: the contents, not `data/`, `test/`, `*.md`)
-  are restarted, one at a time; nothing starts while `boards/.deploying` exists
+  are restarted, one at a time, without dropping a call: the new process starts
+  beside the old one on the same port, and once it listens the old one drains
+  (see *Draining* below); nothing starts while `boards/.deploying` exists
   (a deploy copying), unless it is older than 10 minutes;
 - every 10 s the state goes to `state/multi_runner.json`
   (`Rubbs::MultiRunner::Status`): per board its pid, health, callers, memory,
-  restarts by reason and revision;
-- SIGTERM stops every board in order.
+  restarts by reason, revision, and the old processes handing over or draining;
+- SIGTERM stops every board in order;
+- SIGUSR2 drains every board: the supervisor of the next image, listening
+  beside this one, takes the new calls, and `run!` returns once the last caller
+  of this one has left.
+
+A board with `drain: false` is never two processes at once: a deploy stops it
+and starts it again, and its process holds `data/.rubbs-board.lock` so that the
+next one (of this supervisor or of another beside it) starts only after it has
+ended.
 
 `BBS_BOARDS=feedia,wiki` starts only those. In the root Rakefile,
 `Rubbs::Rake.multi` runs every folder's `rake test` and every board's
@@ -688,6 +699,10 @@ lives on `Rubbs::Common::Line::Session`. A board without `Rubbs.board` (a test, 
 | `log_format` | `ENV["BBS_LOG_FORMAT"] \|\| :text` | How `Rubbs.log` writes: `:text` for a person, `:json` (one object a line) for a log pipeline. |
 | `shutdown_seconds` | `ENV["BBS_SHUTDOWN_SECONDS"] \|\| 8` | How long a stopping server waits for its callers after telling them; the rest are hung up on. Keep it below the stop timeout of the supervisor (`docker stop`: 10 s, or `stop_grace_period`). |
 | `shutdown_notice` | `"The board is restarting in %<seconds>d seconds. …"` | What the callers of a stopping server are told. |
+| `drain_seconds` | `ENV["BBS_DRAIN_SECONDS"] \|\| 1800` | How long a drained server (SIGUSR2) keeps its callers while the next process takes the new calls; then it stops in order. `0`: a drain is a stop. |
+| `drain_notice` | `"The board has been updated. …"` | What the callers of a drained server are told. |
+| `on_drain` | `nil` | `-> { … }` a drained server calls once its port is closed; `Rubbs.board` sets it (`on_drain` blocks, the Central's HTTP, the domain's background work). |
+| `on_listen` | `nil` | `->(server) { … }` a server calls once its port is open; a `Rubbs::MultiRunner` learns so that the process is ready. |
 | `health` | `nil` | `-> { [problems…] }`, what the health probe asks; `Rubbs.board` sets it to the domain's `health`. |
 
 ### `Rubbs.start(port: …)`
@@ -787,7 +802,9 @@ the calling thread (a test, a command-line tool).
 
 ### `Rubbs::Common::Line::Server`
 
-Lightweight wrapper around `TCPServer`. An accept error (any
+Lightweight wrapper around `TCPServer`. The port is opened by
+`Rubbs::Common::Line::Listener.tcp` with `SO_REUSEPORT`, so the board's next
+process can listen on it while this one still does. An accept error (any
 `SystemCallError`, `IOError`) is logged and the loop goes on; any other
 error of the loop is logged as `:fatal` and ends the process, so its
 supervisor (Docker's restart policy, systemd) starts it again.
@@ -811,6 +828,22 @@ On SIGTERM (`docker stop`) or Ctrl-C the server stops in order:
 A second SIGTERM or Ctrl-C meanwhile stops at once. Give the supervisor
 time: with `BBS_SHUTDOWN_SECONDS=20`, a compose service wants
 `stop_grace_period: 30s`.
+
+### Draining
+
+On SIGUSR2 (a deploy, once the board's next process listens on the same port)
+the server makes way without dropping a call:
+
+1. it closes its port: the next process takes the new calls;
+2. `Rubbs.board` runs the `on_drain` blocks, shuts the Central's HTTP (the next
+   process answers it) and the domain's `drain` (the background work ends, the
+   databases stay open);
+3. every caller is told `drain_notice`, and the calls go on;
+4. when the last caller has left, or after `drain_seconds`, it stops in order
+   (above). A SIGTERM meanwhile stops it in order at once.
+
+A board's own HTTP API beside the telnet port opens its port with
+`Rubbs::Common::Line::Listener.tcp` too, and shuts it in `on_drain`.
 
 ### The health probe: `Rubbs::Common::Line::Health`, `bbs-health`
 

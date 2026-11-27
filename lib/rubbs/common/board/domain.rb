@@ -188,8 +188,18 @@ module Rubbs
         # timer, a connection elsewhere) ends it first and calls +super+.
         # Returns +self+.
         def stop
-          jobs.each(&:kill).each { |job| job.join(1) }
+          drain
           @databases&.each_value(&:disconnect)
+          self
+        end
+
+        # Ends the background work of #start, and nothing else: the server
+        # drains (Rubbs::Common::Line::Server#drain), the board's next process does
+        # that work now, while the callers still on the line keep the
+        # databases. Rubbs.board calls it once. Returns +self+.
+        def drain
+          jobs.each(&:kill).each { |job| job.join(1) }
+          jobs.clear
           self
         end
 

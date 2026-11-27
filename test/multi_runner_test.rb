@@ -18,6 +18,23 @@ class MultiRunnerTest < Minitest::Test
     board.run! if Rubbs.main?(__FILE__)
   RUBY
 
+  # A board whose call waits for a key, and says which process it is.
+  HOLDING = <<~RUBY
+    require 'rubbs'
+
+    FLOW = Rubbs::Common::Call::Flow.define do
+      call { session.write("hello from \#{Process.pid}\r\n") && nil }
+      call { session.readkey && session.write("bye from \#{Process.pid}\r\n") && nil }
+    end
+
+    board = Rubbs.board '%<title>s' do
+      modern FLOW
+      goodbye false
+    end
+
+    board.run! if Rubbs.main?(__FILE__)
+  RUBY
+
   Kid = Struct.new(:name, :slug)
 
   def setup
@@ -120,13 +137,95 @@ class MultiRunnerTest < Minitest::Test
     end
   end
 
+  def test_a_deploy_hands_over_and_the_old_process_keeps_its_call
+    Dir.mktmpdir do |root|
+      port = free_port
+      with_runner(root, { 'alpha' => port }, template: HOLDING) do |boards|
+        first = wait_for(root) { |s| s if all_up?(s) }
+        old = pids(first)['alpha']
+        call = TCPSocket.new('127.0.0.1', port)
+        assert_includes read_until(call, 'hello from'), "hello from #{old}"
+
+        File.write(File.join(boards, 'alpha', 'bbs.rb'), "# new\n", mode: 'a')
+        File.write(File.join(boards, '.revision'), "abc123\n")
+        after = wait_for(root) { |s| s if all_up?(s, revision: 'abc123') && board(s, 'alpha')['draining'].any? }
+        new = pids(after)['alpha']
+        refute_equal old, new
+        assert_equal([old], board(after, 'alpha')['draining'].map { |d| d['pid'] })
+        assert_equal({ 'deploy' => 1 }, board(after, 'alpha')['restarts'])
+
+        second = TCPSocket.new('127.0.0.1', port)
+        assert_includes read_until(second, 'hello from'), "hello from #{new}"
+        second.close
+
+        call.write('x')
+        assert_includes read_until(call, 'bye from'), "bye from #{old}"
+        call.close
+        wait_for(root) { |s| s if board(s, 'alpha')['draining'].empty? }
+      end
+    end
+  end
+
+  def test_a_board_that_does_not_drain_is_restarted_and_holds_its_lock
+    Dir.mktmpdir do |root|
+      port = free_port
+      with_runner(root, { 'alpha' => port }, settings: { 'alpha' => { 'drain' => false } }) do |boards|
+        first = wait_for(root) { |s| s if all_up?(s) }
+        assert File.exist?(File.join(boards, 'alpha', 'data', Rubbs::MultiRunner::Launch::LOCK_FILE))
+        File.write(File.join(boards, 'alpha', 'bbs.rb'), "# new\n", mode: 'a')
+        File.write(File.join(boards, '.revision'), "abc123\n")
+        after = wait_for(root) { |s| s if all_up?(s, revision: 'abc123') && pids(s)['alpha'] != pids(first)['alpha'] }
+        assert_equal false, board(after, 'alpha')['drains']
+        assert_empty board(after, 'alpha')['draining']
+        assert_equal({ 'deploy' => 1 }, board(after, 'alpha')['restarts'])
+      end
+    end
+  end
+
+  def test_the_supervisor_drains_and_ends_after_the_last_call
+    Dir.mktmpdir do |root|
+      port = free_port
+      runner = nil
+      with_runner(root, { 'alpha' => port }, template: HOLDING) do |_boards, pid|
+        runner = pid
+        wait_for(root) { |s| s if all_up?(s) }
+        call = TCPSocket.new('127.0.0.1', port)
+        read_until(call, 'hello from')
+        Process.kill('USR2', runner)
+        wait_for(root) { |s| s if s['draining'] && board(s, 'alpha')['draining'].any? }
+        refute Rubbs::Common::Line::Health.ask(port: port, timeout: 1).first
+        assert_nil Process.wait(runner, Process::WNOHANG)
+
+        call.write('x')
+        assert_includes read_until(call, 'bye from'), 'bye from'
+        call.close
+        Timeout.timeout(20) { Process.wait(runner) }
+        assert_predicate $CHILD_STATUS, :success?
+      end
+    end
+  end
+
   private
+
+  def board(state, name) = state['boards'].find { |b| b['name'] == name }
+
+  def read_until(socket, text, seconds = 10)
+    got = +''
+    deadline = Time.now + seconds
+    until got.match?(/#{Regexp.escape(text)}[^\n]*\n/)
+      raise "no #{text.inspect} in #{got.inspect}" if Time.now > deadline
+
+      ready = socket.wait_readable(0.5) or next
+      got << ready.read_nonblock(4096, exception: false).to_s
+    end
+    got
+  end
 
   def ref(name) = Rubbs::MultiRunner::BoardRef.new(name: name, dir: "/tmp/#{name}", definition: nil)
 
-  def write_board(root, name, title)
+  def write_board(root, name, title, template = BOARD)
     FileUtils.mkdir_p(File.join(root, name))
-    File.write(File.join(root, name, 'bbs.rb'), format(BOARD, title: title))
+    File.write(File.join(root, name, 'bbs.rb'), format(template, title: title))
   end
 
   def free_port
@@ -137,21 +236,28 @@ class MultiRunnerTest < Minitest::Test
   end
 
   def all_up?(state, revision: nil)
-    state['boards'].all? { |b| b['up'] && b['slug'].end_with?('-bbs') && (revision.nil? || b['revision'] == revision) }
+    state['boards'].all? do |b|
+      b['up'] && !b['handing_over'] && b['slug'].end_with?('-bbs') && (revision.nil? || b['revision'] == revision)
+    end
   end
 
   def pids(state) = state['boards'].to_h { |b| [b['name'], b['pid']] }
 
-  def with_runner(root, ports)
+  def with_runner(root, ports, template: BOARD, settings: {})
     boards = File.join(root, 'boards')
-    ports.each_key { |name| write_board(boards, name, "#{name.capitalize} BBS") }
-    File.write(File.join(root, 'boards.yml'), ports.to_h { |name, port| [name, { 'port' => port }] }.to_yaml)
+    ports.each_key { |name| write_board(boards, name, "#{name.capitalize} BBS", template) }
+    yaml = ports.to_h { |name, port| [name, { 'port' => port }.merge(settings.fetch(name, {}))] }
+    File.write(File.join(root, 'boards.yml'), yaml.to_yaml)
     runner = spawn_runner(root)
-    yield boards
+    yield boards, runner
   ensure
     if runner
-      Process.kill('TERM', runner)
-      Timeout.timeout(30) { Process.wait(runner) }
+      begin
+        Process.kill('TERM', runner)
+        Timeout.timeout(30) { Process.wait(runner) }
+      rescue Errno::ESRCH, Errno::ECHILD
+        nil
+      end
     end
   end
 

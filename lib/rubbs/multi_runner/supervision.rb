@@ -6,9 +6,11 @@ module Rubbs
     # the ended boards' statuses and starts those due, and every few seconds
     # watches the deploy revision, probes and measures the boards, restarts
     # those that need it and writes the state (Status). SIGTERM or SIGINT ends
-    # the loop and stops every board.
+    # the loop and stops every board; SIGUSR2 drains every board, and the loop
+    # ends when the last process has ended.
     module Supervision
       include Restarts
+      include Draining
 
       # Seconds between two turns of the loop.
       TICK = 1
@@ -25,16 +27,22 @@ module Rubbs
 
       def supervise
         @stop     = false
+        @drain    = false
         @queue    = []
         @last     = Hash.new(-Float::INFINITY)
         @revision = read_revision
-        %w[TERM INT].each { |sig| Signal.trap(sig) { @stop = true } }
+        trap_signals
         Rubbs.log('multi_runner', 'starting', boards: @children.map(&:name).join(','), revision: @revision, rubbs: Rubbs.version)
-        until @stop
-          tick(monotonic)
+        until @stop || drained?
+          @drain ? drain_tick(monotonic) : tick(monotonic)
           sleep TICK
         end
-        shutdown
+        @stop ? shutdown : finish_drain
+      end
+
+      def trap_signals
+        %w[TERM INT].each { |sig| Signal.trap(sig) { @stop = true } }
+        Signal.trap(Common::Line::Server::DRAIN_SIGNAL) { @drain = true }
       end
 
       def tick(now)
@@ -44,7 +52,8 @@ module Rubbs
         every(:probe, PROBE_EVERY, now) { probe_all(now) }
         every(:measure, MEASURE_EVERY, now) { measure_all(now) }
         restart_next(now)
-        @children.select { |child| child.overdue?(now) }.each(&:kill!)
+        hand_over_due(now)
+        kill_overdue(now)
         every(:status, STATUS_EVERY, now) { write_status }
       end
 
@@ -60,8 +69,10 @@ module Rubbs
           pid, status = Process.wait2(-1, Process::WNOHANG)
           break unless pid
 
-          child = @children.find { |c| c.pid == pid } or next
-          reason = child.ended(status, now)
+          child = @children.find { |c| c.owns?(pid) } or next
+          reason = child.reaped(pid, status, now)
+          next log_old_ended(child, reason, pid) if %i[drained previous_ended].include?(reason)
+
           Rubbs.log(
             'multi_runner',
             "#{child.name} ended",
@@ -83,23 +94,25 @@ module Rubbs
       end
 
       def write_status
-        Status.write(@state, @children, revision: @revision, deploying: deploying?)
+        Status.write(@state, @children, revision: @revision, deploying: deploying?, draining: @drain)
       rescue SystemCallError => e
         Rubbs.log('multi_runner', e, level: :warn)
       end
 
       def shutdown
         Rubbs.log('multi_runner', 'stopping', boards: @children.count(&:up?))
-        @children.each { |child| child.stop(:shutdown, monotonic) }
+        stop_all
         wait_for_children(monotonic + Rubbs.config.shutdown_seconds + 5)
-        @children.select(&:up?).each(&:kill!)
+        @children.select(&:alive?).each { |child| child.kill! || child.signal_others('KILL') }
         wait_for_children(monotonic + 1)
         write_status
         Rubbs.log('multi_runner', 'stopped')
       end
 
+      def stop_all = @children.each { |child| child.stop(:shutdown, monotonic) || child.signal_others('TERM') }
+
       def wait_for_children(deadline)
-        until @children.none?(&:up?) || monotonic > deadline
+        until @children.none?(&:alive?) || monotonic > deadline
           reap(monotonic)
           sleep 0.2
         end
