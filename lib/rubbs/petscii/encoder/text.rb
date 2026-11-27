@@ -43,7 +43,18 @@ module Rubbs
           return (o - CASE_OFFSET).chr if ASCII_LOWER.cover?(o)
           return ch if SAME_AS_ASCII.cover?(o) || [LEFT_BRACKET, RIGHT_BRACKET].include?(o)
 
-          half_block(ch) || Glyphs::GLYPHS[ch] || accentless(ch)
+          substitute(ch)
+        end
+
+        # A character that is no letter, digit or ASCII sign: its PETSCII glyph.
+        def substitute(ch) = half_block(ch) || ascii_form(ch) || Glyphs::GLYPHS[ch] || accentless(ch)
+
+        # A sign the C64 shows by its ASCII look-alike (Glyphs::ASCII_FORMS:
+        # × as x, ° as o, ß as ss): its letters swap case like any other, or
+        # they would show as capitals.
+        def ascii_form(ch)
+          form = Glyphs::ASCII_FORMS[ch] or return nil
+          form.each_char.map { |c| glyph(c) }.join
         end
 
         # The blocks the lowercase set draws in reverse video.

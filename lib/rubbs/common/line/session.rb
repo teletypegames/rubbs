@@ -12,6 +12,7 @@ module Rubbs
         include Telnet
         include Notices
         include Activities
+        include Goto
 
         # [session_id] a random 16-character hex id for this session
         # [term_cols]  the caller's terminal width in columns (set by
@@ -78,12 +79,21 @@ module Rubbs
         # a logout sets another; a guest otherwise.
         def identity = @identity ||= Auth.from_line(self)
 
-        # Sets who the caller is (a Rubbs::Common::Auth::Identity); a signed-in
-        # one starts the +call+ event of the badges (Rubbs::Common::Badges.called).
+        # Sets who the caller is (a Rubbs::Common::Auth::Identity); once the
+        # call has its face, a signed-in one starts the +call+ event of the
+        # badges (Rubbs::Common::Badges.called) and the sign-in blocks
+        # (Rubbs::Common::Auth::Logins).
         def identity=(identity)
           @identity = identity
-          Badges.called(self) if @face
+          return unless @face
+
+          Badges.called(self)
+          Auth::Logins.signed_in(self)
         end
+
+        # The account Rubbs::Common::Auth::Logins last ran its blocks for on
+        # this call (its id), or +nil+.
+        attr_accessor :login_seen
 
         # The face the call got, +:modern+ or +:petscii+ (set by
         # Rubbs::Common::Call::Terminal.pick, or by the board for its only face); +nil+ while
@@ -91,10 +101,12 @@ module Rubbs
         attr_reader :face
 
         # Sets the face of the call; a caller signed in already (a call handed
-        # on by another board) starts the +call+ event of the badges here.
+        # on by another board) starts the +call+ event of the badges and the
+        # sign-in blocks (Rubbs::Common::Auth::Logins) here.
         def face=(face)
           @face = face
           Badges.called(self)
+          Auth::Logins.signed_in(self)
         end
 
         # Tells the badges (Rubbs::Common::Badges.report) that the caller did

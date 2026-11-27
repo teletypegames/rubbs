@@ -498,6 +498,15 @@ draws its own screens, and the profile is shown again after it.
 Rubbs::Common::Auth::Profile.extra(:sysop, 'SysOp', if: ->(s) { s.identity.role?(:sysop) }) { |s| Console.run(s) }
 ```
 
+**At a sign-in.** `Rubbs::Common::Auth::Logins.on_login { |session| … }` runs a block for every account
+that signs in on a call (a login from the menu or at the call, a terminal login, a caller handed on
+signed in), once the call has its face, so a notice it leaves (`session.notice`) is shown over the
+first screen. The block runs in the caller's thread: keep it short. An error is logged.
+
+```ruby
+Rubbs::Common::Auth::Logins.on_login { |s| s.notice('2 unread letters', title: 'Mail') if letters?(s) }
+```
+
 **At the splash.** On a board with a login the splash (`Rubbs::Common::Call::Splash`, the preset's) asks a caller who
 is not logged in `Login | Register | Guest` instead of PRESS ANY KEY, and under it *Press space to guest
 mode* (`hint:`, `nil` for none): L and R open the profile at a login or a new account
@@ -2605,6 +2614,10 @@ door :feedia, FEEDIA, label: '&Feedia'
   are kept (`session.telnet_env`) but not believed, and `caller_ip` is the
   line's own. Never forward to someone else's board: it would learn the
   caller's address.
+- `gateway.to('machine:Q99775')` is a copy of a forwarding gateway that also
+  sends `BBS_GOTO`, a place the two boards agree on: the other board reads it
+  once with `session.take_goto` and opens that place instead of its first
+  screen (and its first screen when it has no such place).
 - A directory that dials many boards makes a gateway a call
   (`connect_timeout:` sets the wait, 5 s by default) and reads how it went from
   the `Rubbs::Common::Line::Gateway::Report` its block gets: `connected`, the `error` that kept

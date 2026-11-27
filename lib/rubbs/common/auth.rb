@@ -14,6 +14,7 @@ require_relative 'auth/remote'
 require_relative 'auth/login'
 require_relative 'auth/conveniences'
 require_relative 'auth/profile'
+require_relative 'auth/logins'
 
 module Rubbs
   module Common

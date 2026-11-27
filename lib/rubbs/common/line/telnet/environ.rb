@@ -36,9 +36,10 @@ module Rubbs
           MAX_VARIABLES = 16
           # The variables a forwarding Rubbs::Common::Line::Gateway sends: the face the caller
           # picked on the first board (+modern+ or +petscii+), the caller's own
-          # IP address, the name of the board the call came through, and a
-          # signed-in caller's identity (a Rubbs::Common::Auth::Token).
-          FORWARDED = %w[BBS_FACE BBS_CLIENT_IP BBS_VIA RUBBS_AUTH_KEY].freeze
+          # IP address, the name of the board the call came through, the place
+          # to open (Rubbs::Common::Line::Gateway#to) and a signed-in caller's
+          # identity (a Rubbs::Common::Auth::Token).
+          FORWARDED = %w[BBS_FACE BBS_CLIENT_IP BBS_VIA BBS_GOTO RUBBS_AUTH_KEY].freeze
           # The variables a caller's own terminal logs in with: the account's
           # name (RFC 1572's well-known +USER+) and its password. Taken from any
           # address, as the password proves them, by a board that allows it

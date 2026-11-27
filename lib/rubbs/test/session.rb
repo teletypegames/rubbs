@@ -16,6 +16,7 @@ module Rubbs
     class Session
       include Common::Line::Notices
       include Common::Line::Activities
+      include Common::Line::Goto
 
       # The keys still to come, first first: Strings and Symbols as
       # Rubbs::Common::Line::Telnet#readkey returns them (+:idle+ too). Push more any time.
@@ -34,6 +35,9 @@ module Rubbs
       # The face the call got (+:modern+ or +:petscii+, see
       # Rubbs::Common::Line::Session#face), +nil+ until one is set.
       attr_accessor :face
+
+      # The account Rubbs::Common::Auth::Logins last ran its blocks for (its id), or +nil+.
+      attr_accessor :login_seen
       # The variables a neighbouring board forwarded (see
       # Rubbs::Common::Line::Telnet::Forwarded#forwarded), a Hash; empty unless given.
       attr_reader :forwarded

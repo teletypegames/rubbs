@@ -126,6 +126,18 @@ module Rubbs
           @audience        = audience || Board::BoardDefinition.slug(@name)
         end
 
+        # A copy of this gateway that asks the other board to open +place+
+        # (a String the two boards agree on, such as <tt>machine:Q99775</tt>)
+        # instead of its first screen: it goes as +BBS_GOTO+ with the
+        # forwarded call (only a gateway with +forward+ sends it), and the
+        # board reads it with Rubbs::Common::Line::Session#take_goto.
+        #
+        #   SILICONIA.to("machine:#{qid}").call(session)
+        def to(place) = dup.tap { |gateway| gateway.instance_variable_set(:@goto, place.to_s) }
+
+        # The place a copy made by #to asks for, or +nil+.
+        attr_reader :goto
+
         # The door's program: connects, carries the line until the other board
         # hangs up, and waits for a key before the board takes the line back.
         # A caller who hangs up meanwhile ends the call (IOError), and so does a
@@ -229,14 +241,16 @@ module Rubbs
 
         # What a forwarding gateway tells the other board: the face it sees
         # (an ANSI terminal for a translated PETSCII caller), the caller's
-        # address (as this board believes it), this board's name, and for a
-        # signed-in caller their identity in a token for that board.
+        # address (as this board believes it), this board's name, the place
+        # to open (#to), and for a signed-in caller their identity in a token
+        # for that board.
         def forwarded(session)
           face = session.petscii? && !@translate ? 'petscii' : 'modern'
           {
             'BBS_FACE'       => face,
             'BBS_CLIENT_IP'  => session.caller_ip.to_s,
             'BBS_VIA'        => Rubbs.config.log_tag.to_s,
+            'BBS_GOTO'       => @goto,
             'RUBBS_AUTH_KEY' => auth_key(session)
           }.reject { |_, value| value.to_s.empty? }
         end

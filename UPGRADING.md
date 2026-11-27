@@ -1,3 +1,13 @@
+# rubbs 5.2
+
+New: `Rubbs::Common::Auth::Logins.on_login { |session| … }`, blocks run once for every account that
+signs in on a call (as soon as the call has its face); `Rubbs::Common::Line::Gateway#to(place)` sends
+`BBS_GOTO` with a forwarded call, read once with `Session#take_goto` (a board opens that place
+instead of its first screen).
+
+Fixed: on a C64 a sign shown by its ASCII look-alike (× ° ○ ↓ ß π) came out in capitals (40×25 as
+40X25); its letters now swap case like any other.
+
 # rubbs 5.1
 
 New: deploys without a dropped call. A `Rubbs::MultiRunner` hands a board's changed code over: the
