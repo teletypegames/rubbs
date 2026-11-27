@@ -82,6 +82,8 @@ require_relative 'rubbs/modern/windows/form'
 require_relative 'rubbs/modern/windows/master_detail'
 require_relative 'rubbs/modern/windows/stream'
 require_relative 'rubbs/modern/application'
+require_relative 'rubbs/common/line/notices'
+require_relative 'rubbs/common/line/activity'
 require_relative 'rubbs/common/line/session'
 require_relative 'rubbs/common/line/server'
 require_relative 'rubbs/common/board/domain'
@@ -156,6 +158,12 @@ module Rubbs
     @config ||= Common::Board::Config.new
   end
 
+  # Puts +config+ (a Rubbs::Common::Board::Config) in place of the global
+  # one: a test puts back the one it kept (Rubbs::Test::Case). Returns it.
+  def self.config=(config)
+    @config = config
+  end
+
   # Forgets the global Rubbs::Common::Board::Config, so that the next
   # Rubbs.config makes a new one from the environment: what a
   # Rubbs::MultiRunner does in a board's process before it loads the board.
@@ -212,7 +220,7 @@ module Rubbs
   # Rubbs::Common::Line::Server.current): Rubbs::Common::Line::Session objects, the earliest first; empty
   # when no server runs in this process.
   #
-  #   Rubbs.calls.map { |s| [s.caller_name || 'guest', s.caller_ip, s.place] }
+  #   Rubbs.calls.map { |s| [s.caller_name || 'guest', s.caller_ip, s.activity.to_s] }
   def self.calls = Common::Line::Server.current&.live || []
 
   # Writes one line to the log (stderr, Rubbs::Common::Log): the board's

@@ -147,16 +147,12 @@ module Rubbs
 
         private
 
-        # Runs the block with the board's name as the caller's place
-        # (Rubbs::Common::Line::Session#place), the place before it back afterwards.
-        def visiting(session)
-          return yield unless session.respond_to?(:place=)
+        # Runs the block with the board as what the caller is doing
+        # (Rubbs::Common::Line::Activities#doing, kind +:board+).
+        def visiting(session, &)
+          return yield unless session.respond_to?(:doing)
 
-          place = session.place
-          session.place = "› #{@name}"
-          yield
-        ensure
-          session.place = place if session.respond_to?(:place=)
+          session.doing(:board, @name, &)
         end
 
         def cross(session)

@@ -16,6 +16,10 @@ module Rubbs
       # The methods return the bytes to write rather than writing them, so a
       # caller sends a whole screen update at once.
       class Cursor
+        # What the keys are called on each face, for the hints: +:enter+
+        # takes, +:back+ leaves.
+        KEY_NAMES = { modern: { enter: 'Enter', back: 'Esc' }, petscii: { enter: 'RETURN', back: 'STOP/←' } }.freeze
+
         # The row of the cursor, 1-based (relative to where counting began).
         attr_reader :row
         # The column of the cursor, 1-based (relative to where counting began).
@@ -31,6 +35,10 @@ module Rubbs
 
         # True when the session is a PETSCII line (a C64).
         def petscii? = @petscii
+
+        # What the key +role+ (+:enter+ or +:back+, see KEY_NAMES) is called
+        # on the session's face.
+        def key_name(role) = KEY_NAMES.fetch(@petscii ? :petscii : :modern).fetch(role)
 
         # Reads a key from the session (see Rubbs::Common::Line::Telnet#readkey): +:idle+ when
         # +timeout+ seconds pass without one, when given. Raises IOError when

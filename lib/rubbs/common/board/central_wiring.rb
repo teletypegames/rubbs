@@ -50,10 +50,10 @@ module Rubbs
         def configure_auth
           return Rubbs.config.auth = nil unless @auth
 
-          directory, login, guests, line_login = @auth
+          directory, login, guests, terminal_login = @auth
           directory = directory.call(@board) if directory.respond_to?(:call)
           directory ||= central_accounts
-          Rubbs.config.auth = Auth::Setup.new(directory: directory, login: login, guests: guests, line_login: line_login)
+          Rubbs.config.auth = Auth::Setup.new(directory: directory, login: login, guests: guests, terminal_login: terminal_login)
         end
 
         def central_accounts

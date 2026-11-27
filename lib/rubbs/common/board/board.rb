@@ -90,7 +90,7 @@ module Rubbs
         # or Remote, or a block given the domain object at boot), +login+
         # (+:call+ asks at the start of a call, before the face; +:menu+ leaves
         # it to the faces' login item; +:both+), +guests+ (whether a caller
-        # without an account comes in at a +:call+ login) and +line_login+
+        # without an account comes in at a +:call+ login) and +terminal_login+
         # (whether a name and password the caller's terminal sends with telnet
         # NEW-ENVIRON log them in at the start of the call: Rubbs::Common::Auth.from_line).
         #
@@ -98,11 +98,11 @@ module Rubbs
         #
         #   auth login: :menu                                 # the Central's accounts
         #   auth(login: :call) { |board| board.directory }   # the Central itself
-        #   auth login: :menu, line_login: true               # a terminal may log in with the call
-        def auth(directory = nil, login: :menu, guests: true, line_login: false, &block)
+        #   auth login: :menu, terminal_login: true          # a terminal may log in with the call
+        def auth(directory = nil, login: :menu, guests: true, terminal_login: false, &block)
           raise ArgumentError, "login: is one of #{Auth::LOGINS.join(', ')}" unless Auth::LOGINS.include?(login)
 
-          @auth = [block || directory, login, guests, line_login]
+          @auth = [block || directory, login, guests, terminal_login]
         end
 
         # Whether the modern face uses the mouse (default +true+).

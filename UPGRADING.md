@@ -1,3 +1,31 @@
+# rubbs 5.0
+
+Breaking:
+
+- `auth … line_login:` is `terminal_login:` (`Rubbs::Common::Auth::Setup#terminal_login`), the
+  log event `line_login` is `terminal_login`, and a caller so logged in has an identity of
+  `source` `:terminal` (was `:line`).
+- `Session#login_notice` is gone. A login the terminal sent that did not go leaves a notice
+  (`Rubbs::Common::Line::Notices`: `session.notice(text, title:)`, `session.take_notices`), and
+  `Pages` (every `Kit`) and `Application` show it over the first screen by themselves. Drop the
+  board's own code that read `login_notice`; a `Petscii::Kit` pops it up in its chrome
+  (`show_notice` to change the look).
+- `Session#place` (a String) is `Session#activity`, a `Rubbs::Common::Line::Activity` of `kind`
+  (`:section`, `:door`, `:board`) and `name`; `activity.to_s` gives the old words (a gateway's
+  `› Name`, a door's `door NAME`). A `Door` sets it while the caller is inside;
+  `session.doing(kind, name) { … }` sets one for a while.
+- `Rubbs::Modern::WindowSpec` has a public `size(preset)`; its private `size(key, context, total)`
+  is `measure`.
+
+New: `Rubbs::Test::Case` (a test that plays a caller: `test 'words' do`, `call … { press, type,
+see, never_see }`), `Rubbs::Test::ScriptedLine`, `Rubbs::Test.tmp_data`, `.stub_http`,
+`.screen_text`, `.token`; `Rubbs.config=`; `size :tall` on a window; `form { field … }` and `info`
+on a `Petscii::Screen`; `Rubbs::Modern::Art.draw_on` / `.write` (an art and its hotspots outside an
+Application); `Rubbs::Modern::Ansi.move`; `Rubbs::Common::Screens::Cursor::KEY_NAMES`.
+
+Faster: an idle modern call redraws its frame every second; the frame buffer now shares its cells
+and lays a row at a time, about a third of the CPU it took.
+
 # rubbs 4.8.1
 
 A caller whose terminal logged them in with the call (`line_login`) gets no splash; their identity's

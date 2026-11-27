@@ -55,4 +55,36 @@ class FrameBufferTest < Minitest::Test
     @buffer.write("\e]0;owned\a\u009B")
     refute_match(/[\u0000-\u0008\u000E-\u001A\u007F-\u009F]/, @buffer.diff(@blank).gsub(/\e\[[\d;]*[A-Za-z]/, ''))
   end
+
+  def test_write_off_the_left_edge_and_past_the_right_keeps_the_middle
+    frame = Rubbs::Modern::FrameBuffer.new(4, 1)
+    frame.move(-1, 1)
+    frame.write('abcdefgh')
+    assert_equal ['cdef'], rows(frame)
+  end
+
+  def test_write_advances_the_cursor_past_a_clipped_run
+    frame = Rubbs::Modern::FrameBuffer.new(6, 1)
+    frame.clip(4, 1, 3, 1) do
+      frame.move(1, 1)
+      frame.write('---')
+      frame.write('xyz')
+    end
+    assert_equal ['   xyz'], rows(frame)
+  end
+
+  def test_cells_of_one_character_and_style_are_shared
+    a = Rubbs::Modern::FrameBuffer::Cell.of('x', "\e[31m")
+    assert_same a, Rubbs::Modern::FrameBuffer::Cell.of('x', +"\e[31m")
+    assert_predicate a, :frozen?
+  end
+
+  def test_an_unchanged_frame_has_no_diff
+    [@buffer, @blank].each do |b|
+      b.fill(x: 1, y: 1, width: 20, height: 2, sgr: "\e[44m")
+      b.move(3, 2)
+      b.write('clock')
+    end
+    assert_empty @buffer.diff(@blank)
+  end
 end

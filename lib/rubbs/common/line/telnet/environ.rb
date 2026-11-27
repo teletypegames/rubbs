@@ -42,7 +42,7 @@ module Rubbs
           # The variables a caller's own terminal logs in with: the account's
           # name (RFC 1572's well-known +USER+) and its password. Taken from any
           # address, as the password proves them, by a board that allows it
-          # (Rubbs::Common::Auth::Setup#line_login).
+          # (Rubbs::Common::Auth::Setup#terminal_login).
           LOGIN = %w[USER RUBBS_PASSWORD].freeze
 
           # The variables of a NEW-ENVIRON subnegotiation, +bytes+ an Array of

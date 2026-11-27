@@ -99,7 +99,7 @@ module Rubbs
           return nil if name.empty?
 
           caller = Thread.current[CALLER_KEY]
-          caller.place = name if caller.respond_to?(:place=)
+          caller.activity = Line::Activity.new(kind: :section, name: name) if caller.respond_to?(:activity=)
           Badges.report(caller, :use, name: name, kind: kind.to_s) if caller
 
           write('use', name, face: face.to_s, kind: kind.to_s)

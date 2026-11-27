@@ -69,6 +69,15 @@ class KitPetsciiTest < Minitest::Test
     assert_equal Kit::Chrome::COLORS[:bar], canvas.cell(0, 19).color
   end
 
+  def test_a_notice_of_the_line_pops_up_over_the_first_screen
+    b = board([' '])
+    @line.notice('Wrong name or password. You are a guest now.', title: 'Login')
+    b.start
+    screens = @line.writes.each_with_object([Canvas.new]) { |w, all| all << all.last.dup.feed(w) }
+    assert(screens.any? { |c| c.to_s.include?('LOGIN') && c.to_s.include?('Wrong name or password.') })
+    refute_includes screens.last.to_s, 'LOGIN'
+  end
+
   def test_the_tabs_switch_with_the_cursor
     b = board
     b.start

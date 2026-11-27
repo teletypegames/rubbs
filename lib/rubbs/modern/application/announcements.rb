@@ -18,10 +18,13 @@ module Rubbs
           @session.on_announce(->(text) { @announcements << text })
         end
 
+        # Shows what waits in a message box each: the announcements, then the
+        # notices the line keeps (Rubbs::Common::Line::Notices#take_notices).
         def show_announcements
-          return unless @announcements
+          Dialogs.message(self, @announcements.pop, title: 'Notice') until @announcements.nil? || @announcements.empty?
+          return unless @session.respond_to?(:take_notices)
 
-          Dialogs.message(self, @announcements.pop, title: 'Notice') until @announcements.empty?
+          @session.take_notices.each { |n| Dialogs.message(self, n.text, title: n.title) }
         end
       end
     end

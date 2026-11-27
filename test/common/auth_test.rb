@@ -209,31 +209,31 @@ class AuthLineTest < Minitest::Test
     capture_io { assert Rubbs::Common::Auth.from_line(session).guest? }
   end
 
-  def line_setup(on: true) = Rubbs::Common::Auth::Setup.new(directory: @directory, login: :menu, guests: true, line_login: on)
+  def line_setup(on: true) = Rubbs::Common::Auth::Setup.new(directory: @directory, login: :menu, guests: true, terminal_login: on)
 
   def test_a_terminal_logs_in_with_the_call
     Rubbs.config.auth = line_setup
     session = Rubbs::Test::Session.new(login_offer: %w[ada secret1])
     identity = nil
     out, err = capture_io { identity = Rubbs::Common::Auth.from_line(session) }
-    assert_equal ['Ada', :line], [identity.name, identity.source]
-    assert_nil session.login_notice
-    assert_includes out + err, 'line_login'
+    assert_equal ['Ada', :terminal], [identity.name, identity.source]
+    assert_empty session.take_notices
+    assert_includes out + err, 'terminal_login'
   end
 
   def test_a_wrong_password_from_the_terminal_leaves_a_guest_and_says_why
     Rubbs.config.auth = line_setup
     session = Rubbs::Test::Session.new(login_offer: %w[ada nope])
     capture_io { assert Rubbs::Common::Auth.from_line(session).guest? }
-    assert_equal 'Wrong name or password.', session.login_notice
+    assert_equal([['Login', "Wrong name or password.\nYou are a guest now."]], session.take_notices.map { |n| [n.title, n.text] })
   end
 
-  def test_a_board_without_line_login_ignores_the_terminal
+  def test_a_board_without_terminal_login_ignores_the_terminal
     Rubbs.config.auth = line_setup(on: false)
     session = Rubbs::Test::Session.new(login_offer: %w[ada secret1])
     assert Rubbs::Common::Auth.from_line(session).guest?
-    assert_nil session.login_notice
-    refute Rubbs::Common::Auth::Setup.new(directory: @directory, login: :menu, guests: true).line_login
+    assert_empty session.take_notices
+    refute Rubbs::Common::Auth::Setup.new(directory: @directory, login: :menu, guests: true).terminal_login
   end
 
   def test_a_forwarded_key_goes_before_the_terminal_login
@@ -241,7 +241,7 @@ class AuthLineTest < Minitest::Test
     key = Rubbs::Common::Auth::Token.issue(@directory.find('ada'), aud: Rubbs.config.log_tag)
     session = Rubbs::Test::Session.new(forwarded: { 'RUBBS_AUTH_KEY' => key }, login_offer: %w[ada nope])
     capture_io { assert_equal :token, Rubbs::Common::Auth.from_line(session).source }
-    assert_nil session.login_notice
+    assert_empty session.take_notices
   end
 
   def test_the_login_at_the_call

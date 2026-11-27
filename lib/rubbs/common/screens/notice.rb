@@ -13,7 +13,7 @@ module Rubbs
         # The words under the box.
         PRESS = 'Press a key'
 
-        # The words of the notice.
+        # The words of the notice (a new line in them starts a new line).
         attr_reader :text
 
         # A notice of +text+ titled +title+.
@@ -43,7 +43,13 @@ module Rubbs
           print_lines(frame, [*box.map { |l| "\e[1;33m#{l}\e[0m" }, "  \e[2m#{PRESS}\e[0m"], x: left, y: top)
         end
 
-        def wrapped(width) = Modern::FrameBuffer.wrap_ansi(Text.clean(@text, keep_newlines: false), width)
+        def wrapped(width) = paragraphs.flat_map { |p| Modern::FrameBuffer.wrap_ansi(Text.clean(p, keep_newlines: false), width) }
+
+        def paragraphs = @text.split("\n")
+
+        def petscii_lines(width)
+          paragraphs.flat_map { |p| Modern::FrameBuffer.wrap_ansi(Petscii::Canvas.plain(p, pages.charset), width) }.first(8)
+        end
 
         def modern_box(lines, width)
           ["┌─ #{@title} #{'─' * [width - @title.length - 1, 0].max}┐", *lines.map { |l| "│ #{l.ljust(width)} │" },
@@ -52,7 +58,7 @@ module Rubbs
 
         def draw_petscii(canvas)
           cols  = Petscii::COLS - 4
-          lines = Modern::FrameBuffer.wrap_ansi(Petscii::Canvas.plain(@text, pages.charset), cols - 2).first(8)
+          lines = petscii_lines(cols - 2)
           rows  = [[" #{@title} ", Petscii::Canvas::YELLOW], *lines.map { |l| [" #{l}", Petscii::Canvas::WHITE] },
                    [" #{PRESS}", Petscii::Canvas::GREY]]
           top = [(Petscii::ROWS - rows.size) / 2, 2].max

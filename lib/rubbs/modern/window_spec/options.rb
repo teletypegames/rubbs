@@ -12,8 +12,8 @@ module Rubbs
         def options(context)
           send(:"#{@type}_options", context).merge(
             title:  resolve(:title, context).to_s,
-            width:  size(:width, context, context.cols),
-            height: size(:height, context, context.rows)
+            width:  measure(:width, context, context.cols),
+            height: measure(:height, context, context.rows)
           ).compact
         end
 

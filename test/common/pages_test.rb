@@ -96,6 +96,18 @@ class PagesTest < Minitest::Test
     assert_includes s.output, 'Word: beta'
   end
 
+  def test_the_notices_of_the_line_show_at_the_start_and_after_a_key
+    s = session([' ', :down, ' ', 'q'])
+    s.notice('Wrong name or password.', title: 'Login')
+    pages = Rubbs::Common::Screens::Pages.new(s)
+    pages.start(Words.new(%w[alpha beta]))
+    assert_includes s.output, '┌─ Login'
+    s.notice('Mail came.')
+    pages.run
+    assert_includes s.output, 'Mail came.'
+    assert_empty s.take_notices
+  end
+
   def test_a_hang_up_raises
     assert_raises(Rubbs::Common::Line::Hangup) { Rubbs::Common::Screens::Pages.new(session([:down])).run(Words.new(%w[a b])) }
   end

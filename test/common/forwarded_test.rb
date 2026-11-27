@@ -88,7 +88,7 @@ class ForwardedTest < Minitest::Test
     saved = Rubbs.config.auth
     accounts = Rubbs::Test.accounts
     capture_io { accounts.register('Ada', 'secret1') }
-    Rubbs.config.auth = Rubbs::Common::Auth::Setup.new(directory: accounts, login: :menu, guests: true, line_login: true)
+    Rubbs.config.auth = Rubbs::Common::Auth::Setup.new(directory: accounts, login: :menu, guests: true, terminal_login: true)
     from('198.51.100.9')
     @session.fake_line.caller.write(E.info('USER' => 'Ada', 'RUBBS_PASSWORD' => 'secret1'))
     @session.settle(timeout: 0.3)
@@ -100,7 +100,7 @@ class ForwardedTest < Minitest::Test
     petscii = Rubbs::Common::Call::Flow.define { call { reached = :petscii } }
     flow    = Rubbs::Common::Call::Terminal.flow(title: 'X', modern: petscii, petscii: petscii, splash: splash)
     capture_io { Timeout.timeout(10) { Rubbs::Common::Call::FlowRunner.new(@session, 'id', flow).run } }
-    assert_equal [:petscii, 'Ada', :line], [reached, @session.identity.name, @session.identity.source]
+    assert_equal [:petscii, 'Ada', :terminal], [reached, @session.identity.name, @session.identity.source]
   ensure
     Rubbs.config.auth = saved
   end
@@ -109,7 +109,7 @@ class ForwardedTest < Minitest::Test
     saved = Rubbs.config.auth
     accounts = Rubbs::Test.accounts
     capture_io { accounts.register('Ada', 'secret1') }
-    Rubbs.config.auth = Rubbs::Common::Auth::Setup.new(directory: accounts, login: :menu, guests: true, line_login: true)
+    Rubbs.config.auth = Rubbs::Common::Auth::Setup.new(directory: accounts, login: :menu, guests: true, terminal_login: true)
     from('198.51.100.9')
     @session.fake_line.caller.write(E.info('USER' => 'Ada', 'RUBBS_PASSWORD' => 'nope'))
     @session.settle(timeout: 0.3)

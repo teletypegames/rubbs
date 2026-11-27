@@ -42,6 +42,41 @@ module Rubbs
         frame
       end
 
+      # Writes +art+ on the screen of +session+ outside an Application, its
+      # top left at +top+, +left+ (1-based): each line placed with a cursor
+      # move, so the art stands on whatever is around it. Returns +nil+.
+      #
+      #   Rubbs::Modern::Art.draw_on(art, session, top: 2)
+      #   Rubbs::Modern::Art.write(art, session, :ticket, 'COAT CHECK', sgr: Style[fg: 236, bg: 223], line: 1, top: 2)
+      def draw_on(art, session, top: 1, left: 1)
+        session.write(lines(art).each_with_index.map { |line, i| "#{Ansi.move(top + i, left)}#{line}" }.join)
+        nil
+      end
+
+      # Writes +text+ in the hotspot +name+ of +art+ drawn at +top+, +left+
+      # by #draw_on: on its row +line+ (0-based), in style +sgr+, cut or
+      # padded to the hotspot's width and placed by +align+ (+:left+,
+      # +:center+ or +:right+). A +line+ below the hotspot writes nothing.
+      # Raises what Rubbs::Common::Art#hotspot raises for an unknown name.
+      # Returns +nil+.
+      def write(art, session, name, text, sgr: nil, line: 0, align: :left, top: 1, left: 1)
+        spot = art.hotspot(name)
+        return nil if line >= spot.height
+
+        session.write("#{Ansi.move(top + spot.row + line, left + spot.col)}#{sgr}#{fit(text, spot.width, align)}#{Ansi::RESET}")
+        nil
+      end
+
+      # +text+ (plain) cut or padded to +width+ cells, placed by +align+.
+      def fit(text, width, align)
+        text = FrameBuffer.plain(text.to_s)[0, width]
+        case align
+        when :center then text.center(width)
+        when :right then text.rjust(width)
+        else text.ljust(width)
+        end
+      end
+
       # Writes +cell+ at +x+, +y+ of +frame+; a cell with no colours gets no
       # style.
       def put(frame, cell, x, y)

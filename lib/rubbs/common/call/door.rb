@@ -74,7 +74,7 @@ module Rubbs
           result  = 'ok'
           session.disable_mouse
           session.write("#{Modern::Ansi::RESET}#{Modern::Ansi::CLEAR}")
-          start(session, context)
+          inside(session) { start(session, context) }
         rescue IOError, SystemCallError
           result = nil
           raise
@@ -87,6 +87,14 @@ module Rubbs
         end
 
         private
+
+        # Runs the block with the door as what the caller is doing
+        # (Rubbs::Common::Line::Activities#doing, kind +:door+).
+        def inside(session, &)
+          return yield unless session.respond_to?(:doing)
+
+          session.doing(:door, @name, &)
+        end
 
         def program_for(session) = session.respond_to?(:petscii?) && session.petscii? && @petscii ? @petscii : @program
 

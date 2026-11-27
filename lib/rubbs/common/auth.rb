@@ -38,12 +38,12 @@ module Rubbs
       # Rubbs::Common::Auth::Directory or Remote), +login+ (+:call+: asked at the start
       # of a call, before the face; +:menu+: from a menu item; +:both+),
       # +guests+ (whether a caller without an account comes in at a +:call+
-      # login) and +line_login+ (whether a name and password the caller's
+      # login) and +terminal_login+ (whether a name and password the caller's
       # terminal sends with telnet NEW-ENVIRON log them in, see Auth.from_line;
       # +false+ unless given).
-      Setup = Data.define(:directory, :login, :guests, :line_login) do
-        # A Setup; +line_login+ is +false+ unless given.
-        def initialize(directory:, login:, guests:, line_login: false) = super
+      Setup = Data.define(:directory, :login, :guests, :terminal_login) do
+        # A Setup; +terminal_login+ is +false+ unless given.
+        def initialize(directory:, login:, guests:, terminal_login: false) = super
 
         # Whether the call starts with a login.
         def at_call? = %i[call both].include?(login)
@@ -60,7 +60,7 @@ module Rubbs
 
       # Logs an auth +event+ (a Symbol: +:login+, +:login_failed+, +:locked+,
       # +:register+, +:register_refused+, +:password+, +:grant+, +:revoke+,
-      # +:handed_on+, +:token_refused+, +:line_login+, +:logout+) as one +auth+ line with
+      # +:handed_on+, +:token_refused+, +:terminal_login+, +:logout+) as one +auth+ line with
       # +event+, +asker+ (the board the caller is on: this one, or the one
       # that asked the API) and +facts+, for a log pipeline to count. Returns
       # +nil+.
@@ -81,35 +81,39 @@ module Rubbs
       # The Identity of the caller on +session+ when the call came: the one a
       # neighbouring board handed on in RUBBS_AUTH_KEY (Rubbs::Common::Line::Telnet::Forwarded,
       # checked by Token.verify for this board); else, on a board whose Setup
-      # allows it (Setup#line_login), the account whose name and password the
+      # allows it (Setup#terminal_login), the account whose name and password the
       # caller's terminal sent (Rubbs::Common::Line::Telnet::Forwarded#login_offer);
       # else a guest. A key that is not good is logged and the caller is a
-      # guest; a login that is not good leaves a guest too, with the reason
-      # in the session's +login_notice+.
+      # guest; a login that is not good leaves a guest too, and the session
+      # a notice of why (Rubbs::Common::Line::Notices, titled +Login+).
       def self.from_line(session)
         key = session.respond_to?(:forwarded) ? session.forwarded['RUBBS_AUTH_KEY'] : nil
         return handed_on(key, session.via.to_s) if key
 
         offer = session.respond_to?(:login_offer) ? session.login_offer : nil
         setup = Rubbs.config.auth
-        offer && setup&.line_login ? on_line(setup, session, *offer) : Identity.guest
+        offer && setup&.terminal_login ? on_terminal(setup, session, *offer) : Identity.guest
       end
 
       # The Identity of the account +name+ with +password+ in the directory of
       # +setup+, for the caller on +session+ (its +caller_key+ counts the wrong
-      # passwords), its +source+ +:line+; a guest when it is not one, the words of Login::WORDS for
-      # why then set as the session's +login_notice+ (when it keeps one).
-      # Logs a +line_login+ event either way.
-      def self.on_line(setup, session, name, password)
+      # passwords), its +source+ +:terminal+; a guest when it is not one, the words of Login::WORDS for
+      # why then a notice of the session (when it keeps them, Rubbs::Common::Line::Notices).
+      # Logs a +terminal_login+ event either way.
+      def self.on_terminal(setup, session, name, password)
         result = setup.directory.log_in(name, password, caller_key: session.caller_key)
         if result.is_a?(Identity)
-          event(:line_login, name: result.name)
-          return result.with(source: :line)
+          event(:terminal_login, name: result.name)
+          return result.with(source: :terminal)
         end
-        event(:line_login, level: :warn, name: name.to_s[0, 40], result: result.to_s)
-        session.login_notice = Login::WORDS.fetch(result, Login::WORDS[:wrong]) if session.respond_to?(:login_notice=)
+        event(:terminal_login, level: :warn, name: name.to_s[0, 40], result: result.to_s)
+        session.notice(refused_words(result), title: 'Login') if session.respond_to?(:notice)
         Identity.guest
       end
+
+      # What a caller whose terminal's login got +result+ (a refusal of
+      # Directory#log_in) is told: why (Login::WORDS) and that they are a guest.
+      def self.refused_words(result) = "#{Login::WORDS.fetch(result, Login::WORDS[:wrong])}\nYou are a guest now."
 
       # The Identity of the RUBBS_AUTH_KEY +key+ a call came with through the
       # board +via+, or a guest when it is not good (both logged).

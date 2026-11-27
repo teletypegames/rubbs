@@ -21,7 +21,7 @@ module Rubbs
       # Rubbs::Common::Line::Gateway with <tt>forward: true</tt>) had its question there: the
       # face picked there is taken without asking, and without the splash. A
       # caller whose terminal logged them in with the call (an identity of
-      # source +:line+, Rubbs::Common::Auth.from_line: TTG Gate 64, which shows its own
+      # source +:terminal+, Rubbs::Common::Auth.from_line: TTG Gate 64, which shows its own
       # logo) is asked the question but gets no splash either.
       module Terminal
         # Seconds to wait for the telnet negotiation before guessing.
@@ -96,9 +96,9 @@ module Rubbs
         def self.past_splash?(session, splash, face) = terminal_login?(session) || splash.continue?(session, face)
 
         # Whether the caller on +session+ was logged in by their terminal with
-        # the call (an identity of source +:line+). Asks the identity, so a
+        # the call (an identity of source +:terminal+). Asks the identity, so a
         # login the terminal sent is tried here at the latest.
-        def self.terminal_login?(session) = session.respond_to?(:identity) && session.identity.source == :line
+        def self.terminal_login?(session) = session.respond_to?(:identity) && session.identity.source == :terminal
 
         # The flow of a board with one face, +name+ (+:modern+ or +:petscii+):
         # +steps+ (a Rubbs::Common::Call::Flow), with the call's Rubbs::Common::Line::Session#face set to +name+

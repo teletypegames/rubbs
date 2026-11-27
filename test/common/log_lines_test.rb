@@ -255,7 +255,7 @@ class LogLinesTest < Minitest::Test
       sent.send(:deliver, '{}')
       failed.send(:deliver, '{}')
     end
-    lines = all.select { |l| l['tag'] == 'discord' }
+    lines = all.select { |l| l['tag'] == 'discord' && l['label'] == 'L' }
     assert_equal([%w[sent L], %w[failed L]], lines.map { |l| l.values_at('msg', 'label') })
     assert_equal '500', lines.last['http']
   ensure

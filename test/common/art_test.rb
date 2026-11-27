@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'test_helper'
+require 'rubbs/test'
 
 class ArtTest < Minitest::Test
   ART = <<~YAML
@@ -42,6 +43,16 @@ class ArtTest < Minitest::Test
     assert_equal 2, lines.size
     assert lines.first.start_with?("\e[0;38;5;")
     assert(lines.all? { |l| l.end_with?(Rubbs::Modern::Ansi::RESET) })
+  end
+
+  def test_draw_on_places_each_line_and_write_fills_a_hotspot
+    line = Rubbs::Test::Session.new
+    Rubbs::Modern::Art.draw_on(art, line, top: 3, left: 5)
+    assert_includes line.take, "\e[4;5H"
+    Rubbs::Modern::Art.write(art, line, :door, 'OPEN', sgr: "\e[1m", top: 3, left: 5)
+    assert_equal "\e[3;6H\e[1mOP\e[0m", line.take
+    Rubbs::Modern::Art.write(art, line, :door, 'x', align: :right, line: 1)
+    assert_empty line.take
   end
 
   def test_mistakes_name_the_cell

@@ -419,7 +419,7 @@ end
 | directory | a `Rubbs::Common::Auth::Directory` (the accounts here, on the Central) or a `Rubbs::Common::Auth::Remote` (the Central's); none: the Central's of `central`; a block is given the domain object at boot |
 | `login:` | `:call` asks a name and password at the start of a call, before the face; `:menu` leaves it to the faces (the built-in `:log_in` / `:log_out` commands, `log_in` on a `Petscii::Face`); `:both` |
 | `guests:` | at a `:call` login, whether an empty name or one without an account comes in as a guest (default `true`) |
-| `line_login:` | whether a terminal may log in with the call: a name and password sent with telnet NEW-ENVIRON (see below; default `false`) |
+| `terminal_login:` | whether a terminal may log in with the call: a name and password sent with telnet NEW-ENVIRON (see below; default `false`) |
 
 In an Application, a `Petscii::Face` and a flow: `identity` (a
 `Rubbs::Common::Auth::Identity`: `id`, `name`, `roles`, `source`), `signed_in?`,
@@ -441,13 +441,16 @@ question. A token is `v1.<kid>.<payload>.<HMAC-SHA256>`: the payload (name,
 id, roles, issuer, audience, times, a nonce) is signed with the secret every
 board shares, not hidden; it is good for one board, sixty seconds and once.
 
-**A terminal logging in with the call.** On a board with `line_login: true` a terminal
+**A terminal logging in with the call.** On a board with `terminal_login: true` a terminal
 that keeps its caller's account (TTG Gate 64 on a C64) sends the name and the password with
 the call, unasked, as telnet NEW-ENVIRON `INFO`: `VAR USER` and `USERVAR RUBBS_PASSWORD`.
 They are taken from any address, as the password proves them, and `Rubbs::Common::Auth.from_line`
 logs the caller in with them when the identity is first asked (a forwarded `RUBBS_AUTH_KEY`
 goes first). A login that does not go leaves a guest, the wrong passwords counted as at any
-login, and the reason (`Login::WORDS`) in `session.login_notice` for the board to show once. A caller logged in so (an identity of source `:line`) gets no splash: the terminal has shown its own logo.
+login, and a notice for the caller (`session.notice`, titled *Login*: the reason of `Login::WORDS`
+and that they are a guest now), shown over the first screen without the board doing anything (see
+*Notices* in §21). A caller logged in so (an identity of source `:terminal`) gets no splash: the
+terminal has shown its own logo.
 Telnet is not encrypted: the password travels as it would typed in.
 
 **The secret.** `RUBBS_AUTH_SECRET` (`Rubbs.config.auth_secrets`), the same on
@@ -500,7 +503,8 @@ through the API too, so no board lets it in; its calls go on until a board hangs
 (`Rubbs::Common::Line::Session#hang_up`, see *The calls on the line*).
 
 **Tests.** `Rubbs::Test.accounts` (a fresh accounts database and a `Directory`),
-`Rubbs::Test.auth_secret`, and `Rubbs::Test::Session.new(identity:, forwarded:)`.
+`Rubbs::Test.auth_secret`, `Rubbs::Test.token('Ada', roles: %w[member])` (a `RUBBS_AUTH_KEY` this
+board takes) and `Rubbs::Test::Session.new(identity:, forwarded:)`.
 
 ### The Central: `Rubbs::Common::Central`
 
@@ -705,14 +709,18 @@ caller reads it: `45s`, `12m`, `2h 5m` (a number of seconds works too).
 
 `Rubbs.calls` is the board's calls now (`Rubbs::Common::Line::Server#live` of the running
 `Rubbs::Common::Line::Server.current`), the earliest first: `Rubbs::Common::Line::Session` objects with
-`started_at`, `caller_ip`, `caller_name`, `call_via`, `face` and `place`, where
-the caller is (the section they opened last, `Rubbs::Common::Log.use`, or `› Name` while a
-`Rubbs::Common::Line::Gateway` carries them to another board). `session.hang_up` ends a call
+`started_at`, `caller_ip`, `caller_name`, `call_via`, `face` and `activity`, what
+the caller is doing: a `Rubbs::Common::Line::Activity` of `kind` and `name` — `:section` (the
+part they opened last, `Rubbs::Common::Log.use`), `:door` (a `Door` they are inside) or `:board`
+(a board a `Rubbs::Common::Line::Gateway` carries them to); its `to_s` is a sysop's words
+(`feeds`, `door SERMO`, `› Alexandria BBS`). `session.doing(kind, name) { … }` sets one for a
+while. A board counts the callers in a door by it:
+`Rubbs.calls.count { |s| s.activity == Rubbs::Common::Line::Activity.new(:door, 'sermo') }`. `session.hang_up` ends a call
 from another thread (a sysop's screen): the line closes and the caller's
 thread stops at its next read or write.
 
 ```ruby
-Rubbs.calls.map { |s| [s.caller_name || 'guest', s.caller_ip, Rubbs.duration(Time.now - s.started_at), s.place] }
+Rubbs.calls.map { |s| [s.caller_name || 'guest', s.caller_ip, Rubbs.duration(Time.now - s.started_at), s.activity.to_s] }
 ```
 
 ### Logging and background work: `Rubbs.log`, `Rubbs.background`
@@ -1625,7 +1633,7 @@ Every type takes:
 | Attribute | Notes |
 |---|---|
 | `title` | Plain text; the frame pads it and cuts it. |
-| `width`, `height` | Columns and rows; a negative number counts back from the screen's size (`height -8` = rows − 8). |
+| `width`, `height` | Columns and rows; a negative number counts back from the screen's size (`height -8` = rows − 8). `size :tall` is the preset of the room between the bars (`height -6`). |
 | `maximizable` | On by default for `:master_detail`, `:stream` and `:reader`; `maximizable false` turns it off, `maximizable true` turns it on for the others. |
 | `accent` | A Hash of frame style roles (`window_border`, `window_title`, `window_title_focused`) in other colours than the theme's: the window's frame wears them, its widgets keep the theme. Marks which part of the board a window belongs to. |
 
@@ -2751,6 +2759,16 @@ parser.parse(chunk)   # => the data bytes of chunk
 parser.feed(byte)     # => byte, or nil when it belongs to a command
 ```
 
+### Notices: words for the next screen (`Rubbs::Common::Line::Notices`)
+
+`session.notice(text, title: 'Notice')` keeps something to tell the caller once, at the next
+screen: a login the terminal sent that did not go (the board's `terminal_login`), or anything
+a board finds out before its first screen. A `Pages` runner (and so each `Kit`) shows them over
+the page when it starts and after every key, `show_notice` its look (a `Petscii::Kit` pops them
+up with its own chrome); an `Application` shows them in a message box. `session.take_notices`
+takes what waits. Unlike `announce`, which tells a running screen at once, a notice waits for
+the screen.
+
 ### PETSCII: a Commodore 64 on the line (`Rubbs::Petscii`)
 
 `session.petscii!` turns the line into a C64's: 40×25 (`term_cols` /
@@ -2927,9 +2945,11 @@ item); both are listed on the hint row. Underneath, `Rubbs::Common::Screens::Sel
 keyword (`say(text, color: RD)`).
 
 The short sentences (`Rubbs::Petscii::Screen::Helpers`): `alert(text)` (red,
-then a pause), `notice(text)` (green, then a pause), `prompt(label, hint:,
-text:, max:, mask:)` (a field after a white label and `>`; `nil` when
-empty), `confirm?(question)`, `number(label, range)`, `each_pick(heading,
+then a pause), `notice(text)` (green, then a pause), `info(text)` (cyan,
+then a pause), `prompt(label, hint:, text:, max:, mask:)` (a field after a
+white label and `>`; `nil` when empty), `form { field :url, 'address', max: 80;
+field :name, required: false }` (the fields one after the other, a Hash of the
+answers, `nil` when a required one is left empty), `confirm?(question)`, `number(label, range)`, `each_pick(heading,
 items, label:)`, `markdown(text, width:, indent:)` (in `Screen::MARKDOWN`'s
 C64 colours), `qr(text)`, `rule_line`, `within(title, right) { … }` (the
 previous title drawn again after the block). `key` raises `Rubbs::Common::Line::Hangup`
@@ -3128,6 +3148,8 @@ Rubbs::Modern::Art.draw(house, frame, x: 1, y: 2) # … or into a Rubbs::Modern:
 session.write_raw(Rubbs::Petscii::Art.bytes(house)) # C64: a whole frame
 Rubbs::Petscii::Art.draw(house, canvas, row: 1, col: 10) # … or onto a canvas
 house.hotspot(:window_1)                         # => Art::Hotspot col=6 row=2 …
+Rubbs::Modern::Art.draw_on(house, session, top: 2) # modern, outside an Application: placed line by line
+Rubbs::Modern::Art.write(house, session, :sign, 'OPEN', sgr: Rubbs::Modern::Style[fg: 84], align: :center, top: 2)
 ```
 
 A mistake raises `Rubbs::Common::Art::Error` with the file, the grid, the row and the
@@ -3353,6 +3375,47 @@ c64.take                                       # the bytes written since the las
   `petscii!`, `caller_key` (`line:test`), `hand_over`, `enable_mouse` /
   `mouse_on?`, `idle_seconds` behave as on a real line; `line` is `nil`, so
   a gateway cannot be tested through it.
+
+The helpers:
+
+```ruby
+Rubbs::Test.tmp_data { |dir| Store.new(File.join(dir, 'wall.csv')) }   # removed after the block
+Rubbs::Test.stub_http('/api/boards' => { boards: [] }, %r{/feed} => [503, '']) do |asked|
+  board.refresh                                    # HTTP.get / .post answered from the routes
+end
+Rubbs::Test.screen_text(session)                   # the words on the screen (the C64's screen now)
+Rubbs::Test.token('Ada', roles: %w[member])        # a RUBBS_AUTH_KEY this board takes
+```
+
+`stub_http`'s routes are a String (the URL, or its path with or without the query) or a Regexp,
+answered by a String (200), a Hash or Array (200, JSON), `[status, body]`, an exception, or a
+callable given the URL and the options; a URL no route fits raises `HTTP::Error`.
+
+**A test that plays a caller: `Rubbs::Test::Case`.** A `Minitest::Test` whose tests call a
+screen or a flow on a `Rubbs::Test::ScriptedLine`, the call in a thread of its own, and press
+keys one by one, each after the board asked for it, looking at the screen in between:
+
+```ruby
+class GuestbookTest < Rubbs::Test::Case
+  test 'a C64 caller signs the guestbook' do
+    call(->(line) { UI::Petscii.new(line, {}, board).run }, face: :petscii, as: 'Ada') do
+      press 's'
+      type 'hello', enter: true
+      see 'THANK YOU FOR SIGNING'
+      never_see 'ERROR'
+    end
+  end
+end
+```
+
+- `call(target, face:, as:, **line) { … }`: `target` is a `Rubbs::Common::Call::Flow` (run as
+  the server runs a call, `Rubbs.config.flow` too) or anything with `call(line)`; `face:` is
+  forwarded as `BBS_FACE`, so a terminal question is passed; `as:` a name or an `Identity`.
+  After the block the caller hangs up; an error of the call is raised in the test.
+- `press(*keys)`, `type(text, enter:)`, `see(text)`, `never_see(text)`, `screen`, `hang_up`.
+  A board that does not ask for the next key within five seconds fails the test
+  (`ScriptedLine::Stuck`, with where the call is).
+- Each test runs on a copy of `Rubbs.config`, put back after it.
 
 ---
 

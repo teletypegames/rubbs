@@ -23,6 +23,29 @@ class ScreenTest < Minitest::Test
     assert_includes @session.received, 'return: back'
   end
 
+  def test_a_form_asks_its_fields_one_after_the_other
+    keys("gopher://x\r\r")
+    answers = Timeout.timeout(5) do
+      @screen.form do
+        field :url, 'address', max: 80
+        field :name, required: false
+      end
+    end
+    assert_equal({ url: 'gopher://x', name: nil }, answers)
+    assert_includes @session.received, 'name'
+  end
+
+  def test_a_form_left_empty_at_a_required_field_is_given_up
+    keys("\r")
+    assert_nil(Timeout.timeout(5) { @screen.form { field :url, 'address' } })
+  end
+
+  def test_info_tells_in_cyan_and_waits
+    keys("\r")
+    Timeout.timeout(5) { @screen.info('The catalog is resting.') }
+    assert_includes @session.received, "#{Rubbs::Petscii::Colors::CY}The catalog is resting."
+  end
+
   def test_choose_takes_one_of_the_keys
     keys('xY')
     assert_equal 'y', Timeout.timeout(5) { @screen.choose('sure? ', %w[y n]) }

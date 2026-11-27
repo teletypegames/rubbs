@@ -209,6 +209,16 @@ class ScreenHelpersTest < Minitest::Test
 end
 
 class WindowReaderTest < Minitest::Test
+  def test_size_tall_fills_the_room_between_the_bars
+    app = Rubbs::Modern::Application.new(session: Rubbs::Test::Session.new, session_id: 's')
+    spec = Rubbs::Modern::WindowSpec.new(:about, :info) do
+      size :tall
+      body 'hello'
+    end
+    assert_equal app.rows - 6, spec.open(app).bounds.height
+    assert_raises(ArgumentError) { Rubbs::Modern::WindowSpec.new(:x, :info) { size :huge } }
+  end
+
   def test_a_reader_pages_its_lines_and_says_where
     app = Rubbs::Modern::Application.new(session: Rubbs::Test::Session.new, session_id: 's')
     jumped = nil

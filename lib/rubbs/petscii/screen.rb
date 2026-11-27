@@ -196,3 +196,4 @@ end
 
 require_relative 'screen/prompts'
 require_relative 'screen/helpers'
+require_relative 'screen/form'

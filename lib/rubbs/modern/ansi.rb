@@ -83,6 +83,9 @@ module Rubbs
       CSI_LETTER = /[A-Za-z]/
       # The most parameter bytes read before a CSI sequence is given up.
       MAX_CSI_LENGTH = 32
+
+      # The sequence that moves the cursor to +row+, +col+ (1-based).
+      def self.move(row, col) = "#{CSI}#{row};#{col}H"
     end
   end
 end

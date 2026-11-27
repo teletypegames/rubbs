@@ -10,6 +10,8 @@ module Rubbs
       # (+readkey+, +readline+, +write+ and the rest) comes from Rubbs::Common::Line::Telnet.
       class Session
         include Telnet
+        include Notices
+        include Activities
 
         # [session_id] a random 16-character hex id for this session
         # [term_cols]  the caller's terminal width in columns (set by
@@ -23,14 +25,6 @@ module Rubbs
         attr_reader :idle_seconds
         # When the call came in (a Time).
         attr_reader :started_at
-        # Where the caller is now, for a sysop's list of the calls
-        # (Rubbs.calls): the section they opened last (Rubbs::Common::Log.use), the board a
-        # gateway carries them to (Rubbs::Common::Line::Gateway#call), or +nil+.
-        attr_accessor :place
-        # What went wrong with the login the caller's terminal sent
-        # (Rubbs::Common::Auth.from_line), the words of Rubbs::Common::Auth::Login::WORDS;
-        # +nil+ when it went well or none came. A board shows it once.
-        attr_accessor :login_notice
 
         # Wraps +client+, the accepted socket (any IO with +read+, +write+ and
         # +close+), and notes its address (Telnet::Forwarded#peer_ip) while the

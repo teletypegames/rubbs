@@ -108,6 +108,7 @@ module Rubbs
             loop do
               press!(wait_key)
               show_announcements
+              show_notices
             end
           end
           @result
@@ -122,14 +123,29 @@ module Rubbs
           nil
         end
 
-        # Puts +page+ alone on the stack and paints the whole screen; the first
-        # step of #run, public for a test that presses keys one by one (#press).
-        # Returns the bytes written.
+        # Puts +page+ alone on the stack and paints the whole screen, then
+        # shows what the line keeps to tell (#show_notices); the first step of
+        # #run, public for a test that presses keys one by one (#press).
+        # Returns the bytes of the whole screen.
         def start(page)
           @stack.clear
           put(page)
-          redraw(whole: true)
+          redraw(whole: true).tap { show_notices }
         end
+
+        # Shows each notice the line keeps (Rubbs::Common::Line::Notices#take_notices) with
+        # #show_notice, first first. Returns +nil+.
+        def show_notices
+          return unless @session.respond_to?(:take_notices)
+
+          @session.take_notices.each { |n| show_notice(n) unless @done }
+          nil
+        end
+
+        # Shows +notice+ (a Rubbs::Common::Line::Notice) until a key: a
+        # Rubbs::Common::Screens::Notice. A runner with a look of its own (a kit's pop-up)
+        # puts it so.
+        def show_notice(notice) = show(Notice.new(notice.text, title: notice.title))
 
         # Answers +key+ (#handle) and repaints, as #run does for each key.
         # Returns whether the runner is #done? after it.

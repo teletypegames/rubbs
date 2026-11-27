@@ -116,6 +116,19 @@ module Rubbs
           show(target, &)
         end
 
+        # Shows +notice+ (a Rubbs::Common::Line::Notice) as a pop-up until a
+        # key: its title in capitals on a band, its words wrapped under it
+        # (a new line of the text starts a new line).
+        def show_notice(notice)
+          lines = notice.text.split("\n").flat_map { |part| Modern::FrameBuffer.wrap_ansi(Layout.plain(part), Layout::EDGE - 1) }
+          pop_up(TextView.new(
+                   notice.title.upcase,
+                   lines.map { |l| [l, Canvas::YELLOW] },
+                   color:   Canvas::LIGHT_RED,
+                   section: view&.section
+                 ))
+        end
+
         # Opens the place +key+: +:quit+ ends, an action (#action?) runs, a
         # section's view (#section_view) takes the stack, its tab
         # (#tab_for) lit.

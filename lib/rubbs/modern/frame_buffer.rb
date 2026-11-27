@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'frame_buffer/cell'
+
 module Rubbs
   module Modern
     # An off-screen grid of character cells, each holding one character and
@@ -16,11 +18,8 @@ module Rubbs
     #
     # Anything drawn outside the grid is clipped.
     class FrameBuffer
-      # One screen cell: +char+ is the character shown, +sgr+ the SGR escape
-      # sequence that styles it (+nil+ for the terminal default).
-      Cell = Struct.new(:char, :sgr)
       # The empty cell a cleared buffer is filled with: a space, no style.
-      BLANK = Cell.new(' ', nil).freeze
+      BLANK = Cell.of(' ', nil)
       # SGR reset with no parameter, the short form of Ansi::RESET.
       SHORT_RESET = "\e[m"
       # The two SGR resets, the long form and the short one.
@@ -91,11 +90,13 @@ module Rubbs
       # sequences among them) are dropped and take no cell; characters off the
       # grid are dropped.
       def write(text, sgr: nil)
-        self.class.text(text).each_char do |ch|
-          break if @cy >= @rows
+        return if @cy >= @rows
 
-          put(ch, sgr) unless ch.match?(CONTROL_CHAR)
-        end
+        text = self.class.text(text)
+        text = text.gsub(CONTROL_CHAR, '') if text.match?(CONTROL_CHAR)
+        left, right = span(text.length)
+        lay(text, sgr, left, right) if left < right
+        @cx += text.length
       end
 
       # Writes +text+ from the cursor, interpreting its SGR sequences: they
@@ -137,6 +138,9 @@ module Rubbs
         @cells[row][col]
       end
 
+      # Returns the row of Cells at the 0-based +row+.
+      def row_at(row) = @cells[row]
+
       private
 
       # Whether the cursor is in the rectangle from +left+, +top+ to +right+,
@@ -152,8 +156,30 @@ module Rubbs
         [[outer[0], inner[0]].max, [outer[1], inner[1]].max, [outer[2], inner[2]].min, [outer[3], inner[3]].min]
       end
 
+      # The columns (0-based, the right one outside) where +length+ cells
+      # written from the cursor show: on the grid and in the clip.
+      def span(length)
+        return [0, 0] if @cy.negative? || (@clip && (@cy < @clip[1] || @cy >= @clip[3]))
+
+        left  = [@cx, 0, @clip ? @clip[0] : 0].max
+        right = [@cx + length, @cols, @clip ? @clip[2] : @cols].min
+        [left, right]
+      end
+
+      # Puts the characters of +text+ written from the cursor that fall in
+      # columns +left+ to +right+ into the cursor's row: a run of one
+      # character as one shared cell.
+      def lay(text, sgr, left, right)
+        row = @cells[@cy]
+        if text.count(text[0]) == text.length
+          row.fill(Cell.of(text[0], sgr), left, right - left)
+        else
+          text.chars[(left - @cx)...(right - @cx)].each_with_index { |ch, i| row[left + i] = Cell.of(ch, sgr) }
+        end
+      end
+
       def put(char, sgr)
-        @cells[@cy][@cx] = Cell.new(char, sgr) if visible?
+        @cells[@cy][@cx] = Cell.of(char, sgr) if visible?
         @cx += 1
       end
 
@@ -172,7 +198,10 @@ module Rubbs
       # The cells that differ from +from+: [row, col, cell], 0-based.
       def changes(from)
         (0...@rows).flat_map do |r|
-          (0...@cols).filter_map { |c| [r, c, @cells[r][c]] unless @cells[r][c] == from.cell_at(r, c) }
+          row = @cells[r]
+          next [] if row == from.row_at(r)
+
+          (0...@cols).filter_map { |c| [r, c, row[c]] unless row[c].equal?(from.cell_at(r, c)) || row[c] == from.cell_at(r, c) }
         end
       end
 

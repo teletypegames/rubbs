@@ -49,7 +49,8 @@ module Rubbs
     #                    Hash of keys to blocks taking the reader)
     #
     # Every type takes +title+ (padded by the frame), +width+ and +height+
-    # (a negative number counts back from the screen's size), +maximizable+
+    # (a negative number counts back from the screen's size; #size sets a
+    # preset of them), +maximizable+
     # (on by default for a master/detail, a stream and a reader), +maximized+
     # (opens full screen) and
     # +accent+ (a Hash of theme roles for this window only).
@@ -63,6 +64,9 @@ module Rubbs
         on_submit on_cancel items label detail meta on_pick list_width empty close_button close_label
         lines placeholder buffer_size on_poll where max_width maximized on_key
       ].freeze
+
+      # The size presets of #size: the attributes each one sets.
+      SIZES = { tall: { height: -6 } }.freeze
 
       # The window class of each type.
       WINDOWS = {
@@ -101,6 +105,18 @@ module Rubbs
 
       ATTRS.each do |key|
         define_method(key) { |value = nil, &block| @attrs[key] = block || value }
+      end
+
+      # Sets the size attributes of the preset +name+ (a key of SIZES):
+      # +:tall+ is as high as the screen leaves room for under the menu bar
+      # and over the status bar (<tt>height(-6)</tt>). An attribute set after
+      # it wins. Raises ArgumentError for an unknown preset.
+      #
+      #   window :games, :master_detail do
+      #     size :tall
+      #   end
+      def size(name)
+        @attrs.merge!(SIZES.fetch(name) { raise ArgumentError, "Unknown size: #{name.inspect} (#{SIZES.keys.join(', ')})" })
       end
 
       # Adds a form field stored under +key+. +opts+ is a Rubbs::Modern::Windows::Form
@@ -164,7 +180,7 @@ module Rubbs
         value.is_a?(Proc) ? context.instance_exec(&value) : value
       end
 
-      def size(key, context, total)
+      def measure(key, context, total)
         value = resolve(key, context)
         value.is_a?(Integer) && value.negative? ? total + value : value
       end

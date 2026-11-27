@@ -30,7 +30,7 @@ module Rubbs
 
           # The bottom row with the key hints.
           def hints
-            menu = @cursor.petscii? ? 'STOP/←' : 'Esc'
+            menu = @cursor.key_name(:back)
             bottom(@single ? "#{enter_key} save  #{menu} quit" : "#{menu}: save or quit")
           end
 
@@ -53,7 +53,7 @@ module Rubbs
 
           private
 
-          def enter_key = @cursor.petscii? ? 'RETURN' : 'Enter'
+          def enter_key = @cursor.key_name(:enter)
 
           # The bottom row in reverse, written over with +text+.
           def bottom(text) = @cursor.move(@rows - 1, 1) << reversed(text)
